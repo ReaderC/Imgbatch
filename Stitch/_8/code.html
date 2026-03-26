@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Merge Image - Precision Atelier</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "error-container": "#f97386",
+              "on-tertiary-container": "#5d4368",
+              "error": "#a8364b",
+              "surface-container-highest": "#dce3e9",
+              "on-surface": "#2c3338",
+              "surface-container-low": "#f0f4f8",
+              "on-error-container": "#6e0523",
+              "primary-fixed": "#8c99fc",
+              "inverse-on-surface": "#9a9da0",
+              "on-error": "#fff7f7",
+              "surface-dim": "#d4dbe1",
+              "secondary-fixed-dim": "#d1d3eb",
+              "inverse-primary": "#8c99fc",
+              "on-primary": "#fbf8ff",
+              "inverse-surface": "#0b0f11",
+              "primary-container": "#8c99fc",
+              "on-secondary-fixed-variant": "#585a6f",
+              "outline": "#747c81",
+              "tertiary-fixed": "#f1cefc",
+              "on-background": "#2c3338",
+              "on-tertiary-fixed-variant": "#674c72",
+              "primary-dim": "#3d4aa7",
+              "on-secondary": "#faf8ff",
+              "background": "#f7f9fc",
+              "secondary-fixed": "#e0e1f9",
+              "primary-fixed-dim": "#7f8ced",
+              "on-secondary-fixed": "#3c3e51",
+              "surface-variant": "#dce3e9",
+              "secondary": "#5b5e72",
+              "surface": "#f7f9fc",
+              "primary": "#4956b4",
+              "on-primary-fixed": "#000000",
+              "outline-variant": "#abb3b9",
+              "tertiary-dim": "#64496f",
+              "surface-container-high": "#e3e9ee",
+              "secondary-dim": "#4f5266",
+              "on-tertiary-fixed": "#493055",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-container": "#f1cefc",
+              "error-dim": "#6b0221",
+              "on-surface-variant": "#596065",
+              "surface-container": "#e9eef3",
+              "surface-bright": "#f7f9fc",
+              "on-secondary-container": "#4e5065",
+              "tertiary-fixed-dim": "#e2c0ee",
+              "tertiary": "#71557c",
+              "on-primary-container": "#001075",
+              "secondary-container": "#e0e1f9",
+              "surface-tint": "#4956b4",
+              "on-primary-fixed-variant": "#0e1d7f",
+              "on-tertiary": "#fff7fc"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #dce3e9;
+        border-radius: 10px;
+      }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased overflow-hidden">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full z-40 flex flex-col h-screen w-20 md:w-64 border-r-0 bg-slate-100 dark:bg-slate-900 transition-all duration-300">
+<div class="px-6 py-8">
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 font-headline">Precision Atelier</h1>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-widest mt-1">Batch Processor</p>
+</div>
+<nav class="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
+<!-- Navigation Items Mapping -->
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">compress</span>
+<span class="text-xs font-medium hidden md:block">Compression</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">insert_drive_file</span>
+<span class="text-xs font-medium hidden md:block">Format</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">aspect_ratio</span>
+<span class="text-xs font-medium hidden md:block">Resize</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">branding_watermark</span>
+<span class="text-xs font-medium hidden md:block">Watermark</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">rounded_corner</span>
+<span class="text-xs font-medium hidden md:block">Corners</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">padding</span>
+<span class="text-xs font-medium hidden md:block">Padding</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">crop</span>
+<span class="text-xs font-medium hidden md:block">Crop</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">rotate_right</span>
+<span class="text-xs font-medium hidden md:block">Rotate</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">flip</span>
+<span class="text-xs font-medium hidden md:block">Flip</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">picture_as_pdf</span>
+<span class="text-xs font-medium hidden md:block">Merge PDF</span>
+</a>
+<!-- Active Tab: Merge Image -->
+<a class="relative flex items-center gap-3 px-3 py-3 rounded-lg text-indigo-700 dark:text-indigo-300 font-bold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1 before:bg-indigo-600 before:rounded-r-full bg-slate-200/50 dark:bg-slate-800/50 group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">image</span>
+<span class="text-xs font-bold hidden md:block">Merge Image</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">gif</span>
+<span class="text-xs font-medium hidden md:block">Merge GIF</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-95 duration-150">crop_free</span>
+<span class="text-xs font-medium hidden md:block">Manual Crop</span>
+</a>
+</nav>
+<div class="p-4 mt-auto">
+<div class="bg-indigo-600/10 rounded-xl p-4 hidden md:block">
+<p class="text-[10px] font-bold text-indigo-600 uppercase tracking-tighter">Pro Feature</p>
+<p class="text-xs text-slate-600 mt-1">Smart Batch AI is now active for merging.</p>
+</div>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 right-0 left-20 md:left-64 h-16 flex items-center justify-between px-6 z-30 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-md">
+<div class="flex items-center gap-4">
+<h2 class="font-headline font-bold text-lg text-on-surface">Merge to Image</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group hidden md:block">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-sm">search</span>
+<input class="bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all outline-none" placeholder="Search templates..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity">settings</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity">help</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity">account_circle</button>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="fixed inset-0 top-16 left-20 md:left-64 flex flex-col md:flex-row gap-0 overflow-hidden bg-surface">
+<!-- Left Column: Merge Settings Panel -->
+<section class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-surface-container-low p-6 overflow-y-auto custom-scrollbar">
+<div class="space-y-8">
+<!-- Header -->
+<div>
+<h3 class="font-headline text-xl font-bold text-on-surface">Merge Settings</h3>
+<p class="text-sm text-on-surface-variant mt-1">Define canvas and image spacing rules.</p>
+</div>
+<!-- Orientation Toggle -->
+<div class="bg-surface-container-high rounded-xl p-1 flex">
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-surface-container-lowest text-primary shadow-sm font-semibold text-sm transition-all duration-200">
+<span class="material-symbols-outlined text-[18px]">vertical_align_bottom</span>
+                        Vertical
+                    </button>
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 font-medium text-sm">
+<span class="material-symbols-outlined text-[18px]">horizontal_distribute</span>
+                        Horizontal
+                    </button>
+</div>
+<!-- Dimensions & Spacing -->
+<div class="space-y-4">
+<div class="flex flex-col gap-1.5">
+<label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider ml-1">Page Width (px)</label>
+<input class="w-full bg-surface-container-lowest border-none rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="1920"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider ml-1">Image Spacing (px)</label>
+<input class="w-full bg-surface-container-lowest border-none rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="24"/>
+</div>
+</div>
+<!-- Margins Nested Panel -->
+<div class="bg-surface-container-high rounded-xl p-4 space-y-4">
+<h4 class="font-headline text-sm font-bold text-on-surface">Margins</h4>
+<div class="grid grid-cols-2 gap-3">
+<div class="flex flex-col gap-1">
+<label class="text-[10px] text-on-surface-variant font-medium">Top</label>
+<input class="bg-surface-container-lowest border-none rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="48"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-[10px] text-on-surface-variant font-medium">Bottom</label>
+<input class="bg-surface-container-lowest border-none rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="48"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-[10px] text-on-surface-variant font-medium">Left</label>
+<input class="bg-surface-container-lowest border-none rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="48"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-[10px] text-on-surface-variant font-medium">Right</label>
+<input class="bg-surface-container-lowest border-none rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-primary/30 outline-none" type="number" value="48"/>
+</div>
+</div>
+</div>
+<!-- Appearance -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<label class="text-sm font-bold text-on-surface">Background Color</label>
+<div class="flex items-center gap-2">
+<span class="text-xs text-on-surface-variant font-mono">#FFFFFF</span>
+<div class="w-8 h-8 rounded-full border-2 border-surface-container-highest bg-white cursor-pointer ring-offset-2 hover:ring-2 hover:ring-primary/20 transition-all"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Column: Merge Queue & Live Preview -->
+<section class="flex-1 bg-surface flex flex-col relative overflow-hidden">
+<!-- Queue Header -->
+<div class="px-8 pt-8 pb-4 flex items-center justify-between">
+<div>
+<h3 class="font-headline text-xl font-bold text-on-surface">Merge Queue <span class="text-on-surface-variant font-medium text-base ml-2">(5 images selected)</span></h3>
+<p class="text-xs text-on-surface-variant mt-0.5">Drag to reorder images for the final output.</p>
+</div>
+<button class="text-primary text-sm font-semibold hover:bg-surface-container-low px-4 py-2 rounded-lg transition-colors">Clear All</button>
+</div>
+<!-- Scrollable Image List (Bento-like individual cards) -->
+<div class="flex-1 overflow-y-auto px-8 pb-32 space-y-4 custom-scrollbar">
+<!-- Item 1 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-center gap-6 group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
+<div class="w-24 h-24 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-outline-variant/10">
+<img alt="Nebula" class="w-full h-full object-cover" data-alt="vibrant abstract nebula with swirls of deep blue and purple gases and twinkling distant stars in a cinematic cosmic scene" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7Mk6x6_JPiD85wIaO-2oXIIgYNThGztTLobyX6RNQn4Lqk-dFk5cGMnvbS7iRFI--i0iAh7MSTZH8hkyt63eK3kNOlVVFVmRIz-BxObXHrEB8g1HEUJriT3quihvwuznNWT6yc5I47UlI89q_QYc04qrCOdFknUNEeoCkEpKs6RH9fPeomjGrHA5cCFFwYB1-rrMqwheTzCInq8KitWbEd7AlBooLPEYIRVPrQ3InULsbEDQaD1JvVitH9BUjEqduRgDljqCw0hE"/>
+<div class="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-semibold text-on-surface truncate">abstract_nebula.jpg</h4>
+<p class="text-xs text-on-surface-variant font-medium mt-1">3840 x 2160 • 4.2 MB</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-outline-variant cursor-grab active:cursor-grabbing">drag_indicator</span>
+<button class="material-symbols-outlined text-error-dim bg-error-container/10 p-2 rounded-full hover:bg-error-container/20 transition-all">delete</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-center gap-6 group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
+<div class="w-24 h-24 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-outline-variant/10">
+<img alt="Gradient" class="w-full h-full object-cover" data-alt="smooth liquid gradient with waves of orange, peach, and soft magenta blending seamlessly in a modern aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4txic75OyyyZkdvYSoNXyzHr88u2DInrgoRd5i90aDpy-AvYRcKi4BqhgJu0r98yKtRV7BALyjkgiCFjegBPGPCDr00WfnLhEGQ5pnKdi9vg494rKtnucMD_KQT_xpgxbzYnFtZoKsSb4T9xp5b-uKFtOp7jo_EoUs-SAgRWcSyi_7h0aMsMWI1Exkccbt1b3_P3lB-T83HtnLVHgks7A-hVWZcGW6HWEPiXtykMS5d9E40UzIMGWkmArGw1nklqj75uKmg1RSgo"/>
+<div class="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-semibold text-on-surface truncate">vibrant_flow_02.png</h4>
+<p class="text-xs text-on-surface-variant font-medium mt-1">2560 x 1440 • 2.8 MB</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-outline-variant cursor-grab">drag_indicator</span>
+<button class="material-symbols-outlined text-error-dim bg-error-container/10 p-2 rounded-full hover:bg-error-container/20 transition-all">delete</button>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-primary-fixed p-4 rounded-xl flex items-center gap-6 group transition-all duration-300">
+<div class="w-24 h-24 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-primary/20">
+<img alt="Geometry" class="w-full h-full object-cover" data-alt="minimalist architectural geometry with clean lines and soft shadows on a white concrete surface with bright daylight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC53Qzc2Mfp-bmbQGJRpFaqWWIpL4D9dWHqW-Jzz07UUCDoKQserrAYwOs8UxDKaWfXKBD4i6GLSYiGvVZG8HQxERbyH8Gs50crzdXXnAwxVPW3dt1HOMMUnvhoasRyTbK70SYQE8kRdw9IHCpEIi9_eCaoEcenTQjelWqJtOSTg5E0edazfFiH9U_oQdOyIjdO-jaYnHjkMC9-WStYmWGYDtI-NeuXOJ_RMD94FBpKSvGDqAHXjwTExx7XoBotGjAP9rjGsxPGisY"/>
+<!-- Selection Chip -->
+<div class="absolute top-1 left-1 bg-primary text-on-primary rounded-sm p-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-bold text-on-primary-fixed truncate">minimal_geo_structure.tiff</h4>
+<p class="text-xs text-on-primary-fixed-variant font-medium mt-1">4500 x 3000 • 12.4 MB</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-primary-fixed-variant cursor-grab">drag_indicator</span>
+<button class="material-symbols-outlined text-on-primary-fixed-variant bg-white/20 p-2 rounded-full hover:bg-white/30 transition-all">delete</button>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-center gap-6 group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
+<div class="w-24 h-24 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-outline-variant/10">
+<img alt="Darkness" class="w-full h-full object-cover" data-alt="deep charcoal textured background with subtle organic noise and elegant dark aesthetic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDifsIaue_ctKZ861k_r7GKS--xiRbZlDokz-1jhNQ35koyf598PjOjCK-M-oGwUAFQ8Dmq6l5rA8PZ0veLxOfT6Y8JS2igsg1uNnbIxp5vo4d57Zrcnp1KHBAqWXUL8iAeia_Q4ilj4smTyo65RDyUzqGrWc6AsqcvYUl46082wp3G_T1rkK-6iSk-PvSG_kGeey0-hgFaPpkBMFL5EB4awXCq0mEDJ_meotGkxLIxjCrcD2E9O8gQY7YUFIN8lWKBStB11wOzVgU"/>
+<div class="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-semibold text-on-surface truncate">dark_texture_base.jpg</h4>
+<p class="text-xs text-on-surface-variant font-medium mt-1">1920 x 1080 • 1.1 MB</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-outline-variant cursor-grab">drag_indicator</span>
+<button class="material-symbols-outlined text-error-dim bg-error-container/10 p-2 rounded-full hover:bg-error-container/20 transition-all">delete</button>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl flex items-center gap-6 group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
+<div class="w-24 h-24 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-outline-variant/10">
+<img alt="Atmospheric" class="w-full h-full object-cover" data-alt="ethereal atmospheric light rays filtering through dense morning mist in a serene dark forest setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4oJIrSNWBb5f1hTLgB51SFhD3xfw5Hkr0Gbe5MmK9Xfg--Ij2u37dBGDnWvNJ2tTMgb1kSxbIOGaICeSILiOSzXM-jmN8nTsaTIKAdeDczuzxJsAxrCIap5MWQIs8EicReeV2MwKSJxxOgFM2fs2N7je4MjA135oXyh_DXacjCvMWfEBLYJ85OSu0QT_bilE3pC2AJmje2ucvlxzulI_i-ZXdlpHJbOdY1iPX2bjipmBu8y6w-c8XYEgKbgaR2HZIQqIqC7CkXTQ"/>
+<div class="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-semibold text-on-surface truncate">ethereal_rays_final.jpg</h4>
+<p class="text-xs text-on-surface-variant font-medium mt-1">5120 x 2880 • 7.5 MB</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-outline-variant cursor-grab">drag_indicator</span>
+<button class="material-symbols-outlined text-error-dim bg-error-container/10 p-2 rounded-full hover:bg-error-container/20 transition-all">delete</button>
+</div>
+</div>
+</div>
+<!-- Bottom Action Bar (Floating HUD Style) -->
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-4rem)] max-w-4xl h-20 bg-surface-container-lowest/80 backdrop-blur-xl rounded-full px-8 flex items-center justify-between shadow-2xl shadow-on-surface/10 z-50">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+<span class="text-sm font-semibold text-on-surface">Live Preview Ready</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant opacity-30"></div>
+<div class="flex items-center gap-3">
+<span class="text-xs text-on-surface-variant font-medium">Estimated Canvas:</span>
+<span class="text-xs font-bold text-primary bg-primary-container/20 px-2 py-1 rounded">1920 × 10,480 px</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-sm font-semibold text-on-surface-variant px-4 hover:opacity-70 transition-opacity">Preview Full</button>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-full px-8 py-3 text-sm font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all duration-100 flex items-center gap-2">
+                        Merge and Save
+                        <span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+</body></html>

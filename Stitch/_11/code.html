@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Precision Atelier - Image Batch Compression</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-container": "#001075",
+              "secondary": "#5b5e72",
+              "primary-dim": "#3d4aa7",
+              "inverse-surface": "#0b0f11",
+              "on-primary-fixed": "#000000",
+              "tertiary-fixed-dim": "#e2c0ee",
+              "secondary-fixed": "#e0e1f9",
+              "secondary-dim": "#4f5266",
+              "inverse-primary": "#8c99fc",
+              "tertiary-fixed": "#f1cefc",
+              "tertiary-container": "#f1cefc",
+              "surface-container-lowest": "#ffffff",
+              "on-secondary-container": "#4e5065",
+              "secondary-container": "#e0e1f9",
+              "on-primary": "#fbf8ff",
+              "outline": "#747c81",
+              "surface": "#f7f9fc",
+              "primary-fixed-dim": "#7f8ced",
+              "secondary-fixed-dim": "#d1d3eb",
+              "outline-variant": "#abb3b9",
+              "primary-container": "#8c99fc",
+              "on-background": "#2c3338",
+              "on-tertiary": "#fff7fc",
+              "on-secondary-fixed": "#3c3e51",
+              "primary": "#4956b4",
+              "primary-fixed": "#8c99fc",
+              "on-tertiary-container": "#5d4368",
+              "surface-container-highest": "#dce3e9",
+              "surface-dim": "#d4dbe1",
+              "error": "#a8364b",
+              "surface-container-high": "#e3e9ee",
+              "on-error": "#fff7f7",
+              "on-error-container": "#6e0523",
+              "surface-tint": "#4956b4",
+              "on-secondary": "#faf8ff",
+              "on-primary-fixed-variant": "#0e1d7f",
+              "on-tertiary-fixed-variant": "#674c72",
+              "on-surface": "#2c3338",
+              "on-tertiary-fixed": "#493055",
+              "on-surface-variant": "#596065",
+              "tertiary-dim": "#64496f",
+              "surface-container": "#e9eef3",
+              "inverse-on-surface": "#9a9da0",
+              "error-container": "#f97386",
+              "surface-variant": "#dce3e9",
+              "surface-container-low": "#f0f4f8",
+              "surface-bright": "#f7f9fc",
+              "tertiary": "#71557c",
+              "error-dim": "#6b0221",
+              "on-secondary-fixed-variant": "#585a6f",
+              "background": "#f7f9fc"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-slate-50 dark:bg-slate-900 flex justify-between items-center w-full px-6 py-3 border-none">
+<div class="flex items-center gap-8">
+<span class="text-xl font-extrabold tracking-tight text-indigo-700 dark:text-indigo-300">Precision Atelier</span>
+<div class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 w-64 group focus-within:ring-2 ring-primary/20">
+<span class="material-symbols-outlined text-slate-400 text-sm">search</span>
+<input class="bg-transparent border-none text-sm font-medium focus:ring-0 w-full placeholder:text-slate-400" placeholder="Search files..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-lg">Add Files</button>
+<button class="px-6 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95 duration-150 ease-in-out">Process All</button>
+</div>
+</header>
+<!-- Sidebar Wrapper -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-slate-100 dark:bg-slate-800 flex flex-col py-6 z-40">
+<div class="px-6 mb-8 mt-12">
+<h2 class="text-lg font-black text-indigo-700 dark:text-indigo-300">Tools</h2>
+<p class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Batch Editor</p>
+</div>
+<nav class="flex-1 overflow-y-auto space-y-1">
+<!-- Compression Active -->
+<a class="flex items-center px-6 py-3 text-indigo-700 dark:text-indigo-300 relative before:absolute before:left-0 before:w-1 before:h-6 before:bg-indigo-600 before:rounded-r-full group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4" style="font-variation-settings: 'FILL' 1;">compress</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Compression</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">transform</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Format</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">aspect_ratio</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Resize</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">branding_watermark</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Watermark</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">rounded_corner</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Corners</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">padding</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Padding</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">crop</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Crop</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">rotate_right</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Rotate</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">flip</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Flip</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">picture_as_pdf</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Merge PDF</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">image_search</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Merge Image</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">gif_box</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Merge GIF</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 group hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-4">content_cut</span>
+<span class="text-[11px] font-bold tracking-wide uppercase">Manual Crop</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-16 min-h-screen bg-surface">
+<!-- Dashboard Header -->
+<div class="px-8 py-6">
+<h1 class="text-3xl font-extrabold text-on-surface tracking-tight">428 Images Selected</h1>
+<p class="text-on-surface-variant text-sm font-medium">Ready for batch compression</p>
+</div>
+<!-- Global Control Panel (Glassmorphism) -->
+<div class="mx-8 mb-8 p-6 rounded-xl surface-container-high border-none flex flex-wrap items-end gap-8 shadow-sm">
+<div class="flex-1 min-w-[300px]">
+<div class="flex justify-between mb-3">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Compression Quality</label>
+<span class="text-sm font-bold text-primary">85%</span>
+</div>
+<div class="relative w-full h-1.5 bg-outline-variant/30 rounded-full">
+<div class="absolute h-full w-[85%] bg-primary rounded-full"></div>
+<div class="absolute top-1/2 left-[85%] -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-surface-container-lowest border-2 border-primary rounded-full shadow-md cursor-pointer"></div>
+</div>
+</div>
+<div class="w-48">
+<label class="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">Target Size (KB)</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-none rounded-lg px-4 py-2.5 text-sm font-bold focus:ring-2 ring-primary/20" type="number" value="250"/>
+<span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">KB</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="h-10 px-4 flex items-center gap-2 bg-surface-container-lowest text-primary text-sm font-bold rounded-lg hover:bg-primary/5 transition-colors">
+<span class="material-symbols-outlined text-sm">settings</span>
+                    Advanced
+                </button>
+</div>
+</div>
+<!-- Batch List Container -->
+<div class="mx-8 mb-12 space-y-4">
+<!-- Card 1 -->
+<div class="group flex items-center p-4 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow">
+<div class="relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="dramatic wide landscape of sunset over a calm lake with purple and orange clouds reflected in the water" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXGnHOboiD2SkHWoOmhDu-rEtBYBMP9SBwYVJr0Zf91zECx_XXMALpUaieSRGlUfjRzgH4D2q_LCLwK2N0MHNxcik1g1oAg63tlaR0Dc21aBl7sNPuFrAMzrHvS6TfEpkWRzcPZBTugr_KWnHzApsa--y2SjCoI3LEeqRcUrRg2kRBBUZtHrBW4ucuTFqj3TlmF7vvKyV_fyMu8CtuepdQuWWRggC7cM9DDicjODNrlnRw9t_zWsUZtN_NN1iBg7kVB5XCJ2tcZ5c"/>
+<div class="absolute top-1 left-1 bg-primary px-1.5 py-0.5 rounded-sm text-[8px] font-bold text-white uppercase">JPG</div>
+</div>
+<div class="ml-6 flex-1">
+<h3 class="font-bold text-on-surface">mountain_zenith_hq.jpg</h3>
+<div class="flex items-center gap-4 mt-2">
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">straighten</span>
+                            4096 × 2160
+                        </span>
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">data_usage</span>
+                            8.4 MB
+                        </span>
+</div>
+</div>
+<div class="flex items-center gap-2 pr-2">
+<button class="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold">
+<span class="material-symbols-outlined text-lg">visibility</span>
+                        Preview
+                    </button>
+<button class="p-2 text-error/60 hover:text-error hover:bg-error/5 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group flex items-center p-4 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow">
+<div class="relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="sunbeams filtering through tall redwood forest trees with deep green moss and forest floor texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCabboe1IeleMH9m8LxKr2z2L8UsKYFIJ6ANLb5725CGhiSOOds8nOjHogKAZao5JrtSnRIu1vRpgTL9bJ32OWuPc025HXTlg9JZz6iKj2yz1u7q2EEowNNlvzQUKtZde32YfDsxnWBZRc0VaYGkdtfMFXsL_cSB8wuYdJhGqfNyoy1HBF6vK4w0J0YwVVsvLsWKg12JBFVLh97QMpQXo88ffItB8Dk3X2FVw28aCYVbyjbSt2A2nxaJktOK5mGMXJd_ENgiRvrDvg"/>
+<div class="absolute top-1 left-1 bg-primary px-1.5 py-0.5 rounded-sm text-[8px] font-bold text-white uppercase">PNG</div>
+</div>
+<div class="ml-6 flex-1">
+<h3 class="font-bold text-on-surface">forest_walk_v2.png</h3>
+<div class="flex items-center gap-4 mt-2">
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">straighten</span>
+                            2400 × 3600
+                        </span>
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">data_usage</span>
+                            12.1 MB
+                        </span>
+</div>
+</div>
+<div class="flex items-center gap-2 pr-2">
+<button class="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold">
+<span class="material-symbols-outlined text-lg">visibility</span>
+                        Preview
+                    </button>
+<button class="p-2 text-error/60 hover:text-error hover:bg-error/5 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+<!-- Card 3 (Active/Selected State Example) -->
+<div class="group flex items-center p-4 bg-primary-fixed/20 ring-1 ring-primary/20 rounded-xl hover:shadow-md transition-shadow relative">
+<div class="absolute top-3 left-3 z-10 bg-primary text-white p-0.5 rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'wght' 700;">check</span>
+</div>
+<div class="relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="misty mountain range at dawn with soft morning light and layers of blue fog between hills" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOaVzbQdveGZ-jgqV721BJeXUyMpJRXSCNnbRosYmNCiF2Hpeyk70K-rgZ2P59Sqhg4cfd7zdhjaEGhHMqKh-psZX9oJVJK-wLKpj2OS6M0Rg3mzYbtJnLPxqCgtCYkuWaJxQH70pIZeYKmKjqEj3cxxArcQ2JRhGGqh6YUFTf_AU1sE8cxpf_xseJ6zjAI6TsbT1nXCi67U-XC5HDSzrIHvqOn6TByzw2XdItxyf9p6QchTUKt0Z7jQGboRX31PR3cNnfZ704HuY"/>
+<div class="absolute top-1 left-1 bg-primary px-1.5 py-0.5 rounded-sm text-[8px] font-bold text-white uppercase">JPG</div>
+</div>
+<div class="ml-6 flex-1">
+<h3 class="font-bold text-on-surface">misty_peaks_panorama.jpg</h3>
+<div class="flex items-center gap-4 mt-2">
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">straighten</span>
+                            8192 × 2048
+                        </span>
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">data_usage</span>
+                            18.7 MB
+                        </span>
+</div>
+</div>
+<div class="flex items-center gap-2 pr-2">
+<button class="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold">
+<span class="material-symbols-outlined text-lg">visibility</span>
+                        Preview
+                    </button>
+<button class="p-2 text-error/60 hover:text-error hover:bg-error/5 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="group flex items-center p-4 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow">
+<div class="relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="turquoise glacial lake surrounded by snowy alpine peaks with a small wooden boat on the shore" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQHooEhXIE7gUH9rJcvI1HpVCqyC_NgMDCe1RhSfRWLSEKTHExgyDC2RubODVJuc8uxDXt_T5VUJky6e_3H4l1EkzoLJ3zD3aygMpxckLqnZGs78Hb9-WLJQqhRGXVUzOOU7RBoRjSVKB7cdPHmTEJ-jpwbO8orNUWZYmgIfqBaZEngLh_0Yj0pSm8wtV5jRHSciW-0eJmSxUpneiweixx1xfv4S5RqYpmbN2jn2Gb0lv9it2s8HKjxZjgg3gKJGfZ-kXa0iKH7Qg"/>
+<div class="absolute top-1 left-1 bg-primary px-1.5 py-0.5 rounded-sm text-[8px] font-bold text-white uppercase">JPG</div>
+</div>
+<div class="ml-6 flex-1">
+<h3 class="font-bold text-on-surface">lake_reflexion_01.jpg</h3>
+<div class="flex items-center gap-4 mt-2">
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">straighten</span>
+                            1920 × 1080
+                        </span>
+<span class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">data_usage</span>
+                            2.1 MB
+                        </span>
+</div>
+</div>
+<div class="flex items-center gap-2 pr-2">
+<button class="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold">
+<span class="material-symbols-outlined text-lg">visibility</span>
+                        Preview
+                    </button>
+<button class="p-2 text-error/60 hover:text-error hover:bg-error/5 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating HUD Overlay -->
+<div class="fixed bottom-6 right-8 glass-panel border border-white/20 p-4 rounded-2xl shadow-2xl flex items-center gap-6 z-50">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Est. Savings</span>
+<span class="text-xl font-black text-primary">~38.4 MB</span>
+</div>
+<div class="h-10 w-px bg-slate-200"></div>
+<button class="px-8 py-3 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95">
+            Optimize Batch
+        </button>
+</div>
+</body></html>

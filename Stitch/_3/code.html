@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Format Conversion | Precision Atelier</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "error-container": "#f97386",
+              "on-tertiary-container": "#5d4368",
+              "error": "#a8364b",
+              "surface-container-highest": "#dce3e9",
+              "on-surface": "#2c3338",
+              "surface-container-low": "#f0f4f8",
+              "on-error-container": "#6e0523",
+              "primary-fixed": "#8c99fc",
+              "inverse-on-surface": "#9a9da0",
+              "on-error": "#fff7f7",
+              "surface-dim": "#d4dbe1",
+              "secondary-fixed-dim": "#d1d3eb",
+              "inverse-primary": "#8c99fc",
+              "on-primary": "#fbf8ff",
+              "inverse-surface": "#0b0f11",
+              "primary-container": "#8c99fc",
+              "on-secondary-fixed-variant": "#585a6f",
+              "outline": "#747c81",
+              "tertiary-fixed": "#f1cefc",
+              "on-background": "#2c3338",
+              "on-tertiary-fixed-variant": "#674c72",
+              "primary-dim": "#3d4aa7",
+              "on-secondary": "#faf8ff",
+              "background": "#f7f9fc",
+              "secondary-fixed": "#e0e1f9",
+              "primary-fixed-dim": "#7f8ced",
+              "on-secondary-fixed": "#3c3e51",
+              "surface-variant": "#dce3e9",
+              "secondary": "#5b5e72",
+              "surface": "#f7f9fc",
+              "primary": "#4956b4",
+              "on-primary-fixed": "#000000",
+              "outline-variant": "#abb3b9",
+              "tertiary-dim": "#64496f",
+              "surface-container-high": "#e3e9ee",
+              "secondary-dim": "#4f5266",
+              "on-tertiary-fixed": "#493055",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-container": "#f1cefc",
+              "error-dim": "#6b0221",
+              "on-surface-variant": "#596065",
+              "surface-container": "#e9eef3",
+              "surface-bright": "#f7f9fc",
+              "on-secondary-container": "#4e5065",
+              "tertiary-fixed-dim": "#e2c0ee",
+              "tertiary": "#71557c",
+              "on-primary-container": "#001075",
+              "secondary-container": "#e0e1f9",
+              "surface-tint": "#4956b4",
+              "on-primary-fixed-variant": "#0e1d7f",
+              "on-tertiary": "#fff7fc"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f7f9fc;
+      }
+      h1, h2, h3, .brand-text {
+        font-family: 'Manrope', sans-serif;
+      }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar (Rail) -->
+<nav class="fixed left-0 top-0 h-full z-40 flex flex-col bg-slate-100 dark:bg-slate-900 h-screen w-20 md:w-64">
+<div class="p-6">
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Precision Atelier</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-semibold mt-1 opacity-70">Batch Processor</p>
+</div>
+<div class="flex-1 overflow-y-auto py-4 space-y-1">
+<!-- Navigation Items Mapping -->
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">compress</span>
+<span class="text-xs font-medium hidden md:block">Compression</span>
+</a>
+<!-- Active Tab: Format -->
+<a class="relative flex items-center px-6 py-3 text-indigo-700 dark:text-indigo-300 font-bold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1 before:bg-indigo-600 before:rounded-r-full bg-slate-200/50 dark:bg-slate-800/50" href="#">
+<span class="material-symbols-outlined mr-3">insert_drive_file</span>
+<span class="text-xs font-medium hidden md:block">Format</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">aspect_ratio</span>
+<span class="text-xs font-medium hidden md:block">Resize</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">branding_watermark</span>
+<span class="text-xs font-medium hidden md:block">Watermark</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">rounded_corner</span>
+<span class="text-xs font-medium hidden md:block">Corners</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">padding</span>
+<span class="text-xs font-medium hidden md:block">Padding</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">crop</span>
+<span class="text-xs font-medium hidden md:block">Crop</span>
+</a>
+<div class="h-px bg-outline-variant/10 mx-6 my-4"></div>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">picture_as_pdf</span>
+<span class="text-xs font-medium hidden md:block">Merge PDF</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-indigo-500 transition-colors group" href="#">
+<span class="material-symbols-outlined mr-3">image</span>
+<span class="text-xs font-medium hidden md:block">Merge Image</span>
+</a>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-20 md:left-64 h-16 flex items-center justify-between px-6 z-30 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-md">
+<div class="flex items-center gap-4">
+<h2 class="text-on-surface font-headline font-bold text-lg">Format Conversion</h2>
+<span class="bg-primary-fixed/20 text-on-primary-container px-2 py-0.5 rounded-full text-[10px] font-bold">128 FILES</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden lg:block">
+<input class="bg-surface-container-low border-none rounded-full px-4 py-2 text-sm w-64 focus:ring-2 focus:ring-primary/20 placeholder:text-on-surface-variant/50" placeholder="Search batch..." type="text"/>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity"><span class="material-symbols-outlined">settings</span></button>
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity"><span class="material-symbols-outlined">help</span></button>
+<div class="h-8 w-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs">JS</div>
+</div>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-6 py-2 rounded-full font-semibold text-sm shadow-lg shadow-primary/20 active:scale-95 transition-transform">
+                Process Batch
+            </button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-20 md:ml-64 mt-16 p-8 pb-32 min-h-screen bg-surface">
+<!-- Global Conversion Settings (Floating Panel) -->
+<section class="mb-12 bg-surface-container-low rounded-xl p-8 shadow-sm">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-8">
+<div class="space-y-4 max-w-xl">
+<h3 class="text-2xl font-headline font-extrabold text-on-surface tracking-tight">Global Conversion Settings</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Define the target format and quality parameters for all files in this session. Individual overrides can be applied in the file list below.</p>
+</div>
+<div class="flex flex-wrap gap-4 items-end">
+<div class="space-y-2">
+<label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider ml-1">Convert all to:</label>
+<div class="relative min-w-[160px]">
+<select class="w-full bg-surface-container-lowest border-outline-variant/20 rounded-lg px-4 py-3 text-sm font-semibold text-on-surface appearance-none focus:ring-2 focus:ring-primary/20">
+<option>PNG</option>
+<option selected="">JPEG</option>
+<option>JPG</option>
+<option>WebP</option>
+<option>TIFF</option>
+<option>AVIF</option>
+<option>BMP</option>
+<option>GIF</option>
+<option>ICO</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider ml-1">Quality Level</label>
+<div class="flex items-center gap-4 bg-surface-container-lowest px-4 py-3 rounded-lg border border-outline-variant/10">
+<input class="w-32 accent-primary h-1.5 rounded-full" type="range" value="85"/>
+<span class="text-sm font-bold text-primary">85%</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Batch File List (Asymmetric Grid) -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex gap-4 items-center transition-all hover:translate-y-[-2px] hover:shadow-xl hover:shadow-indigo-500/5 group border border-transparent hover:border-primary/10">
+<div class="relative h-20 w-20 rounded-lg overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Forest path" class="h-full w-full object-cover" data-alt="Sunlight filtering through tall pine trees in a dense forest with a soft morning mist and vibrant green moss" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6uJ8dtW7Xk6Mq453TKkyYDzMWWXFGfRClcjPFEWd88FITlbhZ003A6DMcQ8Pt5Bw9UF-poAMjRYddhPLTaRVYTS-_6litTTiksaxYisM8hAouqS1tVGFgS0MqaVY1-Dhh9U5bdTOif_VwyJ8__viCH2rZa1_LsQyL992I6dBUYH_8WOahdA20rdymks5kkqCYOwTYOVtkKs8tSfBo0xc0V8nCsnNKtudjXgOttQ3NE8XNE-ExW1sylTU5ZDDKv2aA5HHnnClspFc"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold text-on-surface truncate">DSC0921_nature.raw</p>
+<p class="text-[11px] text-on-surface-variant">24.5 MB • 6000 x 4000</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase">→ JPEG</span>
+</div>
+</div>
+<button class="bg-surface-container-high p-2 rounded-full text-on-surface-variant hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+<!-- Card 2 (Active/Selected State) -->
+<div class="bg-primary-fixed/10 rounded-xl p-4 flex gap-4 items-center border border-primary/20 relative">
+<div class="absolute top-2 right-2 h-5 w-5 bg-primary rounded-sm flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="relative h-20 w-20 rounded-lg overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Mountain range" class="h-full w-full object-cover" data-alt="Majestic snow-capped mountain peaks under a clear blue sky with sharp ridges and deep blue shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVU71sjbGDwefkE-j_k1_HPyOoe1GSEro-poAuMhA0_evlItWD7myt4qmxVn5JwgMddbfQ64L7412P6L3TVpRBcuHJe4O5wKT9HfustDKR3ZQ2_PCAhd_3WmwI40lL7s35DXpPRc7ELUp0hCURlx4Lx67tj0IQw-M64Uqr-k_u3Mj4-TZUHIrD1EhJsvXnegFz2ag6lkwYMrP6YOGyTQn6tGREaOgLdwMPWygUMj4Gx4bazj2HDc-tDwz25J9H4ne3cr8Rx5Fgcvo"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold text-on-surface truncate">Highland_Summit.tiff</p>
+<p class="text-[11px] text-on-surface-variant">42.1 MB • 8200 x 5400</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase">→ JPEG</span>
+</div>
+</div>
+<button class="bg-primary p-2 rounded-full text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex gap-4 items-center transition-all hover:translate-y-[-2px] hover:shadow-xl hover:shadow-indigo-500/5 group border border-transparent hover:border-primary/10">
+<div class="relative h-20 w-20 rounded-lg overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Alpine lake" class="h-full w-full object-cover" data-alt="Serene alpine lake reflecting turquoise water and surrounding evergreen trees at dawn with a misty atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKB7j7mpTdTAOvJO9krFyY0H-jHVJ7TnkIIjPiRCX7qMbjinpJfOVN5yv-F_Xn-4V7kmdWnpegHXjg--1kHRlyXRfDyXLDQdBUWFkMalpNGeCpXDQQaDkzxuwYV23Mkiw8x_yZRljSV_GaiyY7_SJaogDbbd0J7-OQu7iLFw_Hpd2mmOHU1kLeLMJafVgrCtfb9cPApcKOPl1Ib4IsKOb6fiafk7AFS6UgsblaRqIZ_Z9lvS7wp7Z25Npf0wjUlH6A33jJdGETuPA"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold text-on-surface truncate">Lake_Reflection_V2.png</p>
+<p class="text-[11px] text-on-surface-variant">12.8 MB • 4500 x 3000</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase">→ JPEG</span>
+</div>
+</div>
+<button class="bg-surface-container-high p-2 rounded-full text-on-surface-variant hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+<!-- Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex gap-4 items-center transition-all hover:translate-y-[-2px] hover:shadow-xl hover:shadow-indigo-500/5 group border border-transparent hover:border-primary/10">
+<div class="relative h-20 w-20 rounded-lg overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Meadow sunset" class="h-full w-full object-cover" data-alt="Lush green meadow filled with wildflowers at sunset with golden light casting long dramatic shadows across the grass" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjSCVkUMJ8kjFz8wJTOKuzOQK6EClDBaIYTfAWPZYxJUS_06XzgVTqnbpp2kDkFx9UOCK8B2b-nndH9SwrI-XvNPer792MsOfSm96vRQoELxEhB5V6supNhgzqoRkVg95eHyJOYOhWJXx3EcoyU7ocFShlEpUGN8UyYACeofWxp5mXdjCgVQXF-_y6KPrBS4oz0YnnlwDruZxNzjqTB_fHPkzZlm0otcOkPuDNAfPaAKIUpPio2TlP6FbChWLTGEB1yglBYFGm1ck"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold text-on-surface truncate">Spring_Equinox.webp</p>
+<p class="text-[11px] text-on-surface-variant">3.2 MB • 3000 x 2000</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase">→ JPEG</span>
+</div>
+</div>
+<button class="bg-surface-container-high p-2 rounded-full text-on-surface-variant hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+<!-- Card 5 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex gap-4 items-center transition-all hover:translate-y-[-2px] hover:shadow-xl hover:shadow-indigo-500/5 group border border-transparent hover:border-primary/10">
+<div class="relative h-20 w-20 rounded-lg overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Wooden bridge" class="h-full w-full object-cover" data-alt="Rustic wooden bridge spanning a crystal clear stream in a vibrant autumn forest with orange and yellow leaves" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWdM6JG6_lqe04JnSOTFijMdzX0ziO0J9A90d7rcdVLhII0HlJSyQOmWPCDl0qk_68xi2BNV0a8YjVtORwxBjUPmYR2LKD6td1g0EP2uvNETBA5eUwyRFIGTw8iUD1rPMn4ExyTfm7dSFHPNwq-a07A9TNDGSPQE8jmViWov27Eve2TxvO7F35HymYoObiV4PW8-8wSno3euoO6TWwA1OPeZAm6IOMUkaGTTn-Gqw4S1gRx2CRK-gUml9Qc35qU4nsDH1tSZDZWFA"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold text-on-surface truncate">Forest_Path_004.avif</p>
+<p class="text-[11px] text-on-surface-variant">1.8 MB • 1920 x 1080</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase">→ JPEG</span>
+</div>
+</div>
+<button class="bg-surface-container-high p-2 rounded-full text-on-surface-variant hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+<!-- Empty / Add File Slot -->
+<div class="border-2 border-dashed border-outline-variant/30 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-surface-container-low transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary">add_photo_alternate</span>
+<span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Add Files</span>
+</div>
+</div>
+</main>
+<!-- Bottom Action Bar (Glassmorphism) -->
+<footer class="fixed bottom-8 left-1/2 -translate-x-1/2 md:left-[calc(50%+128px)] w-[calc(100%-4rem)] md:w-[600px] bg-surface-container-lowest/80 backdrop-blur-xl border border-outline-variant/10 rounded-full px-8 py-4 shadow-2xl flex items-center justify-between z-50">
+<div class="flex items-center gap-4">
+<div class="flex -space-x-2">
+<div class="h-8 w-8 rounded-full border-2 border-surface-container-lowest bg-slate-200 overflow-hidden">
+<img alt="Small thumb" class="object-cover h-full w-full" data-alt="Micro thumbnail of a forest path" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAfh7dBiNEeELVrgTF84vr9jS_VKvRTT6VKiCkg_1qNwCg14MbVCqeuCfdWhloEknXbsY21LdmT_T9lOd9bZwjp9u_ixEL7ZvLA88rVt9eNw0-BMXplZwCmrNFheBIr4npclg_XTSItv83CxfFJ4eLotBTi1_srwoXQkZjNlQ_OUd09RXA4LyL68dfAtoiKbbVPhlt0T6TCwOlVpdaZtSrmDDrIfmoiFq0Ygt7gxBlRa8bGvki5yCsk2I_jT9W5ARkb3CvkfVIzFs"/>
+</div>
+<div class="h-8 w-8 rounded-full border-2 border-surface-container-lowest bg-slate-300 overflow-hidden">
+<img alt="Small thumb" class="object-cover h-full w-full" data-alt="Micro thumbnail of a mountain peak" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6slJxmt2M0VsBz7ySCSfs90zAK0b_T5SlEu1M3LRPDl49dd_Nv4PiKpNWUomSrNp00xHmGmx6O75Zk0hNYhG5Pz4L6Zpy6xgbesKgGPmj1W1y0m4v-d8wofcspBaWwKeTBotvlF24_6prVu_9vBuCJFNLgZsAyaXCnQEHzqwqv9VZvuhEH7FbuErXefcbh6fa462YizzxI97G9KZIJp1tukMnjQvYlHu_kZs5IAcqa-T1CjXpcMndmTb4a5apXarwlvyVEImMrh8"/>
+</div>
+<div class="h-8 w-8 rounded-full border-2 border-surface-container-lowest bg-primary-container flex items-center justify-center text-[8px] font-black text-on-primary-container">+126</div>
+</div>
+<div class="hidden sm:block">
+<p class="text-xs font-bold text-on-surface">128 images queued</p>
+<p class="text-[10px] text-on-surface-variant">Est. size: 84.2 MB after conversion</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="text-on-surface-variant text-sm font-semibold hover:text-on-surface px-4 py-2">Clear All</button>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-8 py-3 rounded-full font-bold text-sm shadow-xl shadow-primary/30 active:scale-95 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">auto_fix_high</span>
+                Convert Batch
+            </button>
+</div>
+</footer>
+</body></html>

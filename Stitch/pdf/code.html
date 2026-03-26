@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>合并为 PDF 设置 - The Precision Atelier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary": "#71557c",
+              "surface-tint": "#4956b4",
+              "surface-container-highest": "#dce3e9",
+              "primary": "#4956b4",
+              "surface-container-lowest": "#ffffff",
+              "on-primary-fixed": "#000000",
+              "inverse-primary": "#8c99fc",
+              "on-secondary-fixed": "#3c3e51",
+              "on-background": "#2c3338",
+              "tertiary-fixed-dim": "#e2c0ee",
+              "secondary-fixed": "#e0e1f9",
+              "inverse-on-surface": "#9a9da0",
+              "on-primary-fixed-variant": "#0e1d7f",
+              "error-dim": "#6b0221",
+              "surface-bright": "#f7f9fc",
+              "on-secondary-fixed-variant": "#585a6f",
+              "outline": "#747c81",
+              "on-tertiary-fixed-variant": "#674c72",
+              "on-primary-container": "#001075",
+              "surface-container": "#e9eef3",
+              "on-tertiary-fixed": "#493055",
+              "primary-dim": "#3d4aa7",
+              "secondary": "#5b5e72",
+              "inverse-surface": "#0b0f11",
+              "primary-fixed": "#8c99fc",
+              "secondary-container": "#e0e1f9",
+              "on-surface": "#2c3338",
+              "surface": "#f7f9fc",
+              "tertiary-container": "#f1cefc",
+              "on-tertiary-container": "#5d4368",
+              "on-primary": "#fbf8ff",
+              "surface-container-low": "#f0f4f8",
+              "surface-variant": "#dce3e9",
+              "background": "#f7f9fc",
+              "secondary-fixed-dim": "#d1d3eb",
+              "on-surface-variant": "#596065",
+              "primary-fixed-dim": "#7f8ced",
+              "secondary-dim": "#4f5266",
+              "on-error-container": "#6e0523",
+              "on-secondary": "#faf8ff",
+              "tertiary-fixed": "#f1cefc",
+              "outline-variant": "#abb3b9",
+              "surface-container-high": "#e3e9ee",
+              "surface-dim": "#d4dbe1",
+              "on-error": "#fff7f7",
+              "error-container": "#f97386",
+              "tertiary-dim": "#64496f",
+              "error": "#a8364b",
+              "primary-container": "#8c99fc",
+              "on-tertiary": "#fff7fc",
+              "on-secondary-container": "#4e5065"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface flex min-h-screen">
+<!-- SideNavBar Component -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-100 dark:bg-slate-950 border-r border-slate-200/15 dark:border-slate-800/15 flex flex-col z-40 overflow-y-auto py-4">
+<div class="px-6 mb-8">
+<h2 class="text-lg font-black text-indigo-600">Precision Suite</h2>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest font-bold opacity-70">Batch Editor</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="compress">compress</span>
+<span class="text-sm font-medium">Compression</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="extension">extension</span>
+<span class="text-sm font-medium">Format</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="aspect_ratio">aspect_ratio</span>
+<span class="text-sm font-medium">Resize</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="branding_watermark">branding_watermark</span>
+<span class="text-sm font-medium">Watermark</span>
+</a>
+<!-- Active Item: Merge PDF -->
+<a class="relative text-indigo-600 dark:text-indigo-400 before:absolute before:left-0 before:w-1 before:h-6 before:bg-indigo-600 before:rounded-r-full flex items-center gap-3 px-4 py-3 bg-slate-200/50 dark:bg-slate-800/50" href="#">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+<span class="text-sm font-bold">Merge PDF</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="image">image</span>
+<span class="text-sm font-medium">Merge Image</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 flex items-center gap-3 px-4 py-3 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="gif">gif</span>
+<span class="text-sm font-medium">Merge GIF</span>
+</a>
+</nav>
+<div class="mt-auto px-4 py-6">
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-3 rounded-full font-bold shadow-lg hover:shadow-indigo-500/20 active:scale-95 transition-all">
+                Process Batch
+            </button>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<main class="flex-1 ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar Component -->
+<header class="sticky top-0 z-30 flex items-center justify-between px-8 h-16 w-full bg-slate-50 dark:bg-slate-900">
+<div class="flex items-center gap-4">
+<h1 class="text-xl font-bold tracking-tight text-indigo-700 dark:text-indigo-300">合并为 PDF 设置</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-slate-200/50 dark:bg-slate-800/50 rounded-full px-4 py-1.5 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-48 text-on-surface" placeholder="Search batch..." type="text"/>
+</div>
+<button class="material-symbols-outlined p-2 text-slate-500 hover:bg-slate-200/50 rounded-full transition-colors" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined p-2 text-slate-500 hover:bg-slate-200/50 rounded-full transition-colors" data-icon="settings">settings</button>
+<div class="w-8 h-8 rounded-full overflow-hidden bg-indigo-100 flex items-center justify-center border border-indigo-200">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="professional portrait of a creative director in a minimalist studio environment with neutral lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQXNjHVpzDl2llwIx1_EHMEZRrZgBfIxvTQXrl01hvybn5KvZktHPZPL1oI69SzdR4CAZN7BjmpsccNdbPu4EZmwhGjI_VNIzY6JqQ8zsdsk7gLrv4AiDFSRSf6kkjaQdbCVRkWvGgZv5nBF-rr9P0ROcZFi2W1aEYI4a7kS63bC-VxbuP0KzpAv4Gar1Ba2tKS5_2SvC0nweJdTAY2qDATzxYXGrqqzipFhBVCj0jaF3ZmJo_Be4rP3EE_E8LncecDz6ZPt-GCfw"/>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="flex flex-1 p-8 gap-8 overflow-hidden bg-surface">
+<!-- Left Panel: Configuration -->
+<section class="w-1/3 flex flex-col gap-6">
+<!-- Page Size Selection -->
+<div class="bg-surface-container-high rounded-xl p-6">
+<h3 class="text-sm font-bold text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="description">description</span>
+                        Page size selection
+                    </h3>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex flex-col items-center justify-center p-4 rounded-lg bg-surface-container-lowest border-2 border-primary text-primary transition-all">
+<span class="text-xs font-bold mb-1">A4</span>
+<span class="text-[10px] opacity-70 italic">210 x 297 mm</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-lg bg-surface-container-lowest hover:bg-white transition-all">
+<span class="text-xs font-bold mb-1">A3</span>
+<span class="text-[10px] opacity-70 italic">297 x 420 mm</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-lg bg-surface-container-lowest hover:bg-white transition-all">
+<span class="text-xs font-bold mb-1">A5</span>
+<span class="text-[10px] opacity-70 italic">148 x 210 mm</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-lg bg-surface-container-lowest hover:bg-white transition-all">
+<span class="text-xs font-bold mb-1">Letter</span>
+<span class="text-[10px] opacity-70 italic">8.5 x 11 in</span>
+</button>
+<button class="col-span-2 flex items-center justify-between p-4 rounded-lg bg-surface-container-lowest hover:bg-white transition-all">
+<div class="flex flex-col items-start">
+<span class="text-xs font-bold mb-1">Adaptive</span>
+<span class="text-[10px] opacity-70 italic">Match image dimensions</span>
+</div>
+<span class="material-symbols-outlined text-primary" data-icon="auto_awesome">auto_awesome</span>
+</button>
+</div>
+</div>
+<!-- Margin Selection -->
+<div class="bg-surface-container-high rounded-xl p-6">
+<h3 class="text-sm font-bold text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="format_indent_increase">format_indent_increase</span>
+                        Margin selection
+                    </h3>
+<div class="space-y-3">
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-lowest cursor-pointer hover:bg-white transition-all group">
+<input checked="" class="w-4 h-4 text-primary focus:ring-primary border-outline-variant" name="margin" type="radio"/>
+<div class="flex-1">
+<div class="text-xs font-bold">None</div>
+<div class="text-[10px] opacity-60">Zero margin, full bleed</div>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-lowest cursor-pointer hover:bg-white transition-all group">
+<input class="w-4 h-4 text-primary focus:ring-primary border-outline-variant" name="margin" type="radio"/>
+<div class="flex-1">
+<div class="text-xs font-bold">Narrow</div>
+<div class="text-[10px] opacity-60">12.7 mm (0.5 in)</div>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-lowest cursor-pointer hover:bg-white transition-all group">
+<input class="w-4 h-4 text-primary focus:ring-primary border-outline-variant" name="margin" type="radio"/>
+<div class="flex-1">
+<div class="text-xs font-bold">Wide</div>
+<div class="text-[10px] opacity-60">25.4 mm (1 in)</div>
+</div>
+</label>
+</div>
+</div>
+<!-- Preview Panel (Bento Style) -->
+<div class="bg-surface-container-low rounded-xl p-6 flex-1 border border-outline-variant/10">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-sm font-bold text-on-surface">Document Summary</h3>
+<span class="bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] font-bold">READY</span>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/15">
+<span class="text-[11px] text-on-surface-variant">Total Pages</span>
+<span class="text-xs font-bold">12</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/15">
+<span class="text-[11px] text-on-surface-variant">Est. File Size</span>
+<span class="text-xs font-bold">4.2 MB</span>
+</div>
+<div class="flex justify-between items-center py-2">
+<span class="text-[11px] text-on-surface-variant">Orientation</span>
+<span class="text-xs font-bold">Portrait</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Panel: Image List -->
+<section class="flex-1 flex flex-col bg-surface-container-low rounded-2xl overflow-hidden border border-outline-variant/10">
+<div class="p-6 bg-surface-container-low flex items-center justify-between sticky top-0 z-10 backdrop-blur-md bg-opacity-80">
+<div>
+<h3 class="text-base font-extrabold text-on-surface">Image list</h3>
+<p class="text-[11px] text-on-surface-variant font-medium">12 images selected • Drag to reorder</p>
+</div>
+<div class="flex gap-2">
+<button class="bg-surface-container-lowest p-2 rounded-lg text-on-surface hover:bg-white transition-all shadow-sm">
+<span class="material-symbols-outlined text-lg" data-icon="sort">sort</span>
+</button>
+<button class="bg-primary p-2 rounded-lg text-on-primary hover:bg-primary-dim transition-all shadow-sm flex items-center gap-2 px-4">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+<span class="text-xs font-bold">Add Images</span>
+</button>
+</div>
+</div>
+<div class="p-6 pt-0 space-y-3 overflow-y-auto">
+<!-- Image Card 1 (Active/Selected State Example) -->
+<div class="bg-primary-fixed/30 rounded-xl p-3 flex items-center gap-4 group hover:bg-primary-fixed/40 transition-all border-l-4 border-primary">
+<div class="cursor-move text-outline-variant group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="w-16 h-16 rounded-lg bg-surface-container-lowest overflow-hidden flex-shrink-0 shadow-sm">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="vibrant red sneaker shoe on a minimalist studio backdrop with sharp lighting and clean shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDT3dVKg28nLBeHdUq9P1EjY6VThfn-8QCLz0yoYBtwMJ1g6BQt6x3_bqWfA_tYBfXQ9HF5DLppk8ZpqAHdqULOw35mM4aK28CYCPGHJB5PM5UN2J2hiZzzzifCNUds7BnFlzCMn7UgKjwP5qHRhbgh53ikfzYKVjTn25oX6HTlS1HxWN5uxBvxVcG8pVeDCJWmQ0KhGbK72L0AiMQpeKDcIAMEbo8dhhS1yg9VmXLvqr0ZIKCUGDkpcjQvFO-3rTEURvp4bEQzKfM"/>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-sm font-bold text-on-surface truncate">Product_Campaign_Main_01.jpg</h4>
+<p class="text-[10px] text-on-surface-variant font-medium flex gap-2">
+<span>1.2 MB</span> • <span>3000 x 4500 px</span>
+</p>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white hover:text-error transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+<!-- Image Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center gap-4 group hover:bg-white transition-all">
+<div class="cursor-move text-outline-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="w-16 h-16 rounded-lg bg-surface-container-low overflow-hidden flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="modern analog white watch on a grey stone surface with soft ambient light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDeiV-Bu9rRwJjyT8rVP2gzGJAmh8UFgRJlNoUB8F_W77qXPbJ6WfBHHg8wAFHczzGAGeapO5oeIVynwDrKwTshy0aoIw_sc5jEpwsM_lV_657VTohxAoRBxkhUBw1aatlBjp-9tQe14n2NQSRymLHy48sv9txQWns2RMS5MxPp27g_n1JoZevz_TOxMureXlTU2StbtgZEmaakZldGCGOH4MuWhiQu1mI3acAt-iFvYcErk5eazFaW1Hduf4CddqT2snN1chM2Fmk"/>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-sm font-bold text-on-surface truncate">Accessories_Lifestyle_Final.jpg</h4>
+<p class="text-[10px] text-on-surface-variant font-medium flex gap-2">
+<span>850 KB</span> • <span>2500 x 2500 px</span>
+</p>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-error transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+<!-- Image Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center gap-4 group hover:bg-white transition-all">
+<div class="cursor-move text-outline-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="w-16 h-16 rounded-lg bg-surface-container-low overflow-hidden flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="professional yellow studio headphones on a dark oak wooden desk background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSUi6Rd4o_AV7utnf5Mc6C70wXt1zvjKQxrNywLr0trQhczOfwqejfl2pgK2TYWXq3qpwZx7MYW1aopTo1Ly8LUyB471epbKrvwCYkBk9mnMKFOFqXXmN8czi8KzTQVJPHaXRdhOGenvjdEzQZHSmByev54fyCfjAOz7sBKC-DqF_x7V9Dqryy4k2UYgRsuVknufGq9tNAvnhZyWCBhIhKwrVkotNx2kTOcEWz5Wk9iZvkseuktODY1Nxu0g_kgTDkCsa-nqkedqw"/>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-sm font-bold text-on-surface truncate">Audio_Gear_Hero_v2.png</h4>
+<p class="text-[10px] text-on-surface-variant font-medium flex gap-2">
+<span>2.1 MB</span> • <span>5000 x 3333 px</span>
+</p>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-error transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+<!-- Image Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center gap-4 group hover:bg-white transition-all">
+<div class="cursor-move text-outline-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="w-16 h-16 rounded-lg bg-surface-container-low overflow-hidden flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="sleek black running shoes with white soles against a dark atmospheric background with neon accents" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjJv8vmZyLqlzz6MqP198WvbmovdvFBFt8i5deVwGEf6-wxyABVdwK_1crix4thQ-OqqegRc-VNiCzUtTDCxVjshltiPi_hdcH9yi69lEunPMV3GobTy9OUeHNP3_5q6QatQUb35VCozShrB7SZea9fXxdDWG4NIXC5A9xeu6vEWO7-o8vlPVB99EillNNEv6aFV1UY33AyThACZPTKvGzKJNRA1_pm24f0K7rjwVV_mYGS2jMoskGv3_mGBbXeygYzEp4GRZslqM"/>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-sm font-bold text-on-surface truncate">Footwear_Running_Dark_A.jpg</h4>
+<p class="text-[10px] text-on-surface-variant font-medium flex gap-2">
+<span>1.4 MB</span> • <span>3800 x 2800 px</span>
+</p>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-error transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+<!-- Image Card 5 -->
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center gap-4 group hover:bg-white transition-all">
+<div class="cursor-move text-outline-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="w-16 h-16 rounded-lg bg-surface-container-low overflow-hidden flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="vintage 35mm film camera on a rustic wooden table with soft morning sunlight streaming in" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAau3X1akWzgPm3TBsMTzbOxILNvZ8wcUlXTTZ8h5JsHFBHJ6yT_QIJVQcNtFc2aRCi4_Wh1xm4ISpsAgm2on49U7oYL7JV1tAli0uptLFfS4Rm5rly3IbpiSRZ-mRm8yyxjN7AOK9sOm34CoRZiCkJNkHAKzWfmvQwaPIDjjGsTwW2dFBwTnsDYQkZSN8jCnWoB2fTeOG1knBdoFl9eODMNHcydeaT-_EcamnRcH5k7K5y6CZVBlUblxD8k3HzBZXmnRd-QqqvIE"/>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-sm font-bold text-on-surface truncate">Analog_Photography_Series_04.jpg</h4>
+<p class="text-[10px] text-on-surface-variant font-medium flex gap-2">
+<span>3.7 MB</span> • <span>6000 x 4000 px</span>
+</p>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-error transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+</div>
+<div class="p-4 mt-auto border-t border-outline-variant/10 bg-surface-container-highest/30">
+<div class="flex items-center justify-between text-[11px] font-bold text-on-surface-variant px-2">
+<span>STORAGE USAGE</span>
+<span>42% of 1GB</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high rounded-full mt-2 overflow-hidden">
+<div class="bg-primary h-full w-[42%] rounded-full"></div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- FAB Suppression Rule Applied: No FAB on Setup/Settings Screens -->
+</body></html>

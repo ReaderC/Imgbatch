@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Precision Atelier - Batch Watermark</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary-container": "#001075",
+                        "secondary": "#5b5e72",
+                        "primary-dim": "#3d4aa7",
+                        "inverse-surface": "#0b0f11",
+                        "on-primary-fixed": "#000000",
+                        "tertiary-fixed-dim": "#e2c0ee",
+                        "secondary-fixed": "#e0e1f9",
+                        "secondary-dim": "#4f5266",
+                        "inverse-primary": "#8c99fc",
+                        "tertiary-fixed": "#f1cefc",
+                        "tertiary-container": "#f1cefc",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#4e5065",
+                        "secondary-container": "#e0e1f9",
+                        "on-primary": "#fbf8ff",
+                        "outline": "#747c81",
+                        "surface": "#f7f9fc",
+                        "primary-fixed-dim": "#7f8ced",
+                        "secondary-fixed-dim": "#d1d3eb",
+                        "outline-variant": "#abb3b9",
+                        "primary-container": "#8c99fc",
+                        "on-background": "#2c3338",
+                        "on-tertiary": "#fff7fc",
+                        "on-secondary-fixed": "#3c3e51",
+                        "primary": "#4956b4",
+                        "primary-fixed": "#8c99fc",
+                        "on-tertiary-container": "#5d4368",
+                        "surface-container-highest": "#dce3e9",
+                        "surface-dim": "#d4dbe1",
+                        "error": "#a8364b",
+                        "surface-container-high": "#e3e9ee",
+                        "on-error": "#fff7f7",
+                        "on-error-container": "#6e0523",
+                        "surface-tint": "#4956b4",
+                        "on-secondary": "#faf8ff",
+                        "on-primary-fixed-variant": "#0e1d7f",
+                        "on-tertiary-fixed-variant": "#674c72",
+                        "on-surface": "#2c3338",
+                        "on-tertiary-fixed": "#493055",
+                        "on-surface-variant": "#596065",
+                        "tertiary-dim": "#64496f",
+                        "surface-container": "#e9eef3",
+                        "inverse-on-surface": "#9a9da0",
+                        "error-container": "#f97386",
+                        "surface-variant": "#dce3e9",
+                        "surface-container-low": "#f0f4f8",
+                        "surface-bright": "#f7f9fc",
+                        "tertiary": "#71557c",
+                        "error-dim": "#6b0221",
+                        "on-secondary-fixed-variant": "#585a6f",
+                        "background": "#f7f9fc"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+        h1, h2, h3 {
+            font-family: 'Manrope', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #dce3e9;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 z-40 bg-slate-100 dark:bg-slate-800 w-64 border-none shrink-0 overflow-y-auto custom-scrollbar">
+<div class="px-6 mb-8">
+<h1 class="text-lg font-black text-indigo-700 dark:text-indigo-300">Precision Atelier</h1>
+<div class="mt-4">
+<p class="text-[11px] font-bold font-inter tracking-wide uppercase text-indigo-600 dark:text-indigo-400">Tools</p>
+<p class="text-xs font-medium text-slate-500">Batch Editor</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">compress</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Compression</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">transform</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Format</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">aspect_ratio</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Resize</span>
+</a>
+<!-- Active Navigation -->
+<a class="flex items-center px-6 py-3 text-indigo-700 dark:text-indigo-300 relative before:absolute before:left-0 before:w-1 before:h-6 before:bg-indigo-600 before:rounded-r-full transition-all duration-200 ease-out bg-slate-200/50" href="#">
+<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">branding_watermark</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Watermark</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">rounded_corner</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Corners</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">padding</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Padding</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">crop</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Crop</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">rotate_right</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Rotate</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">flip</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Flip</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">picture_as_pdf</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Merge PDF</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">image_search</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Merge Image</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">gif_box</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Merge GIF</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined mr-3">content_cut</span>
+<span class="text-[11px] font-bold font-inter tracking-wide uppercase">Manual Crop</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col min-w-0 bg-surface">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-8 py-4 bg-slate-50 dark:bg-slate-900 sticky top-0 z-30">
+<div class="flex items-center gap-4">
+<h2 class="text-xl font-bold font-manrope text-indigo-700 dark:text-indigo-300">Watermark Configuration</h2>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<p class="text-sm font-medium font-inter text-on-surface-variant">Batch Processing 124 Assets</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 rounded-full text-indigo-600 font-bold text-sm hover:bg-slate-200/50 transition-colors">
+                    Add Files
+                </button>
+<button class="px-8 py-2.5 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm shadow-md transition-transform active:scale-95">
+                    Process All
+                </button>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+<div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Left: Settings Control Panel -->
+<section class="lg:col-span-8 space-y-6">
+<!-- Mode Toggle -->
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-sm border-none ring-1 ring-black/[0.03]">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-sm font-bold text-on-surface uppercase tracking-wider font-label">Watermark Type</h3>
+<div class="flex bg-surface-container-low p-1 rounded-full">
+<button class="px-6 py-1.5 rounded-full bg-surface-container-lowest text-primary text-xs font-bold shadow-sm">Text</button>
+<button class="px-6 py-1.5 rounded-full text-on-surface-variant text-xs font-bold hover:text-on-surface transition-colors">Image</button>
+</div>
+</div>
+<!-- Text Options Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="col-span-full">
+<label class="block text-[11px] font-bold text-on-surface-variant uppercase mb-2">Watermark Text</label>
+<input class="w-full bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all" type="text" value="© Precision Atelier 2024"/>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-on-surface-variant uppercase mb-2">Font Size (px)</label>
+<div class="flex items-center gap-4 bg-surface-container-low p-2 rounded-lg">
+<input class="flex-1 accent-primary" max="120" min="12" type="range" value="32"/>
+<span class="text-xs font-bold text-primary w-8 text-right">32</span>
+</div>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-on-surface-variant uppercase mb-2">Font Color</label>
+<div class="flex items-center gap-3 bg-surface-container-low p-2 rounded-lg">
+<div class="w-8 h-8 rounded-md bg-white border border-outline-variant/30"></div>
+<input class="bg-transparent border-none text-xs font-mono font-bold w-full focus:ring-0" type="text" value="#FFFFFF"/>
+</div>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-on-surface-variant uppercase mb-2">Rotation (deg)</label>
+<div class="flex items-center gap-3">
+<button class="p-2 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-sm">rotate_left</span>
+</button>
+<input class="flex-1 bg-surface-container-low border-none rounded-lg py-2 px-3 text-sm font-bold text-center" type="number" value="0"/>
+<button class="p-2 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-sm">rotate_right</span>
+</button>
+</div>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-on-surface-variant uppercase mb-2">Opacity (%)</label>
+<div class="flex items-center gap-4 bg-surface-container-low p-2 rounded-lg">
+<input class="flex-1 accent-primary" max="100" min="0" type="range" value="60"/>
+<span class="text-xs font-bold text-primary w-8 text-right">60%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Positioning & Advanced -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-sm ring-1 ring-black/[0.03]">
+<h3 class="text-sm font-bold text-on-surface uppercase tracking-wider font-label mb-6">Anchor Position</h3>
+<div class="grid grid-cols-3 gap-2 w-36 mx-auto">
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-primary rounded shadow-md ring-2 ring-primary/20 flex items-center justify-center">
+<div class="w-1.5 h-1.5 bg-on-primary rounded-full"></div>
+</button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+<button class="aspect-square bg-surface-container-low rounded hover:bg-primary-container/20 transition-colors"></button>
+</div>
+<p class="text-center text-[10px] text-on-surface-variant mt-4 font-bold uppercase tracking-widest">Center Aligned</p>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-sm ring-1 ring-black/[0.03] flex flex-col justify-between">
+<div>
+<h3 class="text-sm font-bold text-on-surface uppercase tracking-wider font-label mb-4">Offset Margins</h3>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">X-Axis (px)</label>
+<input class="w-full bg-surface-container-low border-none rounded-lg py-2 px-3 text-sm font-bold" type="number" value="20"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">Y-Axis (px)</label>
+<input class="w-full bg-surface-container-low border-none rounded-lg py-2 px-3 text-sm font-bold" type="number" value="20"/>
+</div>
+</div>
+</div>
+<div class="mt-6 flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface-variant">Save for future use?</span>
+<button class="flex items-center gap-2 text-primary font-bold text-xs hover:underline">
+<span class="material-symbols-outlined text-sm">bookmark</span>
+                                    Save as common
+                                </button>
+</div>
+</div>
+</div>
+<!-- Batch List Header -->
+<div class="pt-4 flex items-center justify-between">
+<h3 class="text-lg font-bold font-manrope">Queue Preview <span class="text-on-surface-variant font-normal text-sm ml-2">(124 Images)</span></h3>
+<div class="flex gap-2">
+<button class="p-2 bg-surface-container-high rounded-lg"><span class="material-symbols-outlined text-sm">grid_view</span></button>
+<button class="p-2 bg-surface-container-low rounded-lg text-on-surface-variant"><span class="material-symbols-outlined text-sm">view_list</span></button>
+</div>
+</div>
+<!-- Image List (Bento-style Grid) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- Image Card 1 -->
+<div class="bg-surface-container-lowest p-3 rounded-xl shadow-sm ring-1 ring-black/[0.03] group">
+<div class="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-200">
+<img class="w-full h-full object-cover" data-alt="dramatic aerial landscape of a misty canyon with sunlight piercing through clouds at dawn" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASi0D-Z2C5eQ_i5Qe9wokIGBdBJMYpTfFJexmx9wA1212b2mHJd3E0BVb6ZKNMOuFnJALkWKhsae-agIAy1rd3Ad6h7I9lLB6lqfP4yLO5RqYBLOCYnjIoxYNS44vQ0Q2K7IMQT6WUc-9jUUhTAIcK-BXagW3ikd_wGKrByOLWg5Jy4r-E8E4xV5nFvGeOzM_wARZb-SPpqZVahwMn41ev1ie83L2bu5z8WjevzG0O6WiEX9kV9kcRWZupLSanoBZqJGtnzgEymck"/>
+<div class="absolute inset-0 flex items-center justify-center opacity-60 pointer-events-none">
+<span class="text-white font-bold text-xs transform -rotate-45 tracking-wider">© Precision Atelier 2024</span>
+</div>
+<div class="absolute bottom-2 right-2 flex gap-2 translate-y-8 group-hover:translate-y-0 transition-transform duration-300">
+<button class="p-2 bg-white/90 backdrop-blur rounded-lg shadow-lg hover:bg-white text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="p-2 bg-white/90 backdrop-blur rounded-lg shadow-lg hover:bg-error-container/20 text-error transition-colors">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+<div class="mt-3 flex justify-between items-start">
+<div>
+<p class="text-xs font-bold text-on-surface truncate max-w-[140px]">DSC0492_Canyon.jpg</p>
+<p class="text-[10px] text-on-surface-variant">42.4 MB • 6000x4000</p>
+</div>
+<span class="text-[9px] bg-primary-container/20 text-primary-dim px-2 py-0.5 rounded font-bold uppercase">Pending</span>
+</div>
+</div>
+<!-- Image Card 2 -->
+<div class="bg-surface-container-lowest p-3 rounded-xl shadow-sm ring-1 ring-black/[0.03] group">
+<div class="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-200">
+<img class="w-full h-full object-cover" data-alt="modern brutalist architecture with sharp concrete lines and clear blue sky background with hard shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJCeusz9F_WJ58aFoyr_TT14UvKnIJBl5TgvA3k7cymEJVbOacrQqgO--bvGPEAnyz9v5amt5aP10KvfTPxcpbnI8D28V1D_vvF93l9qr-sK3RVaQJ516ipWhlKKqFdKwyqntcsENW7o2UzNqxKCapHsS7W98aKvQkRjikslEDZVn75SCoh5C5SUq5RWB50DJSm7xvQhebjZW61pJUpYbLqKYYBD7F77BFZbbsIFXcof_-xwPngHe36NGN3cB5cVSgVzWXxSqL3KA"/>
+<div class="absolute inset-0 flex items-center justify-center opacity-60 pointer-events-none">
+<span class="text-white font-bold text-xs transform -rotate-45 tracking-wider">© Precision Atelier 2024</span>
+</div>
+<div class="absolute bottom-2 right-2 flex gap-2 translate-y-8 group-hover:translate-y-0 transition-transform duration-300">
+<button class="p-2 bg-white/90 backdrop-blur rounded-lg shadow-lg hover:bg-white text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="p-2 bg-white/90 backdrop-blur rounded-lg shadow-lg hover:bg-error-container/20 text-error transition-colors">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+<div class="mt-3 flex justify-between items-start">
+<div>
+<p class="text-xs font-bold text-on-surface truncate max-w-[140px]">ARCH_Study_02.png</p>
+<p class="text-[10px] text-on-surface-variant">12.8 MB • 3200x2400</p>
+</div>
+<span class="text-[9px] bg-primary-container/20 text-primary-dim px-2 py-0.5 rounded font-bold uppercase">Pending</span>
+</div>
+</div>
+<!-- Image Card 3 -->
+<div class="bg-surface-container-lowest p-3 rounded-xl shadow-sm ring-1 ring-black/[0.03] group border-2 border-primary/20">
+<div class="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-200">
+<img class="w-full h-full object-cover" data-alt="lush green mountain forest in spring with dramatic fog weaving between pine trees in morning light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAHVqlTj1xygL9zCTQrgwU-Of0zL4tcABOEwZ0ANbf_d_03wjJ81fGreLrKVUV4DYPvfOGEs_yBxvqv3zK8jEHCbPFKQUvZHVL93pHGtqKW3Y4LZVkHLdqAkVNx9eVGvrr40uVgq_jHYLtFSQ5fzEwkUjerLgJT2fOMLdqNWyyoMAxNPECCX6cFR8VA9p0Glz5ql5J4jk4o8LFcv-7qWp-pVjg_bCIccNY-ICRi6x-p5xDyO2VkQfTvK7cSWG25juHA95AgHJntt8"/>
+<div class="absolute inset-0 flex items-center justify-center opacity-60 pointer-events-none">
+<span class="text-white font-bold text-xs transform -rotate-45 tracking-wider">© Precision Atelier 2024</span>
+</div>
+<div class="absolute top-2 left-2 bg-primary text-on-primary text-[9px] font-bold px-2 py-0.5 rounded shadow-lg uppercase">Active Preview</div>
+<div class="absolute bottom-2 right-2 flex gap-2">
+<button class="p-2 bg-primary backdrop-blur rounded-lg shadow-lg text-on-primary">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="p-2 bg-white/90 backdrop-blur rounded-lg shadow-lg hover:bg-error-container/20 text-error transition-colors">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+<div class="mt-3 flex justify-between items-start">
+<div>
+<p class="text-xs font-bold text-primary truncate max-w-[140px]">FOR_Pine_Fog.tiff</p>
+<p class="text-[10px] text-on-surface-variant">105.2 MB • 8000x6000</p>
+</div>
+<span class="text-[9px] bg-primary text-on-primary px-2 py-0.5 rounded font-bold uppercase">Selected</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Right: Summary & Export Info (Sticky) -->
+<aside class="lg:col-span-4 space-y-6">
+<div class="sticky top-24">
+<div class="bg-surface-container-low p-6 rounded-2xl border-none">
+<h3 class="text-sm font-bold text-on-surface uppercase tracking-wider font-label mb-6">Process Summary</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Selected Files</span>
+<span class="font-bold text-on-surface">124</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Process Mode</span>
+<span class="font-bold text-primary">Text Overlay</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Est. Output Size</span>
+<span class="font-bold text-on-surface">~1.2 GB</span>
+</div>
+<div class="h-px bg-outline-variant/10 my-2"></div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Export Destination</span>
+<span class="flex items-center gap-2 font-bold text-primary truncate">
+<span class="material-symbols-outlined text-sm">folder_open</span>
+                                        /Exports/Watermarked...
+                                    </span>
+</div>
+</div>
+<div class="mt-8 space-y-3">
+<button class="w-full py-4 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold shadow-xl shadow-primary/20 transition-transform active:scale-95 flex items-center justify-center gap-3">
+<span class="material-symbols-outlined">rocket_launch</span>
+                                    Start Batch Process
+                                </button>
+<button class="w-full py-3 rounded-full border border-outline-variant/30 text-on-surface-variant text-sm font-bold hover:bg-white transition-colors">
+                                    Download as ZIP
+                                </button>
+</div>
+</div>
+<!-- Tips/Info Card -->
+<div class="mt-6 bg-tertiary-container/30 p-6 rounded-2xl border-none relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-500">
+<span class="material-symbols-outlined text-6xl text-tertiary">lightbulb</span>
+</div>
+<h4 class="text-xs font-bold text-on-tertiary-container uppercase tracking-widest mb-2">Pro Tip</h4>
+<p class="text-xs text-on-tertiary-container leading-relaxed opacity-80">
+                                Use high-contrast font colors (like pure white or black) with 50-70% opacity for the best results across diverse image backgrounds.
+                            </p>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</main>
+<!-- FAB for quick upload - only on relevant screens -->
+<div class="fixed bottom-8 right-8 z-50 md:hidden">
+<button class="w-14 h-14 rounded-full bg-primary text-on-primary shadow-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</body></html>
