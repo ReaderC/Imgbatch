@@ -1,0 +1,1265 @@
+const { nativeImage } = require('electron')
+const fs = require('fs')
+const path = require('path')
+
+const IMAGE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.avif', '.ico'
+])
+const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
+const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
+const LOSSY_OUTPUT_FORMATS = new Set(['jpeg', 'webp', 'avif', 'gif'])
+const OUTPUT_DIR_NAME = 'Imgbatch Output'
+const PDF_PAGE_SIZES = {
+  A3: [841.89, 1190.55],
+  A4: [595.28, 841.89],
+  A5: [419.53, 595.28],
+  Letter: [612, 792],
+}
+
+const TOOL_LABELS = {
+  compression: '图片压缩',
+  format: '格式转换',
+  resize: '修改尺寸',
+  watermark: '添加水印',
+  corners: '添加圆角',
+  padding: '补边留白',
+  crop: '裁剪',
+  rotate: '旋转',
+  flip: '翻转',
+  'merge-pdf': '合并为 PDF',
+  'merge-image': '合并为图片',
+  'merge-gif': '合并为 GIF',
+  'manual-crop': '手动裁剪',
+}
+
+function summarizeConfig(toolId, config = {}) {
+  if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
+  if (toolId === 'format') return `输出 ${config.targetFormat}`
+  if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
+  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
+  if (toolId === 'crop') return `裁剪 ${config.ratio}`
+  if (toolId === 'rotate') return `${config.direction === 'clockwise' ? '顺时针' : '逆时针'} ${config.angle}°`
+  if (toolId === 'flip') {
+    const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
+    return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
+  }
+  if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
+  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px`
+  if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
+  if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
+  return '待处理'
+}
+
+function toNumber(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const normalized = String(value ?? '').trim().replace(/[a-zA-Z%]+$/g, '')
+  const numeric = Number.parseFloat(normalized)
+  return Number.isFinite(numeric) ? numeric : fallback
+}
+
+function toInteger(value, fallback = 0) {
+  return Math.round(toNumber(value, fallback))
+}
+
+function clampNumber(value, min, max, fallback = min) {
+  const numeric = toNumber(value, fallback)
+  return Math.min(max, Math.max(min, numeric))
+}
+
+function sanitizeText(value, fallback = '') {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text || fallback
+}
+
+function pickOption(value, options, fallback) {
+  return options.includes(value) ? value : fallback
+}
+
+function uniqueStrings(values = []) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map((value) => sanitizeText(value)).filter(Boolean)))
+}
+
+function normalizeMeasure(value, fallbackValue, fallbackUnit = 'px') {
+  const raw = String(value ?? '').trim()
+  const unit = raw.endsWith('%') ? '%' : raw.endsWith('px') ? 'px' : fallbackUnit
+  const numericValue = Math.max(0, toNumber(raw, fallbackValue))
+  return {
+    value: numericValue,
+    unit,
+    raw: raw || `${fallbackValue}${unit}`,
+  }
+}
+
+function normalizeRunAssets(assets = []) {
+  return assets.map((asset, index) => {
+    const sourcePath = sanitizeText(asset?.sourcePath)
+    const resolvedSourcePath = sourcePath ? path.resolve(sourcePath) : ''
+    const sourceDir = resolvedSourcePath ? path.dirname(resolvedSourcePath) : ''
+    const fallbackName = resolvedSourcePath ? path.basename(resolvedSourcePath) : `asset-${index + 1}`
+
+    return {
+      id: sanitizeText(asset?.id, `asset-${index + 1}`),
+      sourcePath: resolvedSourcePath,
+      sourceDir,
+      name: sanitizeText(asset?.name, fallbackName),
+      ext: sanitizeText(asset?.ext, resolvedSourcePath ? path.extname(resolvedSourcePath).replace('.', '').toLowerCase() : ''),
+      width: Math.max(0, toInteger(asset?.width, 0)),
+      height: Math.max(0, toInteger(asset?.height, 0)),
+      sizeBytes: Math.max(0, toInteger(asset?.sizeBytes, 0)),
+    }
+  })
+}
+
+function getCommonParentDirectory(paths = []) {
+  const absolutePaths = paths.map((item) => sanitizeText(item)).filter(Boolean).map((item) => path.resolve(item))
+  if (!absolutePaths.length) return ''
+
+  const roots = Array.from(new Set(absolutePaths.map((item) => path.parse(item).root.toLowerCase())))
+  if (roots.length !== 1) return ''
+
+  const firstRoot = path.parse(absolutePaths[0]).root
+  const segmentLists = absolutePaths.map((item) => item.slice(path.parse(item).root.length).split(path.sep).filter(Boolean))
+  const commonSegments = []
+
+  for (let index = 0; index < segmentLists[0].length; index += 1) {
+    const segment = segmentLists[0][index]
+    const matches = segmentLists.every((segments) => segments[index] && segments[index].toLowerCase() === segment.toLowerCase())
+    if (!matches) break
+    commonSegments.push(segment)
+  }
+
+  if (!commonSegments.length) return ''
+  return path.join(firstRoot, ...commonSegments)
+}
+
+function resolveDestinationPath(destinationPath, assets = []) {
+  const customDestination = sanitizeText(destinationPath)
+  if (customDestination) {
+    return {
+      destinationPath: path.resolve(customDestination),
+      strategy: 'custom',
+    }
+  }
+
+  const sourceDirs = Array.from(new Set(assets.map((asset) => asset.sourceDir).filter(Boolean)))
+  if (!sourceDirs.length) {
+    return {
+      destinationPath: '',
+      strategy: 'unresolved',
+    }
+  }
+
+  if (sourceDirs.length === 1) {
+    return {
+      destinationPath: path.join(sourceDirs[0], OUTPUT_DIR_NAME),
+      strategy: 'source-sibling',
+    }
+  }
+
+  const commonParent = getCommonParentDirectory(sourceDirs)
+  if (commonParent) {
+    return {
+      destinationPath: path.join(commonParent, OUTPUT_DIR_NAME),
+      strategy: 'shared-parent',
+    }
+  }
+
+  return {
+    destinationPath: path.join(sourceDirs[0], OUTPUT_DIR_NAME),
+    strategy: 'first-source',
+  }
+}
+
+function normalizeRunConfig(toolId, config = {}) {
+  if (toolId === 'compression') {
+    return {
+      mode: pickOption(config.mode, ['quality', 'target'], 'quality'),
+      quality: clampNumber(config.quality, 1, 100, 85),
+      targetSizeKb: Math.max(1, toInteger(config.targetSizeKb, 250)),
+    }
+  }
+
+  if (toolId === 'format') {
+    return {
+      targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'BMP', 'GIF', 'ICO'], 'JPEG'),
+      quality: clampNumber(config.quality, 1, 100, 90),
+      keepTransparency: Boolean(config.keepTransparency),
+      colorProfile: sanitizeText(config.colorProfile, 'sRGB'),
+    }
+  }
+
+  if (toolId === 'resize') {
+    return {
+      width: normalizeMeasure(config.width, 1920, sanitizeText(config.widthUnit, 'px')),
+      height: normalizeMeasure(config.height, 1080, sanitizeText(config.heightUnit, 'px')),
+      lockAspectRatio: Boolean(config.lockAspectRatio),
+    }
+  }
+
+  if (toolId === 'watermark') {
+    const normalizedPosition = String(config.position || '').replace('center-left', 'middle-left').replace('center-right', 'middle-right')
+    return {
+      type: pickOption(config.type, ['text', 'image'], 'text'),
+      text: sanitizeText(config.text, 'Precision Atelier'),
+      position: pickOption(normalizedPosition, ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'], 'center'),
+      opacity: clampNumber(config.opacity, 0, 100, 60),
+      fontSize: Math.max(1, toInteger(config.fontSize, 32)),
+      color: sanitizeText(config.color, '#FFFFFF'),
+      rotation: toNumber(config.rotation, 0),
+      margin: Math.max(0, toInteger(config.margin, 24)),
+      tiled: Boolean(config.tiled),
+      imagePath: sanitizeText(config.imagePath),
+    }
+  }
+
+  if (toolId === 'corners') {
+    return {
+      radius: Math.max(0, toNumber(config.radius, 24)),
+      unit: pickOption(config.unit, ['px', '%'], 'px'),
+      background: sanitizeText(config.background, '#ffffff'),
+      keepTransparency: Boolean(config.keepTransparency),
+    }
+  }
+
+  if (toolId === 'padding') {
+    return {
+      top: Math.max(0, toInteger(config.top, 20)),
+      right: Math.max(0, toInteger(config.right, 20)),
+      bottom: Math.max(0, toInteger(config.bottom, 20)),
+      left: Math.max(0, toInteger(config.left, 20)),
+      color: sanitizeText(config.color, '#ffffff'),
+      opacity: clampNumber(config.opacity, 0, 100, 100),
+    }
+  }
+
+  if (toolId === 'crop') {
+    const customRatioX = Math.max(1, toInteger(config.customRatioX, 16))
+    const customRatioY = Math.max(1, toInteger(config.customRatioY, 9))
+    const useCustomRatio = Boolean(config.useCustomRatio) || config.ratio === 'Custom'
+
+    return {
+      ratio: useCustomRatio ? `${customRatioX}:${customRatioY}` : sanitizeText(config.ratio, '16:9'),
+      useCustomRatio,
+      customRatio: {
+        x: customRatioX,
+        y: customRatioY,
+      },
+      area: {
+        x: Math.max(0, toInteger(config.x, 0)),
+        y: Math.max(0, toInteger(config.y, 0)),
+        width: Math.max(1, toInteger(config.width, 1920)),
+        height: Math.max(1, toInteger(config.height, 1080)),
+      },
+    }
+  }
+
+  if (toolId === 'rotate') {
+    const normalizedDirection = config.direction === 'anticlockwise' ? 'counterclockwise' : config.direction
+    return {
+      angle: toNumber(config.angle, 45),
+      direction: pickOption(normalizedDirection, ['clockwise', 'counterclockwise'], 'clockwise'),
+      autoCrop: Boolean(config.autoCrop),
+      keepAspectRatio: Boolean(config.keepAspectRatio),
+      background: sanitizeText(config.background, '#ffffff'),
+    }
+  }
+
+  if (toolId === 'flip') {
+    return {
+      horizontal: Boolean(config.horizontal),
+      vertical: Boolean(config.vertical),
+      preserveMetadata: Boolean(config.preserveMetadata),
+      autoCropTransparent: Boolean(config.autoCropTransparent),
+      outputFormat: sanitizeText(config.outputFormat, 'Keep Original'),
+    }
+  }
+
+  if (toolId === 'merge-pdf') {
+    return {
+      pageSize: sanitizeText(config.pageSize, 'A4'),
+      margin: sanitizeText(config.margin, 'narrow'),
+    }
+  }
+
+  if (toolId === 'merge-image') {
+    return {
+      direction: pickOption(config.direction, ['vertical', 'horizontal'], 'vertical'),
+      pageWidth: Math.max(1, toInteger(config.pageWidth, 1920)),
+      spacing: Math.max(0, toInteger(config.spacing, 24)),
+      background: sanitizeText(config.background, '#ffffff'),
+    }
+  }
+
+  if (toolId === 'merge-gif') {
+    return {
+      width: Math.max(1, toInteger(config.width, 1080)),
+      height: Math.max(1, toInteger(config.height, 1080)),
+      interval: Math.max(0.01, toNumber(config.interval, 0.5)),
+      background: sanitizeText(config.background, '#ffffff'),
+    }
+  }
+
+  if (toolId === 'manual-crop') {
+    return {
+      ratio: sanitizeText(config.ratio, '16:9 Cinema'),
+      ratioValue: sanitizeText(config.ratioValue, '16:9'),
+      currentIndex: Math.max(0, toInteger(config.currentIndex, 0)),
+      completedIds: uniqueStrings(config.completedIds),
+      skippedIds: uniqueStrings(config.skippedIds),
+    }
+  }
+
+  return { ...config }
+}
+
+function prepareRunPayload(toolId, config, assets, destinationPath) {
+  const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
+  const normalizedConfig = normalizeRunConfig(toolId, config)
+  const output = resolveDestinationPath(destinationPath, normalizedAssets)
+
+  return {
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    config: normalizedConfig,
+    assets: normalizedAssets,
+    destinationPath: output.destinationPath,
+    output,
+    queuedCount: normalizedAssets.length,
+    summary: summarizeConfig(toolId, normalizedConfig),
+    createdAt: new Date().toISOString(),
+  }
+}
+
+const pendingLaunchValues = []
+const launchWaiters = new Set()
+const launchSubscribers = new Set()
+let launchHooksInstalled = false
+
+function getHostApi() {
+  return globalThis.ztools || {}
+}
+
+function resolveLaunchWaiters() {
+  for (const waiter of launchWaiters) waiter()
+  launchWaiters.clear()
+}
+
+function enqueueLaunchValue(value) {
+  if (value == null) return
+  pendingLaunchValues.push(value)
+  resolveLaunchWaiters()
+  void flushLaunchSubscribers()
+}
+
+function installLaunchHooks() {
+  if (launchHooksInstalled) return
+  launchHooksInstalled = true
+
+  const hostApi = getHostApi()
+  const handleLaunch = (param) => {
+    enqueueLaunchValue(param)
+    if (param?.payload != null && param.payload !== param) {
+      enqueueLaunchValue(param.payload)
+    }
+  }
+
+  hostApi.onPluginEnter?.(handleLaunch)
+  hostApi.onPluginReady?.(handleLaunch)
+}
+
+async function waitForLaunchValue(timeoutMs = 160) {
+  installLaunchHooks()
+  if (pendingLaunchValues.length) return
+
+  await new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer)
+      launchWaiters.delete(finish)
+      resolve()
+    }
+
+    const timer = setTimeout(finish, timeoutMs)
+    launchWaiters.add(finish)
+  })
+}
+
+function consumePendingLaunchValues() {
+  if (!pendingLaunchValues.length) return []
+  return pendingLaunchValues.splice(0, pendingLaunchValues.length)
+}
+
+async function flushLaunchSubscribers() {
+  if (!launchSubscribers.size || !pendingLaunchValues.length) return
+
+  const values = consumePendingLaunchValues()
+  for (const subscriber of launchSubscribers) {
+    try {
+      await subscriber(values)
+    } catch {
+      // ignore subscriber errors so launch delivery keeps working
+    }
+  }
+}
+
+function extractLaunchItems(value, visited = new Set()) {
+  if (!value || visited.has(value)) return []
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap((item) => extractLaunchItems(item, visited))
+  if (typeof value !== 'object') return []
+
+  visited.add(value)
+
+  const directKeys = ['files', 'paths', 'items', 'argv', 'arguments', 'args', 'payload', 'data', 'input', 'inputs', 'list', 'selected', 'selection', 'value', 'values', 'text', 'texts', 'pathList', 'fileList']
+  for (const key of directKeys) {
+    if (value[key]) {
+      const extracted = extractLaunchItems(value[key], visited)
+      if (extracted.length) return extracted
+    }
+  }
+
+  if (typeof value.path === 'string') return [value.path]
+  if (typeof value.filePath === 'string') return [value.filePath]
+  if (typeof value.sourcePath === 'string') return [value.sourcePath]
+
+  return Object.values(value).flatMap((item) => extractLaunchItems(item, visited))
+}
+
+function supportsLocalProcessing(toolId) {
+  return ['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop', 'merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
+}
+
+function getSharp() {
+  try {
+    return require('sharp')
+  } catch {
+    return null
+  }
+}
+
+function getPdfLib() {
+  try {
+    return require('pdf-lib')
+  } catch {
+    return null
+  }
+}
+
+function getGifEncoder() {
+  try {
+    return require('gifenc')
+  } catch {
+    return null
+  }
+}
+
+function ensureDirectory(targetPath) {
+  if (!targetPath) return
+  fs.mkdirSync(targetPath, { recursive: true })
+}
+
+function isProcessableAsset(asset) {
+  return asset.sourcePath && SHARP_INPUT_EXTENSIONS.has(asset.ext)
+}
+
+function mapOutputFormat(toolId, asset, config) {
+  if (toolId === 'format') {
+    const requested = String(config.targetFormat || '').toLowerCase()
+    if (requested === 'jpg') return 'jpeg'
+    if (requested === 'bmp' || requested === 'ico') return 'png'
+    return SHARP_OUTPUT_FORMATS.has(requested) ? requested : 'jpeg'
+  }
+
+  const original = String(asset.ext || '').toLowerCase()
+  if (original === 'jpg') return 'jpeg'
+  return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
+}
+
+function mapOutputExtension(format) {
+  if (format === 'jpeg') return 'jpg'
+  return format
+}
+
+function getOutputName(asset, toolId, format) {
+  const parsed = path.parse(asset.name || path.basename(asset.sourcePath))
+  return `${parsed.name}-${toolId}.${mapOutputExtension(format)}`
+}
+
+function createTransformer(sharpLib, asset) {
+  return sharpLib(asset.sourcePath, { animated: String(asset.ext).toLowerCase() === 'gif' })
+}
+
+function applyResizeOperation(transformer, asset, config) {
+  const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
+  const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
+
+  return transformer.resize({
+    width,
+    height,
+    fit: config.lockAspectRatio ? 'inside' : 'fill',
+  })
+}
+
+function withOutputFormat(transformer, format, quality) {
+  if (format === 'jpeg') return transformer.jpeg({ quality, mozjpeg: true })
+  if (format === 'png') {
+    const compressionLevel = Math.max(0, Math.min(9, Math.round((100 - quality) / 11)))
+    return transformer.png({ compressionLevel })
+  }
+  if (format === 'webp') return transformer.webp({ quality })
+  if (format === 'tiff') return transformer.tiff({ quality })
+  if (format === 'avif') return transformer.avif({ quality })
+  if (format === 'gif') return transformer.gif({ effort: 7 })
+  return transformer.png({ compressionLevel: 6 })
+}
+
+async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('compression', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
+
+  if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
+    await withOutputFormat(createTransformer(sharpLib, asset), format, Math.round(config.quality)).toFile(outputPath)
+    return outputPath
+  }
+
+  const qualitySteps = [90, 80, 70, 60, 50, 40, 30, 20, 10]
+  const targetBytes = config.targetSizeKb * 1024
+  let chosenBuffer = null
+
+  for (const quality of qualitySteps) {
+    const buffer = await withOutputFormat(createTransformer(sharpLib, asset), format, quality).toBuffer()
+    chosenBuffer = buffer
+    if (buffer.length <= targetBytes) break
+  }
+
+  fs.writeFileSync(outputPath, chosenBuffer)
+  return { outputPath, outputSizeBytes: chosenBuffer.length }
+}
+
+async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('format', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
+  await withOutputFormat(createTransformer(sharpLib, asset), format, Math.round(config.quality)).toFile(outputPath)
+  return outputPath
+}
+
+async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('resize', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
+  const resized = applyResizeOperation(createTransformer(sharpLib, asset), asset, config)
+  await withOutputFormat(resized, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+function normalizeHexColor(value, alpha = 1) {
+  const color = sanitizeText(value, '#FFFFFF').replace('#', '')
+  const normalized = color.length === 3 ? color.split('').map((item) => item + item).join('') : color.padEnd(6, 'F').slice(0, 6)
+  const numericAlpha = Math.max(0, Math.min(1, alpha))
+  const red = Number.parseInt(normalized.slice(0, 2), 16)
+  const green = Number.parseInt(normalized.slice(2, 4), 16)
+  const blue = Number.parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${numericAlpha})`
+}
+
+function hexToRgbaObject(value, alpha = 1) {
+  const color = sanitizeText(value, '#ffffff').replace('#', '')
+  const normalized = color.length === 3 ? color.split('').map((item) => item + item).join('') : color.padEnd(6, 'f').slice(0, 6)
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+    alpha,
+  }
+}
+
+function getWatermarkGravity(position) {
+  const mapping = {
+    'top-left': 'northwest',
+    'top-center': 'north',
+    'top-right': 'northeast',
+    'middle-left': 'west',
+    center: 'centre',
+    'middle-right': 'east',
+    'bottom-left': 'southwest',
+    'bottom-center': 'south',
+    'bottom-right': 'southeast',
+  }
+  return mapping[position] || 'centre'
+}
+
+function getWatermarkOffsets(position, margin) {
+  const horizontal = position.includes('left') ? margin : position.includes('right') ? -margin : 0
+  const vertical = position.startsWith('top') ? margin : position.startsWith('bottom') ? -margin : 0
+  return { left: horizontal, top: vertical }
+}
+
+function escapeSvgText(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function buildTextWatermarkSvg(asset, config) {
+  const width = Math.max(asset.width || 1920, config.fontSize * 4)
+  const height = Math.max(asset.height || 1080, config.fontSize * 3)
+  const color = normalizeHexColor(config.color, config.opacity / 100)
+  const text = escapeSvgText(config.text)
+  const x = config.tiled ? Math.round(config.fontSize * 0.6) : Math.round(width / 2)
+  const y = config.tiled ? Math.round(config.fontSize * 1.4) : Math.round(height / 2)
+  const textAnchor = config.tiled ? 'start' : 'middle'
+
+  const content = config.tiled
+    ? Array.from({ length: Math.max(2, Math.ceil(height / Math.max(config.fontSize * 3, 1))) }).map((_, rowIndex) => {
+      const yOffset = y + rowIndex * Math.max(config.fontSize * 2.6, 32)
+      const xOffset = x + (rowIndex % 2 ? Math.round(config.fontSize * 1.5) : 0)
+      return `<text x="${xOffset}" y="${yOffset}" font-size="${config.fontSize}" fill="${color}" transform="rotate(${config.rotation} ${xOffset} ${yOffset})">${text}</text>`
+    }).join('')
+    : `<text x="${x}" y="${y}" text-anchor="${textAnchor}" dominant-baseline="middle" font-size="${config.fontSize}" fill="${color}" transform="rotate(${config.rotation} ${x} ${y})">${text}</text>`
+
+  return Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <style>
+        text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
+      </style>
+      ${content}
+    </svg>
+  `)
+}
+
+async function createImageWatermarkBuffer(sharpLib, asset, config) {
+  const imagePath = sanitizeText(config.imagePath)
+  if (!imagePath || !fs.existsSync(imagePath)) {
+    throw new Error('图片水印文件不存在')
+  }
+
+  const baseWidth = Math.max(asset.width || 1920, 1)
+  const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.22))
+  return sharpLib(imagePath)
+    .rotate(config.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize({ width: watermarkWidth, withoutEnlargement: true })
+    .ensureAlpha(config.opacity / 100)
+    .png()
+    .toBuffer()
+}
+
+async function buildWatermarkComposite(sharpLib, asset, config) {
+  const input = config.type === 'image'
+    ? await createImageWatermarkBuffer(sharpLib, asset, config)
+    : buildTextWatermarkSvg(asset, config)
+
+  if (config.tiled) {
+    return {
+      input,
+      tile: true,
+      gravity: 'centre',
+    }
+  }
+
+  const { left, top } = getWatermarkOffsets(config.position, config.margin)
+  return {
+    input,
+    gravity: getWatermarkGravity(config.position),
+    left,
+    top,
+  }
+}
+
+async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('watermark', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
+  const composite = await buildWatermarkComposite(sharpLib, asset, config)
+  const transformed = createTransformer(sharpLib, asset).composite([composite])
+  await withOutputFormat(transformed, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+function getRotateBackground(value) {
+  return hexToRgbaObject(value, 1)
+}
+
+function mapFlipOutputFormat(asset, config) {
+  const requested = String(config.outputFormat || '').toLowerCase()
+  if (!requested || requested === 'keep original') return mapOutputFormat('flip', asset, config)
+  if (requested === 'jpg') return 'jpeg'
+  if (requested === 'webp') return 'webp'
+  if (requested === 'png') return 'png'
+  if (requested === 'jpeg') return 'jpeg'
+  return mapOutputFormat('flip', asset, config)
+}
+
+async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('rotate', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
+  const angle = config.direction === 'counterclockwise' ? -config.angle : config.angle
+  let transformed = createTransformer(sharpLib, asset).rotate(angle, { background: getRotateBackground(config.background) })
+
+  if (config.keepAspectRatio && asset.width && asset.height) {
+    transformed = transformed.resize({ width: asset.width, height: asset.height, fit: 'contain', background: getRotateBackground(config.background) })
+  }
+
+  await withOutputFormat(transformed, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapFlipOutputFormat(asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
+  let transformed = createTransformer(sharpLib, asset)
+
+  if (config.horizontal) transformed = transformed.flop()
+  if (config.vertical) transformed = transformed.flip()
+
+  await withOutputFormat(transformed, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+function buildRoundedRectSvg(width, height, radius, fill) {
+  return Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="${fill}" />
+    </svg>
+  `)
+}
+
+async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
+  const outputFormat = config.keepTransparency ? 'png' : mapOutputFormat('corners', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'corners', outputFormat))
+  const metadata = await createTransformer(sharpLib, asset).metadata()
+  const width = metadata.width || asset.width || 1
+  const height = metadata.height || asset.height || 1
+  const maxRadius = Math.min(width, height) / 2
+  const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
+  const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
+
+  let transformed = createTransformer(sharpLib, asset).ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
+
+  if (!config.keepTransparency) {
+    const background = {
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: hexToRgbaObject(config.background, 1),
+      },
+    }
+    const imageBuffer = await transformed.png().toBuffer()
+    transformed = sharpLib(background).composite([{ input: imageBuffer }])
+  }
+
+  await withOutputFormat(transformed, outputFormat, 90).toFile(outputPath)
+  return outputPath
+}
+
+async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
+  const format = mapOutputFormat('padding', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
+  const transformed = createTransformer(sharpLib, asset).extend({
+    top: config.top,
+    right: config.right,
+    bottom: config.bottom,
+    left: config.left,
+    background: hexToRgbaObject(config.color, config.opacity / 100),
+  })
+  await withOutputFormat(transformed, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+function normalizeCropBox(asset, config) {
+  const assetWidth = Math.max(1, asset.width || 1)
+  const assetHeight = Math.max(1, asset.height || 1)
+  let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
+  let height = Math.min(assetHeight, Math.max(1, toInteger(config.area?.height, assetHeight)))
+  let left = Math.max(0, toInteger(config.area?.x, 0))
+  let top = Math.max(0, toInteger(config.area?.y, 0))
+
+  if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
+  if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
+
+  if (config.ratio !== 'Original') {
+    const [ratioX, ratioY] = String(config.ratio).split(':').map((item) => Number.parseFloat(item))
+    if (Number.isFinite(ratioX) && Number.isFinite(ratioY) && ratioX > 0 && ratioY > 0) {
+      const targetRatio = ratioX / ratioY
+      const currentRatio = width / height
+      if (currentRatio > targetRatio) {
+        width = Math.max(1, Math.min(assetWidth, Math.round(height * targetRatio)))
+      } else {
+        height = Math.max(1, Math.min(assetHeight, Math.round(width / targetRatio)))
+      }
+      if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
+      if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
+    }
+  }
+
+  return { left, top, width, height }
+}
+
+async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop') {
+  const format = mapOutputFormat('crop', asset, config)
+  const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
+  const box = normalizeCropBox(asset, config)
+  const transformed = createTransformer(sharpLib, asset).extract(box)
+  await withOutputFormat(transformed, format, 90).toFile(outputPath)
+  return outputPath
+}
+
+function getPdfMarginValue(margin, pageWidth) {
+  if (margin === '无') return 0
+  if (margin === 'wide') return Math.round(pageWidth * 0.08)
+  return Math.round(pageWidth * 0.04)
+}
+
+async function writeMergeImageAsset(sharpLib, payload) {
+  const format = 'png'
+  const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
+  const prepared = []
+
+  for (const asset of payload.assets) {
+    const fitWidth = payload.config.direction === 'vertical' ? payload.config.pageWidth : undefined
+    const fitHeight = payload.config.direction === 'horizontal' ? payload.config.pageWidth : undefined
+    const buffer = await sharpLib(asset.sourcePath)
+      .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background: hexToRgbaObject(payload.config.background, 1) })
+      .png()
+      .toBuffer()
+    const meta = await sharpLib(buffer).metadata()
+    prepared.push({ buffer, width: meta.width || 1, height: meta.height || 1, asset })
+  }
+
+  if (!prepared.length) throw new Error('没有可拼接的图片')
+
+  const spacing = payload.config.spacing
+  const totalWidth = payload.config.direction === 'vertical'
+    ? Math.max(...prepared.map((item) => item.width))
+    : prepared.reduce((sum, item) => sum + item.width, 0) + spacing * Math.max(0, prepared.length - 1)
+  const totalHeight = payload.config.direction === 'vertical'
+    ? prepared.reduce((sum, item) => sum + item.height, 0) + spacing * Math.max(0, prepared.length - 1)
+    : Math.max(...prepared.map((item) => item.height))
+
+  let cursorX = 0
+  let cursorY = 0
+  const composites = prepared.map((item) => {
+    const composite = { input: item.buffer, left: cursorX, top: cursorY }
+    if (payload.config.direction === 'vertical') {
+      cursorY += item.height + spacing
+    } else {
+      cursorX += item.width + spacing
+    }
+    return composite
+  })
+
+  await sharpLib({
+    create: {
+      width: totalWidth,
+      height: totalHeight,
+      channels: 4,
+      background: hexToRgbaObject(payload.config.background, 1),
+    },
+  }).composite(composites).png().toFile(outputPath)
+
+  return outputPath
+}
+
+async function writeMergePdfAsset(payload) {
+  const pdfLib = getPdfLib()
+  if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
+  const outputPath = path.join(payload.destinationPath, 'merged.pdf')
+  const pdf = await pdfLib.PDFDocument.create()
+
+  for (const asset of payload.assets) {
+    const imageBytes = fs.readFileSync(asset.sourcePath)
+    const format = String(asset.ext || '').toLowerCase()
+    const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
+      ? await pdf.embedPng(imageBytes)
+      : await pdf.embedJpg(await require('sharp')(asset.sourcePath).jpeg().toBuffer())
+
+    const pageSize = payload.config.pageSize === '与图片一致'
+      ? [embedded.width, embedded.height]
+      : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
+    const page = pdf.addPage(pageSize)
+    const margin = getPdfMarginValue(payload.config.margin, pageSize[0])
+    const drawableWidth = pageSize[0] - margin * 2
+    const drawableHeight = pageSize[1] - margin * 2
+    const scale = Math.min(drawableWidth / embedded.width, drawableHeight / embedded.height)
+    const width = embedded.width * scale
+    const height = embedded.height * scale
+    page.drawImage(embedded, {
+      x: (pageSize[0] - width) / 2,
+      y: (pageSize[1] - height) / 2,
+      width,
+      height,
+    })
+  }
+
+  const bytes = await pdf.save()
+  fs.writeFileSync(outputPath, bytes)
+  return outputPath
+}
+
+async function writeMergeGifAsset(sharpLib, payload) {
+  const gifenc = getGifEncoder()
+  if (!gifenc) throw new Error('缺少 gifenc 依赖')
+  const outputPath = path.join(payload.destinationPath, 'merged.gif')
+  const { GIFEncoder, quantize, applyPalette } = gifenc
+  const encoder = GIFEncoder()
+  encoder.writeHeader()
+  encoder.setRepeat(0)
+  encoder.setDelay(Math.round(payload.config.interval * 1000))
+
+  for (const asset of payload.assets) {
+    const { data } = await sharpLib(asset.sourcePath)
+      .resize({ width: payload.config.width, height: payload.config.height, fit: 'contain', background: hexToRgbaObject(payload.config.background, 1) })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    const rgba = new Uint8Array(data)
+    const palette = quantize(rgba, 256)
+    const index = applyPalette(rgba, palette)
+    encoder.writeFrame(index, payload.config.width, payload.config.height, { palette })
+  }
+
+  encoder.finish()
+  fs.writeFileSync(outputPath, Buffer.from(encoder.bytes()))
+  return outputPath
+}
+
+async function executeSingleAssetTool(payload, sharpLib) {
+  const processed = []
+  const failed = []
+
+  for (const asset of payload.assets) {
+    if (!isProcessableAsset(asset)) {
+      failed.push({ assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` })
+      continue
+    }
+
+    try {
+      let result = null
+      if (payload.toolId === 'compression') result = await writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'format') result = await writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'resize') result = await writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'watermark') result = await writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'rotate') result = await writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'flip') result = await writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'corners') result = await writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'padding') result = await writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'crop') result = await writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
+      if (payload.toolId === 'manual-crop') {
+        const manualConfig = {
+          ratio: payload.config.ratioValue || payload.config.ratio,
+          area: { x: 0, y: 0, width: asset.width, height: asset.height },
+        }
+        result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
+      }
+
+      const outputPath = typeof result === 'string' ? result : result.outputPath
+      const stat = fs.statSync(outputPath)
+      const image = nativeImage.createFromPath(outputPath)
+      const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+
+      processed.push({
+        assetId: asset.id,
+        name: asset.name,
+        outputPath,
+        outputName: path.basename(outputPath),
+        outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : stat.size,
+        width,
+        height,
+      })
+    } catch (error) {
+      failed.push({ assetId: asset.id, name: asset.name, error: error?.message || '处理失败' })
+    }
+  }
+
+  return { processed, failed }
+}
+
+async function executeMergeTool(payload, sharpLib) {
+  const processed = []
+  const failed = []
+  try {
+    let outputPath = ''
+    if (payload.toolId === 'merge-image') outputPath = await writeMergeImageAsset(sharpLib, payload)
+    if (payload.toolId === 'merge-pdf') outputPath = await writeMergePdfAsset(payload)
+    if (payload.toolId === 'merge-gif') outputPath = await writeMergeGifAsset(sharpLib, payload)
+
+    const stat = fs.statSync(outputPath)
+    processed.push({
+      assetId: payload.assets[0]?.id || payload.toolId,
+      name: path.basename(outputPath),
+      outputPath,
+      outputName: path.basename(outputPath),
+      outputSizeBytes: stat.size,
+      width: 0,
+      height: 0,
+    })
+  } catch (error) {
+    failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
+  }
+
+  return { processed, failed }
+}
+
+async function executeLocalTool(payload) {
+  const sharpLib = getSharp()
+  if (!sharpLib) {
+    return {
+      ok: false,
+      ...payload,
+      message: '缺少 sharp 依赖，无法执行本地图片处理。请先安装依赖。',
+    }
+  }
+
+  if (!payload.destinationPath) {
+    return {
+      ok: false,
+      ...payload,
+      message: '无法解析输出目录。',
+    }
+  }
+
+  ensureDirectory(payload.destinationPath)
+
+  const { processed, failed } = ['merge-image', 'merge-pdf', 'merge-gif'].includes(payload.toolId)
+    ? await executeMergeTool(payload, sharpLib)
+    : await executeSingleAssetTool(payload, sharpLib)
+
+  const ok = processed.length > 0 && failed.length === 0
+  const partial = processed.length > 0 && failed.length > 0
+  const message = ok
+    ? `已完成 ${payload.toolLabel}：${processed.length} 项，输出到 ${payload.destinationPath}`
+    : partial
+      ? `${payload.toolLabel} 部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
+      : `${payload.toolLabel} 执行失败：${failed[0]?.error || '没有可处理的图片'}`
+
+  return {
+    ok,
+    partial,
+    ...payload,
+    processed,
+    failed,
+    message,
+  }
+}
+
+const toolsApi = {
+  getEnvironment() {
+    const hostApi = getHostApi()
+    return {
+      appName: hostApi.getAppName?.() || 'ZTools',
+      isWindows: hostApi.isWindows?.() || false,
+      isMacOS: hostApi.isMacOs?.() || hostApi.isMacOS?.() || false,
+      isLinux: hostApi.isLinux?.() || false,
+    }
+  },
+
+  normalizeInput(items = []) {
+    const hostApi = getHostApi()
+    const seedList = Array.isArray(items) ? items : [items]
+    const list = seedList.flatMap((item) => {
+      const extracted = extractLaunchItems(item)
+      return extracted.length ? extracted : [item]
+    })
+    const paths = []
+
+    for (const item of list) {
+      if (!item) continue
+      if (typeof item === 'string') {
+        paths.push(item)
+        continue
+      }
+      if (item.path) {
+        paths.push(item.path)
+        continue
+      }
+      if (item.filePath) {
+        paths.push(item.filePath)
+        continue
+      }
+      if (item.sourcePath) {
+        paths.push(item.sourcePath)
+        continue
+      }
+      if (hostApi.getPathForFile) {
+        const filePath = hostApi.getPathForFile(item)
+        if (filePath) {
+          paths.push(filePath)
+          continue
+        }
+      }
+      if (typeof File !== 'undefined' && item instanceof File && hostApi.getPathForFile) {
+        const filePath = hostApi.getPathForFile(item)
+        if (filePath) paths.push(filePath)
+      }
+    }
+
+    return Array.from(new Set(paths))
+  },
+
+  async collectImageFiles(inputPaths = []) {
+    const result = []
+    const visited = new Set()
+
+    const walk = (targetPath) => {
+      if (!targetPath || visited.has(targetPath) || !fs.existsSync(targetPath)) return
+      visited.add(targetPath)
+      const stat = fs.statSync(targetPath)
+      if (stat.isDirectory()) {
+        for (const entry of fs.readdirSync(targetPath)) {
+          walk(path.join(targetPath, entry))
+        }
+        return
+      }
+
+      const ext = path.extname(targetPath).toLowerCase()
+      if (IMAGE_EXTENSIONS.has(ext)) {
+        result.push(targetPath)
+      }
+    }
+
+    for (const targetPath of inputPaths) walk(targetPath)
+    return result
+  },
+
+  async readImageMeta(filePaths = []) {
+    return filePaths.map((filePath, index) => {
+      const stat = fs.statSync(filePath)
+      const image = nativeImage.createFromPath(filePath)
+      const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+      return {
+        id: `asset-${index}-${Buffer.from(filePath).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`,
+        sourcePath: filePath,
+        name: path.basename(filePath),
+        ext: path.extname(filePath).replace('.', '').toLowerCase(),
+        sizeBytes: stat.size,
+        width,
+        height,
+        thumbnailUrl: this.pathToFileUrl(filePath),
+        status: 'idle',
+        outputPath: '',
+        error: '',
+        selected: false,
+        overrides: {},
+      }
+    })
+  },
+
+  pathToFileUrl(filePath) {
+    const normalized = String(filePath).replace(/\\/g, '/')
+    const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
+    return encodeURI(`file://${prefixed}`)
+  },
+
+  async loadInputs(items = []) {
+    const normalized = this.normalizeInput(items)
+    const filePaths = await this.collectImageFiles(normalized)
+    return this.readImageMeta(filePaths)
+  },
+
+  async resolveLaunchInputs(values = []) {
+    const inputValues = Array.isArray(values) ? values : [values]
+    const collected = []
+
+    for (const value of inputValues) {
+      const normalized = this.normalizeInput(extractLaunchItems(value))
+      if (!normalized.length) continue
+      const filePaths = await this.collectImageFiles(normalized)
+      if (filePaths.length) {
+        collected.push(...filePaths)
+      }
+    }
+
+    if (!collected.length) return []
+    return this.readImageMeta(Array.from(new Set(collected)))
+  },
+
+  async getLaunchInputs() {
+    installLaunchHooks()
+    await waitForLaunchValue()
+
+    const pendingValues = consumePendingLaunchValues()
+    const pendingAssets = await this.resolveLaunchInputs(pendingValues)
+    if (pendingAssets.length) return pendingAssets
+
+    const hostApi = getHostApi()
+    const candidates = [
+      hostApi.getLaunchData?.(),
+      hostApi.getLaunchInputs?.(),
+      hostApi.getCommandData?.(),
+      hostApi.getCmdData?.(),
+      hostApi.getFeature?.(),
+      hostApi.getCurrentFeature?.(),
+      hostApi.getSelectFiles?.(),
+      hostApi.getSelectedFiles?.(),
+      hostApi.getSelectedFilePaths?.(),
+      hostApi.getFiles?.(),
+      hostApi.getPaths?.(),
+      hostApi.getArguments?.(),
+      hostApi.arguments,
+      hostApi.argv,
+      hostApi.payload,
+      hostApi.cmd,
+      hostApi,
+      globalThis.launchData,
+      globalThis.pluginData,
+      globalThis.input,
+      globalThis.inputs,
+    ]
+
+    const resolvedCandidates = await Promise.all(candidates.map((candidate) => Promise.resolve(candidate)))
+    return this.resolveLaunchInputs(resolvedCandidates)
+  },
+
+  subscribeLaunchInputs(callback) {
+    installLaunchHooks()
+    if (typeof callback !== 'function') return false
+    launchSubscribers.add(callback)
+    return true
+  },
+
+  async savePreset(toolId, preset) {
+    const hostApi = getHostApi()
+    const key = `imgbatch:preset:${toolId}`
+    const current = hostApi.dbStorage?.getItem?.(key) || []
+    const next = [...current, preset]
+    hostApi.dbStorage?.setItem?.(key, next)
+    return next
+  },
+
+  async loadPresets(toolId) {
+    const hostApi = getHostApi()
+    return hostApi.dbStorage?.getItem?.(`imgbatch:preset:${toolId}`) || []
+  },
+
+  prepareRunPayload(toolId, config, assets, destinationPath) {
+    return prepareRunPayload(toolId, config, assets, destinationPath)
+  },
+
+  async runTool(toolId, config, assets, destinationPath) {
+    const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+    const hostApi = getHostApi()
+
+    if (supportsLocalProcessing(payload.toolId)) {
+      return executeLocalTool(payload)
+    }
+
+    if (typeof hostApi.runTool === 'function') {
+      return hostApi.runTool(payload.toolId, payload.config, payload.assets, payload.destinationPath, payload)
+    }
+
+    return {
+      ok: false,
+      ...payload,
+      message: `宿主处理管线待接入：${payload.toolLabel} · ${payload.queuedCount} 张 · ${payload.summary}`,
+    }
+  },
+}
+
+installLaunchHooks()
+
+if (typeof window !== 'undefined') {
+  window.imgbatch = toolsApi
+}

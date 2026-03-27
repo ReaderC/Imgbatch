@@ -1,0 +1,32 @@
+{
+  "name": "imgbatch",
+  "title": "Imgbatch",
+  "description": "图片批量处理插件",
+  "version": "0.1.0",
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "features": [
+    {
+      "code": "image-batch",
+      "explain": "图片批量处理",
+      "cmds": [
+        "图片批处理",
+        {
+          "type": "img",
+          "label": "图片批量处理"
+        },
+        {
+          "type": "files",
+          "label": "批量处理文件",
+          "fileType": "file"
+        },
+        {
+          "type": "files",
+          "label": "批量处理文件夹",
+          "fileType": "directory"
+        }
+      ]
+    }
+  ]
+}
