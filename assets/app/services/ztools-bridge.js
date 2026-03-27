@@ -35,6 +35,70 @@ export async function runTool(toolId, config, assets, destinationPath) {
   return window.imgbatch.runTool(toolId, config, assets, destinationPath)
 }
 
+export async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
+  if (!hasBridge()) {
+    return runTool(toolId, config, assets, destinationPath)
+  }
+  return window.imgbatch.stageToolPreview(toolId, config, assets, destinationPath, mode)
+}
+
+export async function saveStagedResult(toolId, stagedItem, destinationPath) {
+  if (!hasBridge()) {
+    return {
+      ok: false,
+      toolId,
+      stagedItem,
+      destinationPath,
+      message: `保存占位：${toolId} 尚未接入宿主执行管线`,
+    }
+  }
+  return window.imgbatch.saveStagedResult(toolId, stagedItem, destinationPath)
+}
+
+export async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
+  if (!hasBridge()) {
+    return {
+      ok: false,
+      toolId,
+      stagedItems,
+      destinationPath,
+      message: `保存占位：${toolId} 尚未接入宿主执行管线`,
+    }
+  }
+  return window.imgbatch.saveAllStagedResults(toolId, stagedItems, destinationPath)
+}
+
+export async function loadSettings() {
+  if (!hasBridge() || typeof window.imgbatch.loadSettings !== 'function') {
+    return { defaultSavePath: '' }
+  }
+  return window.imgbatch.loadSettings()
+}
+
+export async function saveSettings(settings) {
+  if (!hasBridge() || typeof window.imgbatch.saveSettings !== 'function') {
+    return { defaultSavePath: settings?.defaultSavePath || '' }
+  }
+  return window.imgbatch.saveSettings(settings)
+}
+
+export function buildStagedItems(assets = []) {
+  if (!hasBridge() || typeof window.imgbatch.buildStagedItems !== 'function') {
+    return assets
+      .filter((asset) => asset?.previewStatus === 'staged' && asset?.stagedOutputPath)
+      .map((asset) => ({
+        assetId: asset.id,
+        name: asset.name,
+        stagedPath: asset.stagedOutputPath,
+        outputName: asset.stagedOutputName,
+        runId: asset.runId,
+        runFolderName: asset.runFolderName,
+        toolId: asset.stagedToolId,
+      }))
+  }
+  return window.imgbatch.buildStagedItems(assets)
+}
+
 export async function getLaunchInputs() {
   if (!hasBridge() || typeof window.imgbatch.getLaunchInputs !== 'function') return []
   return window.imgbatch.getLaunchInputs()

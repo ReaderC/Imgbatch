@@ -1,5 +1,6 @@
 const { nativeImage } = require('electron')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -7,8 +8,11 @@ const IMAGE_EXTENSIONS = new Set([
 ])
 const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
-const LOSSY_OUTPUT_FORMATS = new Set(['jpeg', 'webp', 'avif', 'gif'])
+const LOSSY_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
+const PREVIEW_DIR_NAME = 'Imgbatch Preview'
+const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -134,12 +138,20 @@ function getCommonParentDirectory(paths = []) {
   return path.join(firstRoot, ...commonSegments)
 }
 
-function resolveDestinationPath(destinationPath, assets = []) {
+function resolveDestinationPath(destinationPath, assets = [], defaultSavePath = '') {
   const customDestination = sanitizeText(destinationPath)
   if (customDestination) {
     return {
       destinationPath: path.resolve(customDestination),
       strategy: 'custom',
+    }
+  }
+
+  const normalizedDefaultSavePath = sanitizeText(defaultSavePath)
+  if (normalizedDefaultSavePath) {
+    return {
+      destinationPath: path.resolve(normalizedDefaultSavePath),
+      strategy: 'default-setting',
     }
   }
 
@@ -169,6 +181,235 @@ function resolveDestinationPath(destinationPath, assets = []) {
   return {
     destinationPath: path.join(sourceDirs[0], OUTPUT_DIR_NAME),
     strategy: 'first-source',
+  }
+}
+
+function buildRunFolderName(createdAt, toolId) {
+  const stamp = new Date(createdAt || Date.now()).toISOString().replace(/[-:.]/g, '').replace('T', '-').replace('Z', '')
+  return `${stamp}-${toolId}`
+}
+
+function createRunDescriptor(baseDestinationPath, toolId, createdAt) {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const runFolderName = buildRunFolderName(createdAt, toolId)
+  const runPath = path.join(baseDestinationPath, runFolderName)
+  return {
+    runId,
+    runFolderName,
+    runPath,
+  }
+}
+
+function createPreviewDirectory(toolId, createdAt) {
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const runFolderName = buildRunFolderName(createdAt, toolId)
+  const runPath = path.join(basePreviewPath, runFolderName)
+  return {
+    basePreviewPath,
+    runFolderName,
+    runPath,
+  }
+}
+
+function getAppSettings() {
+  const hostApi = getHostApi()
+  return hostApi.dbStorage?.getItem?.(SETTINGS_STORAGE_KEY) || {}
+}
+
+function getDefaultSavePath() {
+  return sanitizeText(getAppSettings()?.defaultSavePath)
+}
+
+function isPreviewSaveTool(toolId) {
+  return PREVIEW_SAVE_TOOLS.has(toolId)
+}
+
+function createPreviewSignature(toolId, config) {
+  return JSON.stringify({ toolId, config })
+}
+
+function toPublicFileUrl(filePath) {
+  const normalized = String(filePath).replace(/\\/g, '/')
+  const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
+  return encodeURI(`file://${prefixed}`)
+}
+
+function readOutputMeta(outputPath) {
+  const stat = fs.statSync(outputPath)
+  const image = nativeImage.createFromPath(outputPath)
+  const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+  return {
+    outputPath,
+    outputName: path.basename(outputPath),
+    outputSizeBytes: stat.size,
+    width,
+    height,
+  }
+}
+
+function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
+  const finalDirectory = path.join(baseDestinationPath, runFolderName)
+  ensureDirectory(finalDirectory)
+  return path.join(finalDirectory, outputName)
+}
+
+function savePreviewResult(baseDestinationPath, runFolderName, stagedItem) {
+  const sourcePath = sanitizeText(stagedItem?.stagedPath)
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    throw new Error('预览结果不存在，无法保存')
+  }
+
+  const targetPath = resolveSaveTargetPath(baseDestinationPath, runFolderName, stagedItem.outputName || path.basename(sourcePath))
+  if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+    fs.copyFileSync(sourcePath, targetPath)
+  }
+
+  return readOutputMeta(targetPath)
+}
+
+function normalizePreviewResult(item = {}, payload) {
+  const isBatchPreview = payload.mode === 'preview-save'
+  const stagedPath = item.stagedPath || item.outputPath || ''
+  const previewUrl = item.previewUrl || (stagedPath ? toPublicFileUrl(stagedPath) : '')
+  const cacheBustedPreviewUrl = previewUrl && payload.runId ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}` : previewUrl
+  return {
+    ...item,
+    mode: payload.mode,
+    previewStatus: isBatchPreview ? 'staged' : 'previewed',
+    stagedPath,
+    previewUrl: cacheBustedPreviewUrl,
+    saveSignature: createPreviewSignature(payload.toolId, payload.config),
+    runId: payload.runId,
+    runFolderName: payload.runFolderName,
+    savedOutputPath: item.savedOutputPath || '',
+  }
+}
+
+function normalizeDirectResult(item = {}) {
+  return {
+    ...item,
+    mode: 'direct',
+    previewStatus: 'saved',
+    savedOutputPath: item.outputPath || '',
+  }
+}
+
+function stageResultToProcessed(asset, result, payload) {
+  const stagedPath = typeof result === 'string' ? result : result.outputPath
+  const meta = readOutputMeta(stagedPath)
+  return normalizePreviewResult({
+    assetId: asset.id,
+    name: asset.name,
+    outputName: meta.outputName,
+    stagedPath,
+    previewUrl: toPublicFileUrl(stagedPath),
+    outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
+    width: meta.width,
+    height: meta.height,
+  }, payload)
+}
+
+function directResultToProcessed(asset, result) {
+  const outputPath = typeof result === 'string' ? result : result.outputPath
+  const meta = readOutputMeta(outputPath)
+  return normalizeDirectResult({
+    assetId: asset.id,
+    name: asset.name,
+    outputPath,
+    outputName: meta.outputName,
+    outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
+    width: meta.width,
+    height: meta.height,
+  })
+}
+
+function mergeResultToProcessed(result) {
+  return normalizeDirectResult(result)
+}
+
+function formatResultMessage(payload, processed, failed) {
+  const ok = processed.length > 0 && failed.length === 0
+  const partial = processed.length > 0 && failed.length > 0
+  if (payload.mode === 'preview-only') {
+    if (ok) return `已生成 ${payload.toolLabel} 单张预览，可继续调整参数。`
+    if (partial) return `${payload.toolLabel} 预览部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
+    return `${payload.toolLabel} 预览失败：${failed[0]?.error || '没有可处理的图片'}`
+  }
+  if (payload.mode === 'preview-save') {
+    if (ok) return `已生成 ${payload.toolLabel} 处理结果：${processed.length} 项，可继续保存。`
+    if (partial) return `${payload.toolLabel} 处理部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
+    return `${payload.toolLabel} 处理失败：${failed[0]?.error || '没有可处理的图片'}`
+  }
+  if (ok) return `已完成 ${payload.toolLabel}：${processed.length} 项，输出到 ${payload.destinationPath}`
+  if (partial) return `${payload.toolLabel} 部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
+  return `${payload.toolLabel} 执行失败：${failed[0]?.error || '没有可处理的图片'}`
+}
+
+function createResultEnvelope(payload, processed, failed) {
+  const ok = processed.length > 0 && failed.length === 0
+  const partial = processed.length > 0 && failed.length > 0
+  return {
+    ok,
+    partial,
+    ...payload,
+    processed,
+    failed,
+    message: formatResultMessage(payload, processed, failed),
+  }
+}
+
+function buildSavedResult(payload, processed, failed) {
+  return createResultEnvelope({ ...payload, mode: 'save' }, processed, failed)
+}
+
+function buildSettingsPayload(settings = {}) {
+  return {
+    defaultSavePath: sanitizeText(settings.defaultSavePath),
+  }
+}
+
+function createPreviewPayload(toolId, config, assets, destinationPath, mode = 'preview-save') {
+  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+  if (mode !== 'preview-only') {
+    return {
+      ...payload,
+      mode,
+    }
+  }
+
+  const preview = createPreviewDirectory(toolId, payload.createdAt)
+  return {
+    ...payload,
+    destinationPath: preview.runPath,
+    baseDestinationPath: preview.basePreviewPath,
+    runFolderName: preview.runFolderName,
+    mode,
+  }
+}
+
+function createDirectPayload(toolId, config, assets, destinationPath) {
+  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+  return {
+    ...payload,
+    mode: 'direct',
+  }
+}
+
+function createSavePayload(toolId, stagedItems = [], destinationPath) {
+  const defaultSavePath = getDefaultSavePath()
+  const output = resolveDestinationPath(destinationPath, [], defaultSavePath)
+  const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
+  const firstItem = normalizedItems[0] || {}
+  return {
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    destinationPath: output.destinationPath,
+    output,
+    mode: 'save',
+    stagedItems: normalizedItems,
+    runId: firstItem.runId || '',
+    runFolderName: firstItem.runFolderName || buildRunFolderName(new Date().toISOString(), toolId),
+    createdAt: new Date().toISOString(),
   }
 }
 
@@ -317,18 +558,24 @@ function normalizeRunConfig(toolId, config = {}) {
 function prepareRunPayload(toolId, config, assets, destinationPath) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
-  const output = resolveDestinationPath(destinationPath, normalizedAssets)
+  const defaultSavePath = getDefaultSavePath()
+  const output = resolveDestinationPath(destinationPath, normalizedAssets, defaultSavePath)
+  const createdAt = new Date().toISOString()
+  const run = createRunDescriptor(output.destinationPath, toolId, createdAt)
 
   return {
     toolId,
     toolLabel: TOOL_LABELS[toolId] || toolId,
     config: normalizedConfig,
     assets: normalizedAssets,
-    destinationPath: output.destinationPath,
+    destinationPath: run.runPath,
+    baseDestinationPath: output.destinationPath,
     output,
     queuedCount: normalizedAssets.length,
     summary: summarizeConfig(toolId, normalizedConfig),
-    createdAt: new Date().toISOString(),
+    createdAt,
+    runId: run.runId,
+    runFolderName: run.runFolderName,
   }
 }
 
@@ -505,7 +752,12 @@ function withOutputFormat(transformer, format, quality) {
   if (format === 'jpeg') return transformer.jpeg({ quality, mozjpeg: true })
   if (format === 'png') {
     const compressionLevel = Math.max(0, Math.min(9, Math.round((100 - quality) / 11)))
-    return transformer.png({ compressionLevel })
+    return transformer.png({
+      compressionLevel,
+      palette: quality < 100,
+      quality: Math.max(1, Math.round(quality)),
+      effort: 10,
+    })
   }
   if (format === 'webp') return transformer.webp({ quality })
   if (format === 'tiff') return transformer.tiff({ quality })
@@ -955,26 +1207,171 @@ async function executeSingleAssetTool(payload, sharpLib) {
         result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
       }
 
-      const outputPath = typeof result === 'string' ? result : result.outputPath
-      const stat = fs.statSync(outputPath)
-      const image = nativeImage.createFromPath(outputPath)
-      const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
-
-      processed.push({
-        assetId: asset.id,
-        name: asset.name,
-        outputPath,
-        outputName: path.basename(outputPath),
-        outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : stat.size,
-        width,
-        height,
-      })
+      processed.push(payload.mode === 'direct'
+        ? directResultToProcessed(asset, result)
+        : stageResultToProcessed(asset, result, payload))
     } catch (error) {
       failed.push({ assetId: asset.id, name: asset.name, error: error?.message || '处理失败' })
     }
   }
 
   return { processed, failed }
+}
+
+function isMergeTool(toolId) {
+  return ['merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
+}
+
+function saveAppSettings(settings = {}) {
+  const hostApi = getHostApi()
+  const next = buildSettingsPayload({ ...getAppSettings(), ...settings })
+  hostApi.dbStorage?.setItem?.(SETTINGS_STORAGE_KEY, next)
+  return next
+}
+
+function buildStagedItemsFromAssets(assets = []) {
+  return assets
+    .filter((asset) => asset?.previewStatus === 'staged' && asset?.stagedOutputPath)
+    .map((asset) => ({
+      assetId: asset.id,
+      name: asset.name,
+      stagedPath: asset.stagedOutputPath,
+      outputName: asset.stagedOutputName || path.basename(asset.stagedOutputPath),
+      runId: asset.runId || '',
+      runFolderName: asset.runFolderName || '',
+      toolId: asset.stagedToolId || '',
+    }))
+}
+
+function createFallbackFailure(payload, message) {
+  return {
+    ok: false,
+    partial: false,
+    ...payload,
+    processed: [],
+    failed: [{ assetId: payload.toolId, name: payload.toolLabel, error: message }],
+    message,
+  }
+}
+
+function resolveExecutionMode(toolId) {
+  if (isMergeTool(toolId)) return 'direct'
+  return isPreviewSaveTool(toolId) ? 'preview-save' : 'direct'
+}
+
+async function executeSaveFlow(payload) {
+  if (!payload.stagedItems?.length) {
+    return createFallbackFailure(payload, '没有可保存的预览结果。')
+  }
+
+  if (!payload.destinationPath) {
+    return createFallbackFailure(payload, '无法解析保存目录。')
+  }
+
+  ensureDirectory(payload.destinationPath)
+  const processed = []
+  const failed = []
+
+  for (const item of payload.stagedItems) {
+    try {
+      const saved = savePreviewResult(payload.destinationPath, payload.runFolderName, item)
+      processed.push(normalizeDirectResult({
+        assetId: item.assetId,
+        name: item.name,
+        outputPath: saved.outputPath,
+        outputName: saved.outputName,
+        outputSizeBytes: saved.outputSizeBytes,
+        width: saved.width,
+        height: saved.height,
+      }))
+    } catch (error) {
+      failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '保存失败' })
+    }
+  }
+
+  return buildSavedResult(payload, processed, failed)
+}
+
+async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
+  return executeLocalTool(createPreviewPayload(toolId, config, assets, destinationPath, mode))
+}
+
+async function saveStagedResult(toolId, stagedItem, destinationPath) {
+  return executeSaveFlow(createSavePayload(toolId, [stagedItem], destinationPath))
+}
+
+async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
+  return executeSaveFlow(createSavePayload(toolId, stagedItems, destinationPath))
+}
+
+function loadSettings() {
+  return buildSettingsPayload(getAppSettings())
+}
+
+function saveSettings(settings) {
+  return saveAppSettings(settings)
+}
+
+function createPreparedRunPayload(toolId, config, assets, destinationPath) {
+  return {
+    ...prepareRunPayload(toolId, config, assets, destinationPath),
+    mode: resolveExecutionMode(toolId),
+  }
+}
+
+function createSavePayloadFromAssets(toolId, assets, destinationPath) {
+  return createSavePayload(toolId, buildStagedItemsFromAssets(assets), destinationPath)
+}
+
+function createPreparedPreviewPayload(toolId, config, assets, destinationPath) {
+  return createPreviewPayload(toolId, config, assets, destinationPath)
+}
+
+function createPreparedSavePayload(toolId, stagedItems, destinationPath) {
+  return createSavePayload(toolId, stagedItems, destinationPath)
+}
+
+function createProcessedOutput(asset, result, payload) {
+  return payload.mode === 'preview-save'
+    ? stageResultToProcessed(asset, result, payload)
+    : directResultToProcessed(asset, result)
+}
+
+function createMergeOutput(outputPath, payload) {
+  const meta = readOutputMeta(outputPath)
+  return mergeResultToProcessed({
+    assetId: payload.assets[0]?.id || payload.toolId,
+    name: path.basename(outputPath),
+    outputPath,
+    outputName: meta.outputName,
+    outputSizeBytes: meta.outputSizeBytes,
+    width: 0,
+    height: 0,
+  })
+}
+
+function resolveLocalRunPayload(toolId, config, assets, destinationPath) {
+  return createPreparedRunPayload(toolId, config, assets, destinationPath)
+}
+
+function resolveLocalPreviewPayload(toolId, config, assets, destinationPath) {
+  return createPreparedPreviewPayload(toolId, config, assets, destinationPath)
+}
+
+function resolveLocalSavePayload(toolId, stagedItems, destinationPath) {
+  return createPreparedSavePayload(toolId, stagedItems, destinationPath)
+}
+
+function resolveLocalSaveItemsPayload(assets) {
+  return buildStagedItemsFromAssets(assets)
+}
+
+function resolveLocalSettingsPayload() {
+  return loadSettings()
+}
+
+function setLocalSettingsPayload(settings) {
+  return saveSettings(settings)
 }
 
 async function executeMergeTool(payload, sharpLib) {
@@ -1130,7 +1527,7 @@ const toolsApi = {
       const image = nativeImage.createFromPath(filePath)
       const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
       return {
-        id: `asset-${index}-${Buffer.from(filePath).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`,
+        id: `asset-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
         sourcePath: filePath,
         name: path.basename(filePath),
         ext: path.extname(filePath).replace('.', '').toLowerCase(),
@@ -1235,11 +1632,35 @@ const toolsApi = {
   },
 
   prepareRunPayload(toolId, config, assets, destinationPath) {
-    return prepareRunPayload(toolId, config, assets, destinationPath)
+    return resolveLocalRunPayload(toolId, config, assets, destinationPath)
+  },
+
+  async stageToolPreview(toolId, config, assets, destinationPath, mode) {
+    return stageToolPreview(toolId, config, assets, destinationPath, mode)
+  },
+
+  async saveStagedResult(toolId, stagedItem, destinationPath) {
+    return saveStagedResult(toolId, stagedItem, destinationPath)
+  },
+
+  async saveAllStagedResults(toolId, stagedItems, destinationPath) {
+    return saveAllStagedResults(toolId, stagedItems, destinationPath)
+  },
+
+  loadSettings() {
+    return resolveLocalSettingsPayload()
+  },
+
+  saveSettings(settings) {
+    return setLocalSettingsPayload(settings)
+  },
+
+  buildStagedItems(assets = []) {
+    return resolveLocalSaveItemsPayload(assets)
   },
 
   async runTool(toolId, config, assets, destinationPath) {
-    const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+    const payload = resolveLocalRunPayload(toolId, config, assets, destinationPath)
     const hostApi = getHostApi()
 
     if (supportsLocalProcessing(payload.toolId)) {
