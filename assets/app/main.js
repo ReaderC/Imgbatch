@@ -1,20 +1,24 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
 import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setPreviewModal, setSearchQuery, setState, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, getLaunchInputs, importItems, loadSettings, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { buildStagedItems, getLaunchInputs, importItems, loadSettings, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
-const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const SETTINGS_TOOL_ID = 'settings'
 
 const app = document.getElementById('app')
 const fileInput = createFileInput({ directory: false })
 const folderInput = createFileInput({ directory: true })
+const watermarkFileInput = createFileInput({ directory: false })
+watermarkFileInput.multiple = false
 
 const DRAG_CONTEXT = {
   rotateDial: null,
+  manualCrop: null,
 }
 
-document.body.append(fileInput, folderInput)
+document.body.append(fileInput, folderInput, watermarkFileInput)
 subscribe(render)
 render(getState())
 attachGlobalEvents()
@@ -35,6 +39,10 @@ async function bootstrapSettings() {
 
 function isPreviewSaveTool(toolId) {
   return PREVIEW_SAVE_TOOLS.has(toolId)
+}
+
+function isPreviewableTool(toolId) {
+  return PREVIEWABLE_TOOLS.has(toolId)
 }
 
 function getCurrentDestinationPath() {
@@ -104,6 +112,127 @@ async function saveAllCurrentResults() {
     setState({ isProcessing: false })
   }
 }
+
+async function resolveWatermarkImagePath(file) {
+  if (!file) return ''
+  const directPath = file.path || file.webkitRelativePath || ''
+  if (directPath) return directPath
+  try {
+    const [resolvedPath] = await resolveInputPaths([file])
+    return resolvedPath || file.name || ''
+  } catch {
+    return file.name || ''
+  }
+}
+
+async function openSavedOutput(assetId) {
+  const asset = getState().assets.find((item) => item.id === assetId)
+  const targetPath = asset ? getSavedOutputPath(asset) || getPreviewOutputPath(asset) : ''
+  if (!targetPath) {
+    notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
+    return
+  }
+  const ok = await revealPath(targetPath)
+  if (!ok) {
+    notify({ type: 'error', message: '打开结果目录失败。' })
+  }
+}
+
+async function replaceAssetOriginal(assetId) {
+  const asset = getState().assets.find((item) => item.id === assetId)
+  if (!asset) return
+  const resultPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset)
+  if (!resultPath) {
+    notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
+    return
+  }
+  if (!window.confirm(`确认用处理结果覆盖原图？\n\n${asset.name}`)) return
+
+  setState({ isProcessing: true })
+  try {
+    const result = await replaceOriginals([{
+      assetId: asset.id,
+      name: asset.name,
+      sourcePath: asset.sourcePath,
+      savedOutputPath: resultPath,
+      outputPath: resultPath,
+    }])
+    if (result?.processed?.length || result?.failed?.length) {
+      applyRunResult({ ...result, mode: 'save', toolId: getState().activeTool })
+    }
+    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
+  } catch (error) {
+    notify({ type: 'error', message: error?.message || '替换原图失败。' })
+  } finally {
+    setState({ isProcessing: false })
+  }
+}
+
+async function openCurrentResultsDirectory() {
+  const asset = getState().assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item))
+  if (!asset) {
+    notify({ type: 'info', message: '当前没有可打开的结果目录。' })
+    return
+  }
+  await openSavedOutput(asset.id)
+}
+
+async function replaceCurrentOriginals() {
+  const assets = getState().assets.filter((item) => (getSavedOutputPath(item) || getPreviewOutputPath(item)) && item.sourcePath)
+  if (!assets.length) {
+    notify({ type: 'info', message: '当前没有可替换的处理结果。' })
+    return
+  }
+  if (!window.confirm(`确认用处理结果覆盖 ${assets.length} 张原图？此操作不可撤销。`)) return
+
+  setState({ isProcessing: true })
+  try {
+    const result = await replaceOriginals(assets.map((asset) => ({
+      assetId: asset.id,
+      name: asset.name,
+      sourcePath: asset.sourcePath,
+      savedOutputPath: getSavedOutputPath(asset) || getPreviewOutputPath(asset),
+      outputPath: getSavedOutputPath(asset) || getPreviewOutputPath(asset),
+    })))
+    if (result?.processed?.length || result?.failed?.length) {
+      applyRunResult({ ...result, mode: 'save', toolId: getState().activeTool })
+    }
+    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
+  } catch (error) {
+    notify({ type: 'error', message: error?.message || '替换原图失败。' })
+  } finally {
+    setState({ isProcessing: false })
+  }
+}
+
+function continueProcessing() {
+  closePreviewModal()
+}
+
+function hasAnyResultAssets() {
+  return getState().assets.some((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
+}
+
+function buildResultActions() {
+  if (!hasAnyResultAssets()) return ''
+  return `
+    <div class="result-toolbar">
+      <button class="secondary-button" data-action="continue-processing">继续处理</button>
+      <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
+      <button class="primary-button" data-action="open-current-results">显示结果</button>
+    </div>
+  `
+}
+
+function injectResultToolbar() {
+  const shell = document.querySelector('.app-shell')
+  if (!shell) return
+  const existing = shell.querySelector('.result-toolbar')
+  if (existing) existing.remove()
+  if (!hasAnyResultAssets()) return
+  shell.insertAdjacentHTML('beforeend', buildResultActions())
+}
+
 
 async function persistDefaultSavePath() {
   const defaultSavePath = window.prompt('默认保存路径', getState().settings.defaultSavePath || getState().destinationPath || '')
@@ -180,6 +309,493 @@ function getProcessRunner(toolId) {
   return isPreviewSaveTool(toolId)
     ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save')
     : runTool
+}
+
+function getPreviewRunner(toolId) {
+  return isPreviewableTool(toolId)
+    ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only')
+    : runTool
+}
+
+function shouldReusePreviewResult(toolId, asset) {
+  if (!isPreviewableTool(toolId)) return false
+  if (asset?.stagedToolId !== toolId) return false
+  if (!asset?.previewUrl) return false
+  const signature = JSON.stringify({ toolId, config: getState().configs[toolId] })
+  if (asset?.saveSignature && asset.saveSignature !== signature) return false
+  return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
+}
+
+function mapPreviewResultToAsset(asset, processed, toolId) {
+  if (!processed) return asset
+  return {
+    ...asset,
+    previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
+    stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
+    stagedWidth: processed.width || asset.stagedWidth || 0,
+    stagedHeight: processed.height || asset.stagedHeight || 0,
+    previewStatus: processed.previewStatus || (isPreviewSaveTool(toolId) ? 'previewed' : 'saved'),
+    stagedToolId: toolId,
+    savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
+    outputPath: processed.outputPath || asset.outputPath || '',
+  }
+}
+
+function getPreviewedAssetFromResult(assetId, toolId, fallbackAsset, result) {
+  const nextAsset = getState().assets.find((item) => item.id === assetId)
+  if (nextAsset?.previewUrl) return nextAsset
+  const processed = (result?.processed || []).find((item) => item.assetId === assetId)
+  return mapPreviewResultToAsset(fallbackAsset, processed, toolId)
+}
+
+async function runAssetPreview(tool, asset) {
+  const state = getState()
+  const runner = getPreviewRunner(tool.id)
+  const result = await runner(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
+  if (result?.processed?.length || result?.failed?.length) {
+    applyRunResult(result)
+  }
+  if (result?.ok || result?.partial) {
+    return getPreviewedAssetFromResult(asset.id, tool.id, asset, result)
+  }
+  throw new Error(result?.message || '预览失败。')
+}
+
+async function openProcessedPreview(tool, asset) {
+  const previewedAsset = await runAssetPreview(tool, asset)
+  if (openPreviewModal(previewedAsset)) {
+    return true
+  }
+  throw new Error('预览结果生成成功，但无法打开处理后的图片。')
+}
+
+function isDirectPreviewTool(toolId) {
+  return isPreviewableTool(toolId) && !isPreviewSaveTool(toolId)
+}
+
+function getGenericPreviewMessage(tool, asset) {
+  return `${tool.label} · ${truncate(asset.name, 20)}`
+}
+
+function getNonSavePreviewSuccessMessage(tool) {
+  return `${tool.label} 预览已生成。`
+}
+
+function isMergePreviewTool(toolId) {
+  return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
+}
+
+function shouldOpenRealPreview(toolId) {
+  return isPreviewableTool(toolId) && !isMergePreviewTool(toolId)
+}
+
+function getPreviewFailureMessage(error, tool) {
+  return error?.message || `${tool.label} 预览失败。`
+}
+
+function getPreviewReuseAsset(toolId, asset) {
+  return shouldReusePreviewResult(toolId, asset) ? asset : null
+}
+
+function getPreviewPlaceholderMessage(tool, asset) {
+  return `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}`
+}
+
+function hasPreviewUrl(asset) {
+  return !!asset?.previewUrl
+}
+
+function shouldOpenPreviewModalForAsset(asset) {
+  return hasPreviewUrl(asset)
+}
+
+function buildPreviewNotification(tool) {
+  return getNonSavePreviewSuccessMessage(tool)
+}
+
+function canGenerateSingleAssetPreview(toolId) {
+  return shouldOpenRealPreview(toolId)
+}
+
+function getPreviewResultAsset(assetId, toolId, fallbackAsset, result) {
+  return getPreviewedAssetFromResult(assetId, toolId, fallbackAsset, result)
+}
+
+function isAlreadyPreviewed(toolId, asset) {
+  return !!getPreviewReuseAsset(toolId, asset)
+}
+
+function getPreviewableToolLabel(tool) {
+  return tool?.label || '当前工具'
+}
+
+function getPreviewOpenError(tool) {
+  return `${getPreviewableToolLabel(tool)} 预览结果无法打开。`
+}
+
+function createPreviewError(error, tool) {
+  return error?.message || getPreviewOpenError(tool)
+}
+
+function shouldDirectPreviewTool(toolId) {
+  return isDirectPreviewTool(toolId)
+}
+
+function canOpenExistingPreview(toolId, asset) {
+  return shouldReusePreviewResult(toolId, asset)
+}
+
+function getPreviewAssetResult(assetId) {
+  return getState().assets.find((item) => item.id === assetId)
+}
+
+function getPreviewResultProcessed(result, assetId) {
+  return (result?.processed || []).find((item) => item.assetId === assetId)
+}
+
+function createPreviewFallbackAsset(asset, processed, toolId) {
+  return mapPreviewResultToAsset(asset, processed, toolId)
+}
+
+function getPreviewAssetAfterRun(assetId, toolId, asset, result) {
+  const nextAsset = getPreviewAssetResult(assetId)
+  if (shouldOpenPreviewModalForAsset(nextAsset)) return nextAsset
+  return createPreviewFallbackAsset(asset, getPreviewResultProcessed(result, assetId), toolId)
+}
+
+function getPreviewMode(toolId) {
+  return isPreviewSaveTool(toolId) ? 'preview-only' : 'preview-only'
+}
+
+function getSingleAssetPreviewRunner(toolId) {
+  return getPreviewRunner(toolId)
+}
+
+function isSingleAssetPreviewTool(toolId) {
+  return canGenerateSingleAssetPreview(toolId)
+}
+
+function getPreviewStatusFallback(tool, asset) {
+  return getPreviewPlaceholderMessage(tool, asset)
+}
+
+function getPreviewAssetMessage(tool, asset) {
+  return getGenericPreviewMessage(tool, asset)
+}
+
+function notifyPreviewReady(tool) {
+  notify({ type: 'success', message: buildPreviewNotification(tool) })
+}
+
+function notifyPreviewFailure(error, tool) {
+  notify({ type: 'error', message: createPreviewError(error, tool) })
+}
+
+function notifyPreviewUnavailable(tool, asset) {
+  notify({ type: 'info', message: getPreviewStatusFallback(tool, asset) })
+}
+
+async function previewSingleAsset(tool, asset) {
+  if (isAlreadyPreviewed(tool.id, asset) && openPreviewModal(asset)) {
+    return
+  }
+  if (!isSingleAssetPreviewTool(tool.id)) {
+    notifyPreviewUnavailable(tool, asset)
+    return
+  }
+  const previewedAsset = await runAssetPreview(tool, asset)
+  if (!openPreviewModal(previewedAsset)) {
+    throw new Error(getPreviewOpenError(tool))
+  }
+  if (shouldDirectPreviewTool(tool.id)) {
+    notifyPreviewReady(tool)
+  }
+}
+
+async function previewMergeAsset(tool, asset) {
+  notifyPreviewUnavailable(tool, asset)
+}
+
+async function previewToolAsset(tool, asset) {
+  if (isMergePreviewTool(tool.id)) {
+    await previewMergeAsset(tool, asset)
+    return
+  }
+  await previewSingleAsset(tool, asset)
+}
+
+function canPreviewTool(toolId) {
+  return isSingleAssetPreviewTool(toolId)
+}
+
+function getPreviewToolState(toolId, asset) {
+  return canOpenExistingPreview(toolId, asset)
+}
+
+function shouldPreviewWithProcessing(toolId) {
+  return canPreviewTool(toolId)
+}
+
+function getPreviewExistingAsset(toolId, asset) {
+  return getPreviewToolState(toolId, asset) ? asset : null
+}
+
+function ensurePreviewable(tool, asset) {
+  const existing = getPreviewExistingAsset(tool.id, asset)
+  if (existing && openPreviewModal(existing)) {
+    return { handled: true }
+  }
+  if (!shouldPreviewWithProcessing(tool.id)) {
+    return { handled: false }
+  }
+  return { handled: false }
+}
+
+function notifyPreviewProcessing(error, tool) {
+  notifyPreviewFailure(error, tool)
+}
+
+async function executePreview(tool, asset) {
+  await previewToolAsset(tool, asset)
+}
+
+function getPreviewActionTool(state) {
+  return TOOL_MAP[state.activeTool]
+}
+
+function canOpenToolPreview(toolId, asset) {
+  return shouldReusePreviewResult(toolId, asset)
+}
+
+function getPreviewCandidate(toolId, asset) {
+  return canOpenToolPreview(toolId, asset) ? asset : null
+}
+
+function openExistingPreview(toolId, asset) {
+  const candidate = getPreviewCandidate(toolId, asset)
+  if (candidate && openPreviewModal(candidate)) {
+    return true
+  }
+  return false
+}
+
+function shouldUsePreviewProcessing(toolId) {
+  return shouldOpenRealPreview(toolId)
+}
+
+function notifyPreviewNotImplemented(tool, asset) {
+  notifyPreviewUnavailable(tool, asset)
+}
+
+async function runPreviewFlow(tool, asset) {
+  if (openExistingPreview(tool.id, asset)) return
+  if (!shouldUsePreviewProcessing(tool.id)) {
+    notifyPreviewNotImplemented(tool, asset)
+    return
+  }
+  await executePreview(tool, asset)
+}
+
+function getPreviewableAsset(toolId, asset) {
+  return canPreviewTool(toolId) ? asset : null
+}
+
+function resolvePreviewTool(state) {
+  return getPreviewActionTool(state)
+}
+
+function shouldShowPreviewNotification(toolId) {
+  return isDirectPreviewTool(toolId)
+}
+
+function maybeNotifyDirectPreviewReady(tool) {
+  if (shouldShowPreviewNotification(tool.id)) {
+    notifyPreviewReady(tool)
+  }
+}
+
+async function handleToolPreview(tool, asset) {
+  await runPreviewFlow(tool, asset)
+}
+
+function getDirectPreviewAsset(toolId, asset) {
+  return getPreviewableAsset(toolId, asset)
+}
+
+function canHandlePreview(tool, asset) {
+  return !!tool && !!asset
+}
+
+async function openToolPreview(tool, asset) {
+  if (!canHandlePreview(tool, asset)) return
+  await handleToolPreview(tool, asset)
+}
+
+function getPreviewTool(toolId) {
+  return TOOL_MAP[toolId]
+}
+
+function resolvePreviewToolByState() {
+  return getPreviewTool(getState().activeTool)
+}
+
+function getPreviewAssetLabel(asset) {
+  return truncate(asset?.name || '当前图片', 20)
+}
+
+function createPreviewUnavailableMessage(tool, asset) {
+  return `${tool.label} 暂不支持预览：${getPreviewAssetLabel(asset)}`
+}
+
+function notifyUnsupportedPreview(tool, asset) {
+  notify({ type: 'info', message: createPreviewUnavailableMessage(tool, asset) })
+}
+
+function shouldUseUnsupportedPreview(toolId) {
+  return !shouldUsePreviewProcessing(toolId) && !isMergePreviewTool(toolId)
+}
+
+function previewToolSupportsProcessing(toolId) {
+  return shouldUsePreviewProcessing(toolId)
+}
+
+function getPreviewToolCandidate() {
+  return resolvePreviewToolByState()
+}
+
+async function processPreviewAsset(asset) {
+  const tool = getPreviewToolCandidate()
+  if (!tool || !asset) return
+  if (shouldUseUnsupportedPreview(tool.id)) {
+    notifyUnsupportedPreview(tool, asset)
+    return
+  }
+  await openToolPreview(tool, asset)
+}
+
+function getToolPreviewRunner(toolId) {
+  return getSingleAssetPreviewRunner(toolId)
+}
+
+function getPreviewExecutionMode(toolId) {
+  return getPreviewMode(toolId)
+}
+
+async function executePreviewRunner(toolId, config, assets, destinationPath) {
+  return getToolPreviewRunner(toolId)(toolId, config, assets, destinationPath, getPreviewExecutionMode(toolId))
+}
+
+function getPreviewedAsset(toolId, assetId, asset, result) {
+  return getPreviewAssetAfterRun(assetId, toolId, asset, result)
+}
+
+async function previewWithRunner(tool, asset) {
+  const state = getState()
+  const result = await executePreviewRunner(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
+  if (result?.processed?.length || result?.failed?.length) {
+    applyRunResult(result)
+  }
+  if (!(result?.ok || result?.partial)) {
+    throw new Error(result?.message || '预览失败。')
+  }
+  const previewedAsset = getPreviewedAsset(tool.id, asset.id, asset, result)
+  if (!openPreviewModal(previewedAsset)) {
+    throw new Error(getPreviewOpenError(tool))
+  }
+  maybeNotifyDirectPreviewReady(tool)
+}
+
+async function previewAssetWithTool(tool, asset) {
+  if (openExistingPreview(tool.id, asset)) return
+  if (!previewToolSupportsProcessing(tool.id)) {
+    if (isMergePreviewTool(tool.id)) {
+      notifyPreviewUnavailable(tool, asset)
+      return
+    }
+    notifyUnsupportedPreview(tool, asset)
+    return
+  }
+  await previewWithRunner(tool, asset)
+}
+
+function isPreviewSupported(toolId) {
+  return previewToolSupportsProcessing(toolId)
+}
+
+function getPreviewFlowTool() {
+  return resolvePreviewToolByState()
+}
+
+async function performAssetPreview(asset) {
+  const tool = getPreviewFlowTool()
+  if (!tool || !asset) return
+  await previewAssetWithTool(tool, asset)
+}
+
+function shouldNotifyPreviewSuccess(toolId) {
+  return isDirectPreviewTool(toolId)
+}
+
+function notifyToolPreviewSuccess(tool) {
+  if (shouldNotifyPreviewSuccess(tool.id)) {
+    notifyPreviewReady(tool)
+  }
+}
+
+function createToolPreviewFailure(error, tool) {
+  return error?.message || `${tool.label} 预览失败。`
+}
+
+function notifyToolPreviewFailure(error, tool) {
+  notify({ type: 'error', message: createToolPreviewFailure(error, tool) })
+}
+
+function previewResultExists(toolId, asset) {
+  return canOpenExistingPreview(toolId, asset)
+}
+
+function shouldPreviewAssetDirectly(toolId) {
+  return isPreviewSupported(toolId)
+}
+
+function previewAssetUnavailable(tool, asset) {
+  notifyPreviewUnavailable(tool, asset)
+}
+
+function getPreviewToolFromState() {
+  return resolvePreviewToolByState()
+}
+
+function getPreviewAssetFromState(assetId) {
+  return getState().assets.find((item) => item.id === assetId)
+}
+
+async function triggerAssetPreview(assetId) {
+  const asset = getPreviewAssetFromState(assetId)
+  const tool = getPreviewToolFromState()
+  if (!asset || !tool) return
+  if (previewResultExists(tool.id, asset) && openPreviewModal(asset)) return
+  if (!shouldPreviewAssetDirectly(tool.id)) {
+    previewAssetUnavailable(tool, asset)
+    return
+  }
+  await previewAssetWithTool(tool, asset)
+}
+
+function canPreviewCurrentTool(toolId) {
+  return isPreviewSupported(toolId)
+}
+
+function resolvePreviewMessage(tool, asset) {
+  return getPreviewPlaceholderMessage(tool, asset)
+}
+
+function notifyPreviewUnsupported(tool, asset) {
+  notify({ type: 'info', message: resolvePreviewMessage(tool, asset) })
+}
+
+function getPreviewProcessingTool() {
+  return resolvePreviewToolByState()
 }
 
 function getProcessSuccessMessage(result, tool) {
@@ -374,7 +990,7 @@ function createNoopPromise() {
 }
 
 function ensurePreviewableTool(tool) {
-  return !!tool && isPreviewSaveTool(tool.id)
+  return !!tool && isPreviewableTool(tool.id)
 }
 
 function getToolProcessingCount(tool) {
@@ -394,16 +1010,16 @@ function getToolPreviewSummary(tool, asset) {
 }
 
 function previewGenericAsset(tool, asset) {
-  notify({ type: 'info', message: `预览占位：${getToolPreviewSummary(tool, asset)}` })
+  void previewAsset(asset.id)
 }
 
 function resolvePreviewAction(tool, asset) {
   if (!tool || !asset) return
   if (ensurePreviewableTool(tool)) {
-    previewAssetResult(asset)
+    previewGenericAsset(tool, asset)
     return
   }
-  previewGenericAsset(tool, asset)
+  notifyPreviewUnavailable(tool, asset)
 }
 
 function notifyMissingAsset() {
@@ -1871,6 +2487,7 @@ function maybeNotifyPreviewSaveCount() {
 function render(state) {
   const snapshot = captureUiSnapshot()
   app.innerHTML = renderAppShell(state) + renderNotifications(state.notifications)
+  injectResultToolbar()
   restoreUiSnapshot(snapshot)
 }
 
@@ -2023,6 +2640,11 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'clear-assets') {
+      setState({ assets: [], previewModal: null })
+      return
+    }
+
     if (action === 'move-asset') {
       moveAsset(target.dataset.assetId, target.dataset.direction)
       return
@@ -2043,6 +2665,36 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'pick-watermark-image') {
+      watermarkFileInput.click()
+      return
+    }
+
+    if (action === 'continue-processing') {
+      continueProcessing()
+      return
+    }
+
+    if (action === 'replace-current-originals') {
+      await replaceCurrentOriginals()
+      return
+    }
+
+    if (action === 'open-current-results') {
+      await openCurrentResultsDirectory()
+      return
+    }
+
+    if (action === 'replace-asset-original') {
+      await replaceAssetOriginal(target.dataset.assetId)
+      return
+    }
+
+    if (action === 'open-asset-result') {
+      await openSavedOutput(target.dataset.assetId)
+      return
+    }
+
     if (action === 'open-folder-input') {
       folderInput.click()
       return
@@ -2057,6 +2709,11 @@ function attachGlobalEvents() {
 
     if (action === 'drag-rotate') {
       beginRotateDrag(event, target)
+      return
+    }
+
+    if (action === 'manual-crop-drag' || action === 'manual-crop-resize') {
+      beginManualCropDrag(event, target)
       return
     }
 
@@ -2082,10 +2739,20 @@ function attachGlobalEvents() {
     }
 
     if (action === 'set-manual-crop-ratio') {
-      updateConfig('manual-crop', {
+      const state = getState()
+      const config = state.configs['manual-crop']
+      const asset = state.assets[config.currentIndex]
+      const nextPatch = {
         ratio: target.dataset.label,
         ratioValue: target.dataset.value,
-      })
+      }
+      if (asset) {
+        nextPatch.cropAreas = {
+          ...(config.cropAreas || {}),
+          [asset.id]: createDefaultManualCropArea(asset, target.dataset.value),
+        }
+      }
+      updateConfig('manual-crop', nextPatch)
       return
     }
 
@@ -2165,6 +2832,14 @@ function attachGlobalEvents() {
 
   document.addEventListener('change', async (event) => {
     const target = event.target
+    if (target === watermarkFileInput) {
+      const file = target.files?.[0]
+      const imagePath = await resolveWatermarkImagePath(file)
+      updateConfig('watermark', { imagePath })
+      target.value = ''
+      return
+    }
+
     if (target === fileInput || target === folderInput) {
       await handleImport([...target.files])
       target.value = ''
@@ -2194,16 +2869,23 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointermove', (event) => {
-    if (!DRAG_CONTEXT.rotateDial) return
-    handleRotateDrag(event)
+    if (DRAG_CONTEXT.rotateDial) {
+      handleRotateDrag(event)
+      return
+    }
+    if (DRAG_CONTEXT.manualCrop) {
+      handleManualCropDrag(event)
+    }
   })
 
   document.addEventListener('pointerup', () => {
     endRotateDrag()
+    endManualCropDrag()
   })
 
   document.addEventListener('pointercancel', () => {
     endRotateDrag()
+    endManualCropDrag()
   })
 
   document.addEventListener('dragover', (event) => {
@@ -2244,41 +2926,21 @@ async function previewAsset(assetId) {
   }
 
   const tool = TOOL_MAP[state.activeTool]
-  const isCurrentToolPreview = asset.stagedToolId === tool.id && ['previewed', 'staged', 'saved'].includes(asset.previewStatus) && asset.previewUrl
-  if (isCurrentToolPreview && openPreviewModal(asset)) {
+  if (!tool) return
+  if (openExistingPreview(tool.id, asset)) {
     return
   }
-
-  if (!isPreviewSaveTool(tool.id)) {
-    notify({ type: 'info', message: getPreviewMessage(asset) })
+  if (!shouldUsePreviewProcessing(tool.id)) {
+    notifyPreviewUnavailable(tool, asset)
     return
   }
-
   if (state.isProcessing) return
 
   setState({ isProcessing: true })
   try {
-    const result = await stageToolPreview(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath(), 'preview-only')
-    if (result?.processed?.length || result?.failed?.length) {
-      applyRunResult(result)
-    }
-
-    if (result?.ok || result?.partial) {
-      const nextAsset = getState().assets.find((item) => item.id === assetId)
-      const previewedAsset = nextAsset?.previewUrl ? nextAsset : {
-        ...asset,
-        ...(result.processed || []).find((item) => item.assetId === assetId),
-      }
-      if (openPreviewModal(previewedAsset)) {
-        return
-      }
-      notify({ type: 'error', message: '预览结果生成成功，但无法打开处理后的图片。' })
-      return
-    }
-
-    notify({ type: 'info', message: result?.message || '预览失败。' })
+    await previewWithRunner(tool, asset)
   } catch (error) {
-    notify({ type: 'error', message: error?.message || '预览失败。' })
+    notifyToolPreviewFailure(error, tool)
   } finally {
     setState({ isProcessing: false })
   }
@@ -2411,6 +3073,127 @@ function handleRotateDrag(event) {
 
 function endRotateDrag() {
   DRAG_CONTEXT.rotateDial = null
+}
+
+function beginManualCropDrag(event, target) {
+  const stage = target.closest('[data-role="manual-crop-stage"]')
+  const box = target.closest('[data-role="manual-crop-box"]') || target
+  if (!stage || !box) return
+  event.preventDefault()
+  const state = getState()
+  const config = state.configs['manual-crop']
+  const asset = state.assets[config.currentIndex]
+  if (!asset) return
+  const imageRect = stage.getBoundingClientRect()
+  const area = getManualCropArea(asset, config)
+  DRAG_CONTEXT.manualCrop = {
+    assetId: asset.id,
+    ratioValue: config.ratioValue || '16:9',
+    stageRect: imageRect,
+    area,
+    startX: event.clientX,
+    startY: event.clientY,
+    mode: target.dataset.action === 'manual-crop-resize' ? 'resize' : 'move',
+    handle: target.dataset.handle || '',
+  }
+}
+
+function handleManualCropDrag(event) {
+  const context = DRAG_CONTEXT.manualCrop
+  if (!context) return
+  const state = getState()
+  const config = state.configs['manual-crop']
+  const asset = state.assets[config.currentIndex]
+  if (!asset || asset.id !== context.assetId) return
+  const nextArea = context.mode === 'move'
+    ? moveManualCropArea(context, event, asset)
+    : resizeManualCropArea(context, event, asset)
+  const cropAreas = { ...(config.cropAreas || {}), [asset.id]: nextArea }
+  updateConfig('manual-crop', { cropAreas })
+}
+
+function endManualCropDrag() {
+  DRAG_CONTEXT.manualCrop = null
+}
+
+function getManualCropArea(asset, config) {
+  return (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+}
+
+function createDefaultManualCropArea(asset, ratioValue) {
+  const width = Math.max(1, asset.width || 1)
+  const height = Math.max(1, asset.height || 1)
+  const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
+  const targetRatio = ratioX / ratioY
+  let cropWidth = width
+  let cropHeight = Math.round(cropWidth / targetRatio)
+  if (cropHeight > height) {
+    cropHeight = height
+    cropWidth = Math.round(cropHeight * targetRatio)
+  }
+  return {
+    x: Math.max(0, Math.round((width - cropWidth) / 2)),
+    y: Math.max(0, Math.round((height - cropHeight) / 2)),
+    width: cropWidth,
+    height: cropHeight,
+  }
+}
+
+function moveManualCropArea(context, event, asset) {
+  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
+  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
+  const area = {
+    ...context.area,
+    x: Math.round(context.area.x + dx),
+    y: Math.round(context.area.y + dy),
+  }
+  return clampManualCropArea(area, asset)
+}
+
+function resizeManualCropArea(context, event, asset) {
+  const ratio = getManualCropRatio(context.ratioValue)
+  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
+  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
+  let { x, y, width, height } = context.area
+
+  if (context.handle.includes('r')) width += dx
+  if (context.handle.includes('l')) {
+    width -= dx
+    x += dx
+  }
+  if (context.handle.includes('b')) height += dy
+  if (context.handle.includes('t')) {
+    height -= dy
+    y += dy
+  }
+  if (context.handle === 'ml' || context.handle === 'mr') {
+    height = width / ratio
+  } else if (context.handle === 'tm' || context.handle === 'bm') {
+    width = height * ratio
+  } else {
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      height = width / ratio
+    } else {
+      width = height * ratio
+    }
+  }
+
+  return clampManualCropArea({ x, y, width: Math.round(width), height: Math.round(height) }, asset)
+}
+
+function clampManualCropArea(area, asset) {
+  const assetWidth = Math.max(1, asset.width || 1)
+  const assetHeight = Math.max(1, asset.height || 1)
+  const width = Math.min(assetWidth, Math.max(40, Math.round(area.width)))
+  const height = Math.min(assetHeight, Math.max(40, Math.round(area.height)))
+  const x = Math.max(0, Math.min(assetWidth - width, Math.round(area.x)))
+  const y = Math.max(0, Math.min(assetHeight - height, Math.round(area.y)))
+  return { x, y, width, height }
+}
+
+function getManualCropRatio(ratioValue) {
+  const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
+  return ratioX / ratioY
 }
 
 function normalizeSignedAngle(value) {

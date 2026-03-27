@@ -68,6 +68,23 @@ export async function saveAllStagedResults(toolId, stagedItems, destinationPath)
   return window.imgbatch.saveAllStagedResults(toolId, stagedItems, destinationPath)
 }
 
+export async function revealPath(targetPath) {
+  if (!hasBridge() || typeof window.imgbatch.revealPath !== 'function') return false
+  return window.imgbatch.revealPath(targetPath)
+}
+
+export async function replaceOriginals(items) {
+  if (!hasBridge() || typeof window.imgbatch.replaceOriginals !== 'function') {
+    return { ok: false, processed: [], failed: [], message: '替换原图功能尚未接入宿主执行管线' }
+  }
+  return window.imgbatch.replaceOriginals(items)
+}
+
+export async function resolveInputPaths(items = []) {
+  if (!hasBridge() || typeof window.imgbatch.resolveInputPaths !== 'function') return []
+  return window.imgbatch.resolveInputPaths(items)
+}
+
 export async function loadSettings() {
   if (!hasBridge() || typeof window.imgbatch.loadSettings !== 'function') {
     return { defaultSavePath: '' }

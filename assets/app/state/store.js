@@ -1,7 +1,7 @@
 import { DEFAULT_TOOL } from '../config/tools.js'
 
 const listeners = new Set()
-const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 
 const state = {
   activeTool: DEFAULT_TOOL,
@@ -19,7 +19,7 @@ const state = {
     compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
     format: { targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'sRGB' },
     resize: { width: '1920px', height: '1080px', widthUnit: 'px', heightUnit: 'px', lockAspectRatio: true },
-    watermark: { type: 'text', text: 'Precision Atelier', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false },
+    watermark: { type: 'text', text: 'Precision Atelier', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
     corners: { radius: 24, unit: 'px', background: '#ffffff', keepTransparency: false },
     padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100 },
     crop: { ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: 0, y: 0, width: 1920, height: 1080 },
@@ -28,7 +28,7 @@ const state = {
     'merge-pdf': { pageSize: 'A4', margin: 'narrow' },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff' },
     'merge-gif': { width: 1080, height: 1080, interval: 0.5, background: '#ffffff' },
-    'manual-crop': { ratio: '16:9 Cinema', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [] },
+    'manual-crop': { ratio: '16:9 Cinema', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, dragMode: '', dragHandle: '', draftArea: null },
   },
 }
 

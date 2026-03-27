@@ -25,22 +25,17 @@ export function renderCompressionPage(toolId, state) {
 
   return `
     <section class="panel panel--dense" data-role="drop-surface" data-scroll-role="panel">
-      <div class="panel-hero panel-hero--compact">
+      <div class="panel-hero panel-hero--compact panel-hero--minimal">
         <div>
-          <div class="section-eyebrow">Precision Atelier</div>
           <h2 class="hero-title">${tool.label}</h2>
-          <p class="hero-subtitle">${getHeroCopy(toolId)}</p>
         </div>
         <div class="panel-hero__actions">
           <button class="ghost-button" data-action="save-preset" data-tool-id="${toolId}">保存预设</button>
         </div>
       </div>
 
-      ${renderDropZone()}
-
-      <div class="settings-shell">
+      <div class="settings-shell settings-shell--compact">
         ${renderPrimaryCard(toolId, config)}
-        ${renderInsightCard(toolId, config, state.assets.length)}
       </div>
     </section>
   `
@@ -150,19 +145,26 @@ function renderResizeConfig(config) {
 }
 
 function renderWatermarkConfig(config) {
-  return renderSettingsSection('水印模式', '添加水印', '文本 / 图片水印共用一套参数，后续走预览后保存流程。', `
+  return renderSettingsSection('水印模式', '添加水印', '', `
     ${renderSegmented('watermark', 'type', config.type, [
       ['text', '文本'],
       ['image', '图片'],
     ])}
     ${config.type === 'text'
       ? renderInputField({ label: '水印文本', toolId: 'watermark', key: 'text', value: config.text })
-      : renderInputField({ label: '图片水印来源', toolId: 'watermark', key: 'imagePath', value: config.imagePath || '', placeholder: '选择图片水印文件' })}
+      : `
+        <div class="toggle-card toggle-card--compact">
+          <div>
+            <div class="toggle-card__label">图片水印</div>
+            <div class="muted watermark-file-label">${escapeAttribute(config.imagePath || '未选择文件')}</div>
+          </div>
+          <button class="secondary-button" data-action="pick-watermark-image">选择文件</button>
+        </div>`}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '字体大小', toolId: 'watermark', key: 'fontSize', type: 'number', value: config.fontSize, min: 8, max: 240 })}
-      ${renderInputField({ label: '颜色', toolId: 'watermark', key: 'color', value: config.color })}
+      ${renderInputField({ label: '字体大小', toolId: 'watermark', key: 'fontSize', type: 'number', value: config.fontSize, min: 8, max: 240, disabled: config.type !== 'text' })}
+      ${renderInputField({ label: '颜色', toolId: 'watermark', key: 'color', value: config.color, disabled: config.type !== 'text' })}
       ${renderInputField({ label: '旋转角度', toolId: 'watermark', key: 'rotation', type: 'number', value: config.rotation, min: -180, max: 180 })}
-      ${renderInputField({ label: '边距', toolId: 'watermark', key: 'margin', type: 'number', value: config.margin, min: 0 })}
+      ${renderInputField({ label: '边距', toolId: 'watermark', key: 'margin', type: 'number', value: config.margin, min: 0, disabled: config.tiled })}
     `)}
     ${renderRangeField({
       label: '透明度',
@@ -172,19 +174,29 @@ function renderWatermarkConfig(config) {
       max: 100,
       value: config.opacity,
       suffix: '%',
-      hint: '拖动时即时显示当前透明度。',
     })}
-    <div>
-      <div class="card-label" style="margin-bottom:10px;">锚点位置</div>
-      <div class="position-grid">
-        ${WATERMARK_POSITIONS.map((position) => `
-          <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${position}">
-            <span></span>
-          </button>
-        `).join('')}
+    ${config.tiled ? renderRangeField({
+      label: '平铺密度',
+      toolId: 'watermark',
+      key: 'density',
+      min: 20,
+      max: 200,
+      value: config.density || 100,
+      suffix: '%',
+    }) : ''}
+    ${config.tiled ? '' : `
+      <div>
+        <div class="card-label" style="margin-bottom:10px;">锚点位置</div>
+        <div class="position-grid">
+          ${WATERMARK_POSITIONS.map((position) => `
+            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${position}">
+              <span></span>
+            </button>
+          `).join('')}
+        </div>
       </div>
-    </div>
-    ${renderToggleRow('平铺模式', '开启后会重复铺满画面', 'watermark', 'tiled', config.tiled)}
+    `}
+    ${renderToggleRow('平铺模式', '', 'watermark', 'tiled', config.tiled)}
   `)
 }
 
@@ -250,14 +262,12 @@ function renderRotateConfig(config) {
   const knobX = 120 + Math.cos(dialRadians) * 92
   const knobY = 120 + Math.sin(dialRadians) * 92
 
-  return renderSettingsSection('旋转控制', '旋转', '圆盘支持鼠标拖拽，仍保留精确角度输入与预设按钮。', `
+  return renderSettingsSection('旋转控制', '旋转', '', `
     <div class="rotate-card">
       <div class="rotate-dial" data-role="rotate-dial" data-tool-id="rotate">
         <div class="rotate-dial__ring"></div>
         <div class="rotate-dial__guide"></div>
-        <div class="rotate-dial__disc" style="transform:rotate(${signedAngle}deg);">
-          <span class="material-symbols-outlined">rotate_right</span>
-        </div>
+        <div class="rotate-dial__disc"></div>
         <div class="rotate-dial__value">${Math.abs(config.angle)}°</div>
         <button class="rotate-dial__knob" data-action="drag-rotate" data-tool-id="rotate" style="left:${knobX}px;top:${knobY}px;" aria-label="拖动旋转角度"></button>
       </div>
@@ -342,127 +352,16 @@ function renderMergeGifConfig(config) {
 }
 
 function renderInsightCard(toolId, config, assetCount) {
-  if (toolId === 'compression') {
-    return renderSummarySection('预估结果', '压缩摘要', `
-      ${statCard('当前模式', config.mode === 'quality' ? '按质量' : '按体积')}
-      ${statCard('质量', `${config.quality}%`)}
-      ${statCard('目标大小', `${config.targetSizeKb} KB`)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'format') {
-    return renderSummarySection('输出摘要', '转换参数', `
-      ${statCard('目标格式', config.targetFormat)}
-      ${statCard('质量', `${config.quality}`)}
-      ${statCard('透明通道', config.keepTransparency ? '保留' : '关闭')}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'resize') {
-    return renderSummarySection('目标摘要', '尺寸输出', `
-      ${statCard('宽度', normalizeResizeValue(config.width, config.widthUnit))}
-      ${statCard('高度', normalizeResizeValue(config.height, config.heightUnit))}
-      ${statCard('保持比例', config.lockAspectRatio ? '是' : '否')}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'watermark') {
-    return renderSummarySection('应用摘要', '水印参数', `
-      ${statCard('模式', config.type === 'text' ? '文本' : '图片')}
-      ${statCard('透明度', `${config.opacity}%`)}
-      ${statCard('角度', `${config.rotation}°`)}
-      ${statCard('位置', config.position)}
-    `)
-  }
-
-  if (toolId === 'corners') {
-    return renderSummarySection('圆角摘要', '圆角输出', `
-      ${statCard('半径', `${config.radius}${config.unit}`)}
-      ${statCard('透明背景', config.keepTransparency ? '保留' : '填充')}
-      ${statCard('背景色', config.background)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'padding') {
-    return renderSummarySection('留白摘要', '补边输出', `
-      ${statCard('总边距', `${config.top + config.right + config.bottom + config.left}px`)}
-      ${statCard('背景色', config.color)}
-      ${statCard('透明度', `${config.opacity}%`)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'crop') {
-    const ratioLabel = config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio
-    return renderSummarySection('裁剪摘要', '裁剪输出', `
-      ${statCard('裁剪比例', ratioLabel)}
-      ${statCard('起点', `${config.x}, ${config.y}`)}
-      ${statCard('目标尺寸', `${config.width} × ${config.height}`)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'rotate') {
-    return renderSummarySection('旋转摘要', '旋转输出', `
-      ${statCard('角度', `${config.angle}°`)}
-      ${statCard('方向', config.direction === 'clockwise' ? '顺时针' : '逆时针')}
-      ${statCard('自动裁切', config.autoCrop ? '开启' : '关闭')}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'flip') {
-    return renderSummarySection('翻转摘要', '镜像输出', `
-      ${statCard('左右翻转', config.horizontal ? '开启' : '关闭')}
-      ${statCard('上下翻转', config.vertical ? '开启' : '关闭')}
-      ${statCard('输出格式', config.outputFormat)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-    `)
-  }
-
-  if (toolId === 'merge-pdf') {
-    return renderSummarySection('PDF 摘要', '文档输出', `
-      ${statCard('页面大小', config.pageSize)}
-      ${statCard('边距', config.margin)}
-      ${statCard('队列图片', `${assetCount} 张`)}
-      ${statCard('排序模式', '开启')}
-    `)
-  }
-
-  if (toolId === 'merge-image') {
-    return renderSummarySection('图片摘要', '拼接输出', `
-      ${statCard('方向', config.direction === 'vertical' ? '纵向' : '横向')}
-      ${statCard('页面宽度', `${config.pageWidth}px`)}
-      ${statCard('间距', `${config.spacing}px`)}
-      ${statCard('背景色', config.background)}
-    `)
-  }
-
-  if (toolId === 'merge-gif') {
-    return renderSummarySection('GIF 摘要', '动图输出', `
-      ${statCard('宽度', `${config.width}px`)}
-      ${statCard('高度', `${config.height}px`)}
-      ${statCard('间隔', `${config.interval}s`)}
-      ${statCard('背景色', config.background)}
-    `)
-  }
-
   return ''
 }
 
 function renderSettingsSection(eyebrow, title, subtitle, content) {
   return `
-    <section class="settings-section">
-      <div class="settings-section__header">
-        <div class="section-eyebrow">${eyebrow}</div>
-        <h3 class="panel-title">${title}</h3>
-        <p class="panel-subtitle">${subtitle}</p>
+    <section class="settings-section settings-section--compact">
+      <div class="settings-section__header settings-section__header--compact">
+        <h3 class="panel-title panel-title--compact">${title}</h3>
       </div>
-      <div class="settings-list">
+      <div class="settings-list settings-list--compact">
         ${content}
       </div>
     </section>
@@ -498,6 +397,7 @@ function renderSegmented(toolId, key, activeValue, options) {
 }
 
 function renderInputField({ label, toolId, key, type = 'text', value = '', hint = '', placeholder = '', min, max, step, disabled = false }) {
+  const resolvedHint = ''
   return `
     <label class="setting-row setting-row--stack ${disabled ? 'is-disabled' : ''}">
       <span class="setting-row__header">
@@ -518,12 +418,13 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', hint 
           ${disabled ? 'disabled' : ''}
         />
       </span>
-      ${hint ? `<span class="setting-row__hint">${hint}</span>` : ''}
+      ${resolvedHint ? `<span class="setting-row__hint">${resolvedHint}</span>` : ''}
     </label>
   `
 }
 
 function renderSelectField({ label, toolId, key, value, options, hint = '' }) {
+  const resolvedHint = ''
   return `
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
@@ -538,12 +439,13 @@ function renderSelectField({ label, toolId, key, value, options, hint = '' }) {
         </select>
         <span class="material-symbols-outlined select-shell__icon">expand_more</span>
       </span>
-      ${hint ? `<span class="setting-row__hint">${hint}</span>` : ''}
+      ${resolvedHint ? `<span class="setting-row__hint">${resolvedHint}</span>` : ''}
     </label>
   `
 }
 
 function renderRangeField({ label, toolId, key, min, max, value, suffix = '', hint = '' }) {
+  const resolvedHint = ''
   return `
     <label class="setting-row setting-row--range">
       <span class="setting-row__header">
@@ -564,17 +466,18 @@ function renderRangeField({ label, toolId, key, min, max, value, suffix = '', hi
           style="--range-progress:${getRangeProgress(value, min, max)}%;"
         />
       </span>
-      ${hint ? `<span class="setting-row__hint">${hint}</span>` : ''}
+      ${resolvedHint ? `<span class="setting-row__hint">${resolvedHint}</span>` : ''}
     </label>
   `
 }
 
 function renderToggleRow(label, hint, toolId, key, checked) {
+  const resolvedHint = ''
   return `
-    <div class="toggle-card">
+    <div class="toggle-card toggle-card--compact">
       <div>
         <div class="toggle-card__label">${label}</div>
-        <div class="muted" style="font-size:13px;">${hint}</div>
+        ${resolvedHint ? `<div class="muted" style="font-size:12px;">${resolvedHint}</div>` : ''}
       </div>
       <button class="switch ${checked ? 'is-on' : ''}" data-action="toggle-config" data-tool-id="${toolId}" data-key="${key}"></button>
     </div>
@@ -582,11 +485,12 @@ function renderToggleRow(label, hint, toolId, key, checked) {
 }
 
 function renderInfoRow(label, hint, badge) {
+  const resolvedHint = ''
   return `
-    <div class="toggle-card">
+    <div class="toggle-card toggle-card--compact">
       <div>
         <div class="toggle-card__label">${label}</div>
-        <div class="muted" style="font-size:13px;">${hint}</div>
+        ${resolvedHint ? `<div class="muted" style="font-size:12px;">${resolvedHint}</div>` : ''}
       </div>
       <div class="badge">${badge}</div>
     </div>
@@ -618,22 +522,8 @@ function estimateCompression(config) {
   return `${estimated} KB`
 }
 
-function getHeroCopy(toolId) {
-  const copy = {
-    compression: '左侧改成更紧凑的设置列表，压缩质量拖动时直接显示百分比。',
-    format: '格式转换页保留完整格式枚举，并统一队列展示目标输出。',
-    resize: '尺寸页支持常用尺寸与比例锁定，首批会接入预览后保存。',
-    watermark: '文本 / 图片水印共享一套面板，后续处理结果先预览再保存。',
-    corners: '圆角参数已经与留白页面解耦，并补齐 px / % 与背景填充策略。',
-    padding: '留白页支持上下左右边距、背景色、透明度。',
-    crop: '裁剪页保留比例、自定义比例和裁剪框坐标。',
-    rotate: '旋转页接入可拖拽圆盘、角度输入和方向切换。',
-    flip: '翻转页保留水平 / 垂直镜像和输出格式设置。',
-    'merge-pdf': 'PDF 页面保持排序型右侧队列。',
-    'merge-image': 'Merge Image 保持直接输出。',
-    'merge-gif': 'GIF 页继续保持排序型处理。',
-  }
-  return copy[toolId] || ''
+function getHeroCopy() {
+  return ''
 }
 
 function getRangeProgress(value, min, max) {

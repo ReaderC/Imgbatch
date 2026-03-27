@@ -1,4 +1,4 @@
-const { nativeImage } = require('electron')
+const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -12,7 +12,7 @@ const LOSSY_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
-const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -362,6 +362,10 @@ function buildSavedResult(payload, processed, failed) {
   return createResultEnvelope({ ...payload, mode: 'save' }, processed, failed)
 }
 
+function buildSavedResultWithReveal(payload, processed, failed) {
+  return revealResultDirectoryIfNeeded(buildSavedResult(payload, processed, failed))
+}
+
 function buildSettingsPayload(settings = {}) {
   return {
     defaultSavePath: sanitizeText(settings.defaultSavePath),
@@ -451,6 +455,7 @@ function normalizeRunConfig(toolId, config = {}) {
       rotation: toNumber(config.rotation, 0),
       margin: Math.max(0, toInteger(config.margin, 24)),
       tiled: Boolean(config.tiled),
+      density: clampNumber(config.density, 20, 200, 100),
       imagePath: sanitizeText(config.imagePath),
     }
   }
@@ -549,6 +554,7 @@ function normalizeRunConfig(toolId, config = {}) {
       currentIndex: Math.max(0, toInteger(config.currentIndex, 0)),
       completedIds: uniqueStrings(config.completedIds),
       skippedIds: uniqueStrings(config.skippedIds),
+      cropAreas: config.cropAreas && typeof config.cropAreas === 'object' ? config.cropAreas : {},
     }
   }
 
@@ -855,29 +861,53 @@ function escapeSvgText(value) {
     .replaceAll("'", '&#39;')
 }
 
+function getWatermarkRenderScale(asset) {
+  const width = Math.max(asset.width || 0, 1)
+  const height = Math.max(asset.height || 0, 1)
+  const baseDimension = Math.min(width, height)
+  return Math.max(0.6, Math.min(2.2, baseDimension / 1080))
+}
+
 function buildTextWatermarkSvg(asset, config) {
   const width = Math.max(asset.width || 1920, config.fontSize * 4)
   const height = Math.max(asset.height || 1080, config.fontSize * 3)
   const color = normalizeHexColor(config.color, config.opacity / 100)
   const text = escapeSvgText(config.text)
-  const x = config.tiled ? Math.round(config.fontSize * 0.6) : Math.round(width / 2)
-  const y = config.tiled ? Math.round(config.fontSize * 1.4) : Math.round(height / 2)
-  const textAnchor = config.tiled ? 'start' : 'middle'
+  const renderScale = getWatermarkRenderScale(asset)
+  const renderFontSize = Math.max(12, Math.round(config.fontSize * renderScale))
 
-  const content = config.tiled
-    ? Array.from({ length: Math.max(2, Math.ceil(height / Math.max(config.fontSize * 3, 1))) }).map((_, rowIndex) => {
-      const yOffset = y + rowIndex * Math.max(config.fontSize * 2.6, 32)
-      const xOffset = x + (rowIndex % 2 ? Math.round(config.fontSize * 1.5) : 0)
-      return `<text x="${xOffset}" y="${yOffset}" font-size="${config.fontSize}" fill="${color}" transform="rotate(${config.rotation} ${xOffset} ${yOffset})">${text}</text>`
+  if (config.tiled) {
+    const densityScale = 100 / Math.max(20, config.density || 100)
+    const stepX = Math.max(renderFontSize * Math.max(String(config.text || '').length, 4) * 0.9 * densityScale, renderFontSize * 2.4)
+    const stepY = Math.max(renderFontSize * 2.8 * densityScale, renderFontSize * 1.6)
+    const rows = Math.max(2, Math.ceil(height / stepY) + 1)
+    const cols = Math.max(2, Math.ceil(width / stepX) + 1)
+    const content = Array.from({ length: rows }).map((_, rowIndex) => {
+      const yOffset = Math.round(renderFontSize * 1.4 + rowIndex * stepY)
+      return Array.from({ length: cols }).map((__, colIndex) => {
+        const xOffset = Math.round(renderFontSize * 0.6 + colIndex * stepX + (rowIndex % 2 ? stepX / 2 : 0))
+        return `<text x="${xOffset}" y="${yOffset}" font-size="${renderFontSize}" fill="${color}" transform="rotate(${config.rotation} ${xOffset} ${yOffset})">${text}</text>`
+      }).join('')
     }).join('')
-    : `<text x="${x}" y="${y}" text-anchor="${textAnchor}" dominant-baseline="middle" font-size="${config.fontSize}" fill="${color}" transform="rotate(${config.rotation} ${x} ${y})">${text}</text>`
 
+    return Buffer.from(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        <style>
+          text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
+        </style>
+        ${content}
+      </svg>
+    `)
+  }
+
+  const x = Math.round(width / 2)
+  const y = Math.round(height / 2)
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <style>
         text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
       </style>
-      ${content}
+      <text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="${renderFontSize}" fill="${color}" transform="rotate(${config.rotation} ${x} ${y})">${text}</text>
     </svg>
   `)
 }
@@ -888,8 +918,9 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
     throw new Error('图片水印文件不存在')
   }
 
+  const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
-  const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.22))
+  const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
   return sharpLib(imagePath)
     .rotate(config.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
@@ -911,13 +942,116 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
     }
   }
 
-  const { left, top } = getWatermarkOffsets(config.position, config.margin)
+  const overlayMeta = await sharpLib(input).metadata()
+  const overlayWidth = Math.max(1, overlayMeta.width || 1)
+  const overlayHeight = Math.max(1, overlayMeta.height || 1)
+  const assetWidth = Math.max(1, asset.width || 1)
+  const assetHeight = Math.max(1, asset.height || 1)
+  const margin = Math.max(0, config.margin || 0)
+  const horizontal = config.position.includes('left')
+    ? margin
+    : config.position.includes('right')
+      ? Math.max(0, assetWidth - overlayWidth - margin)
+      : Math.round((assetWidth - overlayWidth) / 2)
+  const vertical = config.position.startsWith('top')
+    ? margin
+    : config.position.startsWith('bottom')
+      ? Math.max(0, assetHeight - overlayHeight - margin)
+      : Math.round((assetHeight - overlayHeight) / 2)
+
   return {
     input,
-    gravity: getWatermarkGravity(config.position),
-    left,
-    top,
+    left: Math.max(0, horizontal),
+    top: Math.max(0, vertical),
   }
+}
+
+function resolvePathForReveal(targetPath) {
+  if (!targetPath) return ''
+  try {
+    const stat = fs.existsSync(targetPath) ? fs.statSync(targetPath) : null
+    if (stat?.isDirectory()) return targetPath
+    return path.dirname(targetPath)
+  } catch {
+    return ''
+  }
+}
+
+async function revealPath(targetPath) {
+  const resolved = resolvePathForReveal(targetPath)
+  if (!resolved) return false
+  try {
+    await shell.openPath(resolved)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function replaceOriginalWithSaved(item = {}) {
+  const sourcePath = sanitizeText(item.savedOutputPath || item.outputPath)
+  const targetPath = sanitizeText(item.sourcePath)
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    throw new Error('处理结果不存在，无法替换原图')
+  }
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    throw new Error('原图不存在，无法替换')
+  }
+  fs.copyFileSync(sourcePath, targetPath)
+  return {
+    assetId: item.assetId,
+    name: item.name,
+    outputPath: targetPath,
+    savedOutputPath: sourcePath,
+  }
+}
+
+async function replaceOriginals(items = []) {
+  const processed = []
+  const failed = []
+  for (const item of items) {
+    try {
+      processed.push(replaceOriginalWithSaved(item))
+    } catch (error) {
+      failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
+    }
+  }
+  return {
+    ok: processed.length > 0 && failed.length === 0,
+    partial: processed.length > 0 && failed.length > 0,
+    processed,
+    failed,
+    message: processed.length > 0 && failed.length === 0
+      ? `已替换 ${processed.length} 张原图。`
+      : processed.length > 0
+        ? `替换原图部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
+        : failed[0]?.error || '替换原图失败。',
+  }
+}
+
+function resolveInputPaths(items = []) {
+  return toolsApi.normalizeInput(items)
+}
+
+function revealResultDirectoryIfNeeded(result) {
+  if (!['save', 'direct'].includes(result?.mode)) return result
+  const targetPath = result.destinationPath || result.baseDestinationPath || ''
+  if (targetPath && (result.ok || result.partial)) {
+    void revealPath(targetPath)
+  }
+  return result
+}
+
+function buildSavedResultWithReveal(payload, processed, failed) {
+  return revealResultDirectoryIfNeeded(buildSavedResult(payload, processed, failed))
+}
+
+function buildEnvelopeWithReveal(payload, processed, failed) {
+  return revealResultDirectoryIfNeeded(createResultEnvelope(payload, processed, failed))
+}
+
+function buildFallbackFailureWithReveal(payload, message) {
+  return revealResultDirectoryIfNeeded(createFallbackFailure(payload, message))
 }
 
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
@@ -1156,9 +1290,6 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
-  encoder.writeHeader()
-  encoder.setRepeat(0)
-  encoder.setDelay(Math.round(payload.config.interval * 1000))
 
   for (const asset of payload.assets) {
     const { data } = await sharpLib(asset.sourcePath)
@@ -1170,7 +1301,10 @@ async function writeMergeGifAsset(sharpLib, payload) {
     const rgba = new Uint8Array(data)
     const palette = quantize(rgba, 256)
     const index = applyPalette(rgba, palette)
-    encoder.writeFrame(index, payload.config.width, payload.config.height, { palette })
+    encoder.writeFrame(index, payload.config.width, payload.config.height, {
+      palette,
+      delay: Math.max(1, Math.round(payload.config.interval * 100)),
+    })
   }
 
   encoder.finish()
@@ -1200,9 +1334,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
       if (payload.toolId === 'padding') result = await writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
       if (payload.toolId === 'crop') result = await writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
       if (payload.toolId === 'manual-crop') {
+        const manualArea = payload.config.cropAreas?.[asset.id]
         const manualConfig = {
           ratio: payload.config.ratioValue || payload.config.ratio,
-          area: { x: 0, y: 0, width: asset.width, height: asset.height },
+          area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
         }
         result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
       }
@@ -1261,11 +1396,11 @@ function resolveExecutionMode(toolId) {
 
 async function executeSaveFlow(payload) {
   if (!payload.stagedItems?.length) {
-    return createFallbackFailure(payload, '没有可保存的预览结果。')
+    return buildFallbackFailureWithReveal(payload, '没有可保存的预览结果。')
   }
 
   if (!payload.destinationPath) {
-    return createFallbackFailure(payload, '无法解析保存目录。')
+    return buildFallbackFailureWithReveal(payload, '无法解析保存目录。')
   }
 
   ensureDirectory(payload.destinationPath)
@@ -1289,7 +1424,7 @@ async function executeSaveFlow(payload) {
     }
   }
 
-  return buildSavedResult(payload, processed, failed)
+  return buildSavedResultWithReveal(payload, processed, failed)
 }
 
 async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {

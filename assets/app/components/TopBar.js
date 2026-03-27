@@ -1,6 +1,6 @@
 import { TOOL_MAP } from '../config/tools.js'
 
-const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 
 export function renderTopBar(state) {
   const tool = TOOL_MAP[state.activeTool]
@@ -22,7 +22,6 @@ export function renderTopBar(state) {
           <span class="badge">${state.assets.length} images</span>
           <span class="badge" title="${savePathLabel}">${savePathLabel}</span>
           ${canSaveAll ? `<button class="secondary-button" data-action="save-all-results" ${state.isProcessing ? 'disabled' : ''}>全部保存</button>` : ''}
-          <button class="icon-button" data-action="open-settings" title="设置"><span class="material-symbols-outlined">settings</span></button>
           <button class="icon-button" title="帮助"><span class="material-symbols-outlined">help</span></button>
           <button class="primary-button" data-action="process-current" ${state.isProcessing ? 'disabled' : ''}>${state.isProcessing ? '处理中...' : '开始处理'}</button>
         </div>

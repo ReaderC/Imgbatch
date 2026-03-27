@@ -1,6 +1,6 @@
 import { TOOL_MAP } from '../config/tools.js'
 
-const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize'])
+const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 
 export function renderImageQueue(state) {
   const tool = TOOL_MAP[state.activeTool]
@@ -9,26 +9,41 @@ export function renderImageQueue(state) {
     ? state.assets.filter((item) => [item.name, item.ext].join(' ').toLowerCase().includes(query))
     : state.assets
 
-  if (!assets.length) {
-    return `
-      <section class="queue" data-role="drop-surface" data-scroll-role="queue">
-        <div class="empty-state">
-          <span class="badge">Queue Empty</span>
-          <h3 class="queue-title">拖入图片开始批处理</h3>
-          <p class="queue-subtitle">支持把图片、文件夹直接拖到右侧队列。预览型页面会先生成结果，再手动保存；合并型页面保留直接输出。</p>
-        </div>
-      </section>
-    `
-  }
-
   return `
     <section class="queue" data-role="drop-surface" data-scroll-role="queue">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
-        <div style="font-size:13px;color:var(--on-surface-variant);">${tool.mode === 'sort' ? '图片顺序会直接影响最终导出结果。' : PREVIEW_SAVE_TOOLS.has(tool.id) ? '先生成预览结果，再决定单张保存或全部保存。' : '图片列表支持拖入、预览与移除。'}</div>
-        <span class="badge">${assets.length} selected</span>
-      </div>
-      <div class="queue-list">
-        ${assets.map((asset, index) => renderQueueItem(asset, tool, state, index, assets.length)).join('')}
+      ${assets.length ? `
+        <div class="queue-header queue-header--compact">
+          <div class="queue-header__hint">${tool.mode === 'sort' ? '图片顺序会直接影响最终导出结果。' : PREVIEW_SAVE_TOOLS.has(tool.id) ? '先生成预览结果，再决定单张保存或全部保存。' : '图片列表支持预览与移除。'}</div>
+          <span class="badge">${assets.length} selected</span>
+        </div>
+        <div class="queue-list">
+          ${assets.map((asset, index) => renderQueueItem(asset, tool, state, index, assets.length)).join('')}
+        </div>
+      ` : `
+        <div class="empty-state empty-state--queue">
+          <span class="badge">Queue Empty</span>
+          <h3 class="queue-title">添加图片开始处理</h3>
+          <div class="queue-empty-actions">
+            <button class="primary-button" data-action="open-folder-input">选择文件夹</button>
+            <button class="secondary-button" data-action="open-file-input">选择图片</button>
+          </div>
+        </div>
+      `}
+      <div class="queue-footer">
+        <div class="queue-toolbar">
+          <button class="icon-button queue-toolbar__button" data-action="open-folder-input" title="选择文件夹，读取该目录（包含子目录）下所有图片加入">
+            <span class="material-symbols-outlined">folder_open</span>
+          </button>
+          <button class="icon-button queue-toolbar__button" data-action="open-file-input" title="选择（多选）图片加入">
+            <span class="material-symbols-outlined">add_photo_alternate</span>
+          </button>
+          <button class="icon-button queue-toolbar__button" data-action="clear-assets" title="清空" ${state.assets.length ? '' : 'disabled'}>
+            <span class="material-symbols-outlined">delete_sweep</span>
+          </button>
+          <button class="icon-button queue-toolbar__button" data-action="open-settings" title="设置">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+        </div>
       </div>
     </section>
   `
@@ -87,7 +102,13 @@ function renderPrimaryAction(asset, tool) {
   }
 
   if (previewStatus === 'saved') {
-    return `<button class="queue-item__action" data-action="preview-asset" data-asset-id="${asset.id}">查看结果</button>`
+    return `
+      <div class="queue-item__action-stack">
+        <button class="queue-item__action" data-action="preview-asset" data-asset-id="${asset.id}">查看结果</button>
+        <button class="queue-item__action secondary" data-action="open-asset-result" data-asset-id="${asset.id}">打开目录</button>
+        <button class="queue-item__action secondary" data-action="replace-asset-original" data-asset-id="${asset.id}">替换原图</button>
+      </div>
+    `
   }
 
   return `<button class="queue-item__action" data-action="preview-asset" data-asset-id="${asset.id}">${previewStatus === 'stale' ? '重新预览' : '预览效果'}</button>`
