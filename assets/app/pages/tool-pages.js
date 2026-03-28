@@ -1,12 +1,18 @@
-import { TOOL_MAP } from '../config/tools.js'
+﻿import { TOOL_MAP } from '../config/tools.js'
 
-const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF']
+const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO']
+const COLOR_PROFILE_OPTIONS = [
+  ['srgb', 'sRGB'],
+  ['p3', 'Display P3'],
+  ['cmyk', 'CMYK'],
+]
 const PDF_MARGIN_OPTIONS = [
   ['none', '无边距'],
   ['narrow', '窄'],
   ['normal', '普通'],
   ['wide', '宽'],
 ]
+const PDF_PAGE_SIZE_OPTIONS = ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Original']
 const RESIZE_PRESETS = [
   { label: '1080×1080', width: '1080px', height: '1080px' },
   { label: '1080×1350', width: '1080px', height: '1350px' },
@@ -137,8 +143,9 @@ function renderFormatConfig(config) {
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
       ${renderInputField({ label: '质量', toolId: 'format', key: 'quality', type: 'number', value: config.quality, min: 1, max: 100 })}
-      ${renderInfoRow('颜色配置', '当前仅支持 sRGB', 'sRGB')}
+      ${renderSelectField({ label: '颜色配置', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
+    ${renderToggleRow('保留透明通道', '', 'format', 'keepTransparency', config.keepTransparency)}
   `)
 }
 
@@ -264,12 +271,14 @@ function renderRotateConfig(config) {
       ${renderInputField({ label: '精确角度', toolId: 'rotate', key: 'angle', type: 'number', value: signedAngle, min: -360, max: 360 })}
     `)}
     <div>
-      <div class="card-label" style="margin-bottom:6px;">常用方向</div>
+      <div class="card-label" style="margin-bottom:6px;">常用角度</div>
       <div class="preset-row">
         ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
+    ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
+    ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
   `)
 }
 
@@ -277,6 +286,8 @@ function renderFlipConfig(config) {
   return renderSettingsSection(`
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
+    ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
+    ${renderToggleRow('自动裁掉透明边', '', 'flip', 'autoCropTransparent', config.autoCropTransparent)}
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: [['Keep Original', '保持原格式'], ['PNG', 'PNG'], ['JPEG', 'JPEG'], ['WebP', 'WebP']] })}
   `)
 }
@@ -284,10 +295,11 @@ function renderFlipConfig(config) {
 function renderMergePdfConfig(config) {
   return renderSettingsSection(`
     ${renderFieldGrid(`
-      ${renderSelectField({ label: '页面尺寸', toolId: 'merge-pdf', key: 'pageSize', value: config.pageSize, options: ['A4', 'A3', 'Letter', 'Legal'] })}
+      ${renderSelectField({ label: '页面尺寸', toolId: 'merge-pdf', key: 'pageSize', value: config.pageSize, options: PDF_PAGE_SIZE_OPTIONS })}
       ${renderSelectField({ label: '页边距', toolId: 'merge-pdf', key: 'margin', value: config.margin, options: PDF_MARGIN_OPTIONS })}
       ${renderColorField({ label: '背景色', toolId: 'merge-pdf', key: 'background', value: config.background || '#FFFFFF' })}
     `)}
+    ${renderToggleRow('自动分页', '', 'merge-pdf', 'autoPaginate', config.autoPaginate)}
   `)
 }
 
@@ -301,6 +313,7 @@ function renderMergeImageConfig(config) {
       ${renderInputField({ label: '页面宽度', toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1 })}
       ${renderInputField({ label: '图片间距', toolId: 'merge-image', key: 'spacing', type: 'number', value: config.spacing, min: 0 })}
     `)}
+    ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
   `)
 }
@@ -312,6 +325,7 @@ function renderMergeGifConfig(config) {
       ${renderInputField({ label: '高度', toolId: 'merge-gif', key: 'height', type: 'number', value: config.height, min: 1 })}
       ${renderInputField({ label: '间隔秒数', toolId: 'merge-gif', key: 'interval', type: 'number', value: config.interval, min: 0.1, step: 0.1 })}
     `)}
+    ${renderToggleRow('循环播放', '', 'merge-gif', 'loop', config.loop)}
     ${renderColorField({ label: '背景色', toolId: 'merge-gif', key: 'background', value: config.background || '#FFFFFF' })}
   `)
 }

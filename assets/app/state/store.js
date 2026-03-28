@@ -13,22 +13,25 @@ const state = {
     defaultSavePath: '',
   },
   previewModal: null,
+  resultView: null,
+  colorPicker: null,
+  sidebarCollapsed: false,
   assets: [],
   notifications: [],
   configs: {
     compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
-    format: { targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'sRGB' },
-    resize: { width: '1920px', height: '1080px', widthUnit: 'px', heightUnit: 'px', lockAspectRatio: true },
-    watermark: { type: 'text', text: 'Precision Atelier', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
-    corners: { radius: 24, unit: 'px', background: '#ffffff', keepTransparency: false },
+    format: { targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
+    resize: { width: '1920px', height: '1080px', lockAspectRatio: true },
+    watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
+    corners: { radius: '24px', background: '#ffffff', keepTransparency: false },
     padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100 },
     crop: { ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: 0, y: 0, width: 1920, height: 1080 },
-    rotate: { angle: 45, direction: 'clockwise', autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
+    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
     flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original' },
-    'merge-pdf': { pageSize: 'A4', margin: 'narrow' },
-    'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff' },
-    'merge-gif': { width: 1080, height: 1080, interval: 0.5, background: '#ffffff' },
-    'manual-crop': { ratio: '16:9 Cinema', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, dragMode: '', dragHandle: '', draftArea: null },
+    'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
+    'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start' },
+    'merge-gif': { width: 1080, height: 1080, interval: 0.5, background: '#ffffff', loop: true },
+    'manual-crop': { ratio: '16:9 电影', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, dragMode: '', dragHandle: '', draftArea: null, hudCollapsed: true },
   },
 }
 
@@ -53,6 +56,16 @@ export function updateSettings(patch) {
 
 export function setPreviewModal(previewModal) {
   state.previewModal = previewModal
+  emit()
+}
+
+export function setResultView(resultView) {
+  state.resultView = resultView
+  emit()
+}
+
+export function setColorPicker(colorPicker) {
+  state.colorPicker = colorPicker
   emit()
 }
 
@@ -129,6 +142,14 @@ export function applyRunResult(result) {
 
     return asset
   })
+
+  if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
+    state.resultView = buildResultView(result, state.assets)
+  }
+
+  if (result.mode === 'preview-only') {
+    state.resultView = null
+  }
 
   emit()
 }
@@ -210,13 +231,16 @@ function applyProcessedAsset(asset, processed, result) {
   }
 
   if (result.mode === 'save') {
+    const nextSavedPath = processed.savedOutputPath ?? processed.outputPath ?? ''
     return {
       ...asset,
       status: 'done',
       error: '',
       outputPath: processed.outputPath || '',
       previewStatus: 'saved',
-      savedOutputPath: processed.outputPath || '',
+      savedOutputPath: nextSavedPath,
+      stagedOutputPath: nextSavedPath ? asset.stagedOutputPath : '',
+      stagedOutputName: nextSavedPath ? asset.stagedOutputName : '',
       runId: asset.runId || result.runId || '',
       runFolderName: asset.runFolderName || result.runFolderName || '',
     }
@@ -230,6 +254,59 @@ function applyProcessedAsset(asset, processed, result) {
     previewStatus: 'saved',
     error: '',
   }
+}
+
+function buildResultView(result, assets = []) {
+  const processed = Array.isArray(result?.processed) ? result.processed : []
+  const failed = Array.isArray(result?.failed) ? result.failed : []
+  const assetMap = new Map((assets || []).map((asset) => [asset.id, asset]))
+  const items = processed
+    .map((item) => buildResultViewItem(item, assetMap.get(item.assetId)))
+    .filter((item) => item.outputPath)
+
+  return {
+    runId: result?.runId || '',
+    toolId: result?.toolId || '',
+    mode: result?.mode || 'direct',
+    items,
+    failed,
+    createdAt: Date.now(),
+  }
+}
+
+function buildResultViewItem(processed, asset) {
+  const sourceName = asset?.name || processed?.name || processed?.outputName || ''
+  const resultName = processed?.outputName || getPathFileName(processed?.savedOutputPath || processed?.outputPath || processed?.stagedPath) || sourceName
+  const resultWidth = processed?.width || asset?.stagedWidth || asset?.width || 0
+  const resultHeight = processed?.height || asset?.stagedHeight || asset?.height || 0
+  const resultSizeBytes = processed?.outputSizeBytes || asset?.stagedSizeBytes || asset?.sizeBytes || 0
+  const outputPath = processed?.savedOutputPath || processed?.outputPath || processed?.stagedPath || asset?.savedOutputPath || asset?.stagedOutputPath || ''
+
+  return {
+    assetId: processed?.assetId || asset?.id || '',
+    name: sourceName,
+    beforeUrl: asset?.thumbnailUrl || '',
+    afterUrl: processed?.previewUrl || processed?.outputPath || processed?.savedOutputPath || processed?.stagedPath || '',
+    outputPath,
+    source: {
+      name: sourceName,
+      sizeBytes: asset?.sizeBytes || 0,
+      width: asset?.width || 0,
+      height: asset?.height || 0,
+    },
+    result: {
+      name: resultName,
+      sizeBytes: resultSizeBytes,
+      width: resultWidth,
+      height: resultHeight,
+    },
+    summary: processed?.summary || '',
+  }
+}
+
+function getPathFileName(value = '') {
+  const normalized = String(value || '').replaceAll('\\', '/')
+  return normalized.split('/').pop() || ''
 }
 
 function emit() {

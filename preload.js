@@ -8,7 +8,9 @@ const IMAGE_EXTENSIONS = new Set([
 ])
 const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
+const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const LOSSY_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
+const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ico'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
@@ -20,6 +22,7 @@ const PDF_PAGE_SIZES = {
   A4: [595.28, 841.89],
   A5: [419.53, 595.28],
   Letter: [612, 792],
+  Legal: [612, 1008],
 }
 
 const TOOL_LABELS = {
@@ -487,10 +490,10 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'format') {
     return {
-      targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF'], 'JPEG'),
+      targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO'], 'JPEG'),
       quality: clampNumber(config.quality, 1, 100, 90),
       keepTransparency: Boolean(config.keepTransparency),
-      colorProfile: sanitizeText(config.colorProfile, 'sRGB'),
+      colorProfile: pickOption(String(config.colorProfile || '').toLowerCase(), ['srgb', 'p3', 'cmyk'], 'srgb'),
     }
   }
 
@@ -581,9 +584,10 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'merge-pdf') {
     return {
-      pageSize: sanitizeText(config.pageSize, 'A4'),
-      margin: sanitizeText(config.margin, 'narrow'),
+      pageSize: pickOption(String(config.pageSize || ''), ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Original'], 'A4'),
+      margin: pickOption(String(config.margin || ''), ['none', 'narrow', 'normal', 'wide'], 'narrow'),
       background: sanitizeText(config.background, '#ffffff'),
+      autoPaginate: Boolean(config.autoPaginate),
     }
   }
 
@@ -593,6 +597,7 @@ function normalizeRunConfig(toolId, config = {}) {
       pageWidth: Math.max(1, toInteger(config.pageWidth, 1920)),
       spacing: Math.max(0, toInteger(config.spacing, 24)),
       background: sanitizeText(config.background, '#ffffff'),
+      align: pickOption(String(config.align || ''), ['start', 'center'], 'start'),
     }
   }
 
@@ -602,6 +607,7 @@ function normalizeRunConfig(toolId, config = {}) {
       height: Math.max(1, toInteger(config.height, 1080)),
       interval: Math.max(0.01, toNumber(config.interval, 0.5)),
       background: sanitizeText(config.background, '#ffffff'),
+      loop: config.loop !== false,
     }
   }
 
@@ -785,7 +791,7 @@ function mapOutputFormat(toolId, asset, config) {
   if (toolId === 'format') {
     const requested = String(config.targetFormat || '').toLowerCase()
     if (requested === 'jpg') return 'jpeg'
-    if (requested === 'bmp' || requested === 'ico') return 'png'
+    if (CUSTOM_OUTPUT_FORMATS.has(requested)) return requested
     return SHARP_OUTPUT_FORMATS.has(requested) ? requested : 'jpeg'
   }
 
@@ -797,6 +803,17 @@ function mapOutputFormat(toolId, asset, config) {
 function mapOutputExtension(format) {
   if (format === 'jpeg') return 'jpg'
   return format
+}
+
+function isAlphaCapableFormat(format) {
+  return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
+}
+
+function resolveSharpIccProfile(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'p3' || normalized === 'display-p3' || normalized === 'display p3') return 'p3'
+  if (normalized === 'cmyk') return 'cmyk'
+  return 'srgb'
 }
 
 function getOutputName(asset, toolId, format) {
@@ -837,6 +854,83 @@ function withOutputFormat(transformer, format, quality) {
   return transformer.png({ compressionLevel: 6 })
 }
 
+function applyColorProfile(transformer, colorProfile) {
+  if (typeof transformer.withIccProfile !== 'function') return transformer
+  return transformer.withIccProfile(resolveSharpIccProfile(colorProfile))
+}
+
+function applyMetadataPolicy(transformer, preserveMetadata) {
+  if (!preserveMetadata || typeof transformer.keepMetadata !== 'function') return transformer
+  return transformer.keepMetadata()
+}
+
+function applyTransparencyPolicy(transformer, format, keepTransparency, background = '#ffffff') {
+  if (keepTransparency && isAlphaCapableFormat(format)) return transformer
+  return transformer.flatten({ background: hexToRgbaObject(background, 1) })
+}
+
+async function createBmpBuffer(transformer) {
+  const { data, info } = await transformer
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const width = Math.max(1, info.width || 1)
+  const height = Math.max(1, info.height || 1)
+  const channels = Math.max(3, info.channels || 3)
+  const rowStride = Math.ceil((width * 3) / 4) * 4
+  const pixelDataSize = rowStride * height
+  const fileHeaderSize = 14
+  const dibHeaderSize = 40
+  const fileSize = fileHeaderSize + dibHeaderSize + pixelDataSize
+  const buffer = Buffer.alloc(fileSize)
+
+  buffer.write('BM', 0, 2, 'ascii')
+  buffer.writeUInt32LE(fileSize, 2)
+  buffer.writeUInt32LE(fileHeaderSize + dibHeaderSize, 10)
+  buffer.writeUInt32LE(dibHeaderSize, 14)
+  buffer.writeInt32LE(width, 18)
+  buffer.writeInt32LE(height, 22)
+  buffer.writeUInt16LE(1, 26)
+  buffer.writeUInt16LE(24, 28)
+  buffer.writeUInt32LE(0, 30)
+  buffer.writeUInt32LE(pixelDataSize, 34)
+  buffer.writeInt32LE(2835, 38)
+  buffer.writeInt32LE(2835, 42)
+
+  const pixelOffset = fileHeaderSize + dibHeaderSize
+  for (let y = 0; y < height; y += 1) {
+    const srcY = height - 1 - y
+    const dstRowOffset = pixelOffset + y * rowStride
+    for (let x = 0; x < width; x += 1) {
+      const srcOffset = (srcY * width + x) * channels
+      const dstOffset = dstRowOffset + x * 3
+      buffer[dstOffset] = data[srcOffset + 2] || 0
+      buffer[dstOffset + 1] = data[srcOffset + 1] || 0
+      buffer[dstOffset + 2] = data[srcOffset] || 0
+    }
+  }
+
+  return buffer
+}
+
+function createIcoBuffer(pngBuffer, width, height) {
+  const entryWidth = width >= 256 ? 0 : width
+  const entryHeight = height >= 256 ? 0 : height
+  const header = Buffer.alloc(6 + 16)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(1, 4)
+  header.writeUInt8(entryWidth, 6)
+  header.writeUInt8(entryHeight, 7)
+  header.writeUInt8(0, 8)
+  header.writeUInt8(0, 9)
+  header.writeUInt16LE(1, 10)
+  header.writeUInt16LE(32, 12)
+  header.writeUInt32LE(pngBuffer.length, 14)
+  header.writeUInt32LE(22, 18)
+  return Buffer.concat([header, pngBuffer])
+}
+
 async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('compression', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
@@ -863,7 +957,27 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('format', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
-  await withOutputFormat(createTransformer(sharpLib, asset), format, Math.round(config.quality)).toFile(outputPath)
+  let transformed = applyColorProfile(createTransformer(sharpLib, asset), config.colorProfile)
+  transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
+
+  if (format === 'bmp') {
+    const buffer = await createBmpBuffer(transformed)
+    fs.writeFileSync(outputPath, buffer)
+    return { outputPath, outputSizeBytes: buffer.length }
+  }
+
+  if (format === 'ico') {
+    const pngBuffer = await transformed
+      .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toBuffer()
+    const iconMeta = await sharpLib(pngBuffer).metadata()
+    const buffer = createIcoBuffer(pngBuffer, iconMeta.width || 256, iconMeta.height || 256)
+    fs.writeFileSync(outputPath, buffer)
+    return { outputPath, outputSizeBytes: buffer.length }
+  }
+
+  await withOutputFormat(transformed, format, Math.round(config.quality)).toFile(outputPath)
   return outputPath
 }
 
@@ -1177,10 +1291,28 @@ function mapFlipOutputFormat(asset, config) {
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
-  let transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: getRotateBackground(config.background) })
+  let transformed = null
+
+  if (config.autoCrop) {
+    transformed = createTransformer(sharpLib, asset)
+      .ensureAlpha()
+      .rotate(config.angle, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .trim()
+  } else {
+    transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: getRotateBackground(config.background) })
+  }
 
   if (config.keepAspectRatio && asset.width && asset.height) {
-    transformed = transformed.resize({ width: asset.width, height: asset.height, fit: 'contain', background: getRotateBackground(config.background) })
+    transformed = transformed.resize({
+      width: asset.width,
+      height: asset.height,
+      fit: 'contain',
+      background: config.autoCrop ? { r: 0, g: 0, b: 0, alpha: 0 } : getRotateBackground(config.background),
+    })
+  }
+
+  if (config.autoCrop && !isAlphaCapableFormat(format)) {
+    transformed = transformed.flatten({ background: getRotateBackground(config.background) })
   }
 
   await withOutputFormat(transformed, format, 90).toFile(outputPath)
@@ -1194,6 +1326,11 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
 
   if (config.horizontal) transformed = transformed.flop()
   if (config.vertical) transformed = transformed.flip()
+  if (config.autoCropTransparent) transformed = transformed.ensureAlpha().trim()
+  if (config.autoCropTransparent && !isAlphaCapableFormat(format)) {
+    transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
+  }
+  transformed = applyMetadataPolicy(transformed, config.preserveMetadata)
 
   await withOutputFormat(transformed, format, 90).toFile(outputPath)
   return outputPath
@@ -1330,7 +1467,15 @@ async function writeMergeImageAsset(sharpLib, payload) {
   let cursorX = 0
   let cursorY = 0
   const composites = prepared.map((item) => {
-    const composite = { input: item.buffer, left: cursorX, top: cursorY }
+    const composite = {
+      input: item.buffer,
+      left: payload.config.direction === 'vertical' && payload.config.align === 'center'
+        ? Math.max(0, Math.round((totalWidth - item.width) / 2))
+        : cursorX,
+      top: payload.config.direction === 'horizontal' && payload.config.align === 'center'
+        ? Math.max(0, Math.round((totalHeight - item.height) / 2))
+        : cursorY,
+    }
     if (payload.config.direction === 'vertical') {
       cursorY += item.height + spacing
     } else {
@@ -1395,6 +1540,128 @@ async function writeMergePdfAsset(payload) {
   return outputPath
 }
 
+async function writeMergePdfAssetReal(sharpLib, payload) {
+  const pdfLib = getPdfLib()
+  if (!pdfLib) throw new Error('缂哄皯 pdf-lib 渚濊禆')
+  const outputPath = path.join(payload.destinationPath, 'merged.pdf')
+  const pdf = await pdfLib.PDFDocument.create()
+  const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
+
+  for (const asset of payload.assets) {
+    const imageBytes = fs.readFileSync(asset.sourcePath)
+    const format = String(asset.ext || '').toLowerCase()
+    const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
+      ? await pdf.embedPng(imageBytes)
+      : await pdf.embedJpg(await sharpLib(asset.sourcePath).jpeg().toBuffer())
+    const fixedPageSize = payload.config.pageSize === 'Original'
+      ? null
+      : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
+    const margin = getPdfMarginValueResolved(payload.config.margin, fixedPageSize?.[0] || embedded.width)
+
+    if (payload.config.pageSize === 'Original') {
+      const pageSize = [embedded.width + margin * 2, embedded.height + margin * 2]
+      const page = pdf.addPage(pageSize)
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: pageSize[0],
+        height: pageSize[1],
+        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+      })
+      page.drawImage(embedded, {
+        x: margin,
+        y: margin,
+        width: embedded.width,
+        height: embedded.height,
+      })
+      continue
+    }
+
+    const pageSize = fixedPageSize || PDF_PAGE_SIZES.A4
+    const drawableWidth = Math.max(1, pageSize[0] - margin * 2)
+    const drawableHeight = Math.max(1, pageSize[1] - margin * 2)
+
+    if (!payload.config.autoPaginate) {
+      const page = pdf.addPage(pageSize)
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: pageSize[0],
+        height: pageSize[1],
+        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+      })
+      const scale = Math.min(drawableWidth / embedded.width, drawableHeight / embedded.height)
+      const width = embedded.width * scale
+      const height = embedded.height * scale
+      page.drawImage(embedded, {
+        x: (pageSize[0] - width) / 2,
+        y: (pageSize[1] - height) / 2,
+        width,
+        height,
+      })
+      continue
+    }
+
+    const sourceMeta = await sharpLib(asset.sourcePath).metadata()
+    const sourceWidth = Math.max(1, sourceMeta.width || embedded.width || 1)
+    const sourceHeight = Math.max(1, sourceMeta.height || embedded.height || 1)
+    const scaledWidth = Math.max(1, Math.round(drawableWidth))
+    const scaledHeight = Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
+    const scaledBuffer = await sharpLib(asset.sourcePath)
+      .resize({ width: scaledWidth, fit: 'fill' })
+      .png()
+      .toBuffer()
+
+    if (scaledHeight <= drawableHeight) {
+      const paged = await pdf.embedPng(scaledBuffer)
+      const page = pdf.addPage(pageSize)
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: pageSize[0],
+        height: pageSize[1],
+        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+      })
+      page.drawImage(paged, {
+        x: margin,
+        y: (pageSize[1] - paged.height) / 2,
+        width: paged.width,
+        height: paged.height,
+      })
+      continue
+    }
+
+    let offsetY = 0
+    while (offsetY < scaledHeight) {
+      const sliceHeight = Math.min(Math.round(drawableHeight), scaledHeight - offsetY)
+      const sliceBuffer = await sharpLib(scaledBuffer)
+        .extract({ left: 0, top: offsetY, width: scaledWidth, height: sliceHeight })
+        .png()
+        .toBuffer()
+      const pageImage = await pdf.embedPng(sliceBuffer)
+      const page = pdf.addPage(pageSize)
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: pageSize[0],
+        height: pageSize[1],
+        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+      })
+      page.drawImage(pageImage, {
+        x: margin,
+        y: pageSize[1] - margin - pageImage.height,
+        width: pageImage.width,
+        height: pageImage.height,
+      })
+      offsetY += sliceHeight
+    }
+  }
+
+  const bytes = await pdf.save()
+  fs.writeFileSync(outputPath, bytes)
+  return outputPath
+}
+
 async function writeMergeGifAsset(sharpLib, payload) {
   const gifenc = getGifEncoder()
   if (!gifenc) throw new Error('缺少 gifenc 依赖')
@@ -1415,6 +1682,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
     encoder.writeFrame(index, payload.config.width, payload.config.height, {
       palette,
       delay: Math.max(1, Math.round(payload.config.interval * 100)),
+      repeat: payload.config.loop ? 0 : -1,
     })
   }
 
@@ -1675,7 +1943,7 @@ async function executeMergeTool(payload, sharpLib) {
   try {
     let outputPath = ''
     if (payload.toolId === 'merge-image') outputPath = await writeMergeImageAsset(sharpLib, payload)
-    if (payload.toolId === 'merge-pdf') outputPath = await writeMergePdfAsset(payload)
+    if (payload.toolId === 'merge-pdf') outputPath = await writeMergePdfAssetReal(sharpLib, payload)
     if (payload.toolId === 'merge-gif') outputPath = await writeMergeGifAsset(sharpLib, payload)
 
     const stat = fs.statSync(outputPath)
