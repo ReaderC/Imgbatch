@@ -1,7 +1,7 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setPreviewModal, setSearchQuery, setState, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, getLaunchInputs, importItems, loadSettings, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setPreviewModal, setResultView, setSearchQuery, setState, subscribe, updateConfig, updateSettings } from './state/store.js'
+import { buildStagedItems, getLaunchInputs, importItems, loadSettings, openInputDialog, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -82,6 +82,7 @@ async function saveAssetResult(assetId) {
     const result = await saveStagedResult(state.activeTool, stagedItem, getCurrentDestinationPath())
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
+      handleResultSaveCompletion()
     }
     notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '保存失败。' })
   } catch (error) {
@@ -104,6 +105,7 @@ async function saveAllCurrentResults() {
     const result = await saveAllStagedResults(state.activeTool, stagedItems, getCurrentDestinationPath())
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
+      handleResultSaveCompletion()
     }
     notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '批量保存失败。' })
   } catch (error) {
@@ -115,27 +117,342 @@ async function saveAllCurrentResults() {
 
 async function resolveWatermarkImagePath(file) {
   if (!file) return ''
-  const directPath = file.path || file.webkitRelativePath || ''
+  const directPath = file.path || file.filePath || file.webkitRelativePath || ''
   if (directPath) return directPath
   try {
     const [resolvedPath] = await resolveInputPaths([file])
-    return resolvedPath || file.name || ''
+    if (resolvedPath) return resolvedPath
   } catch {
-    return file.name || ''
+    // fall through to data url
   }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(file)
+  })
 }
 
 async function openSavedOutput(assetId) {
   const asset = getState().assets.find((item) => item.id === assetId)
-  const targetPath = asset ? getSavedOutputPath(asset) || getPreviewOutputPath(asset) : ''
+  const targetPath = asset ? (getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath) : ''
   if (!targetPath) {
     notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
     return
   }
   const ok = await revealPath(targetPath)
   if (!ok) {
-    notify({ type: 'error', message: '打开结果目录失败。' })
+    notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
   }
+}
+
+async function openResultPath(targetPath) {
+  if (!targetPath) return
+  const ok = await revealPath(targetPath)
+  if (!ok) {
+    notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
+  }
+}
+
+function getReplacePayload(asset, resultPath) {
+  const sourcePath = normalizeAssetPath(asset?.sourcePath)
+  const outputPath = normalizeAssetPath(resultPath)
+  return {
+    assetId: asset.id,
+    name: asset.name,
+    sourcePath,
+    savedOutputPath: outputPath,
+  }
+}
+
+function normalizeAssetPath(value = '') {
+  return String(value || '').replaceAll('\\', '/').trim()
+}
+
+function clearAssetsResultState(assetIds) {
+  const ids = new Set(assetIds)
+  const state = getState()
+  setState({
+    assets: state.assets.map((asset) => {
+      if (!ids.has(asset.id)) return asset
+      return {
+        ...asset,
+        previewStatus: 'idle',
+        previewUrl: '',
+        stagedOutputPath: '',
+        stagedOutputName: '',
+        stagedSizeBytes: 0,
+        stagedWidth: 0,
+        stagedHeight: 0,
+        savedOutputPath: '',
+        outputPath: '',
+        runId: '',
+        runFolderName: '',
+        stagedToolId: '',
+        saveSignature: '',
+      }
+    }),
+  })
+}
+
+function buildResultViewItem(asset) {
+  const resultSizeBytes = asset.stagedSizeBytes || asset.sizeBytes || 0
+  const resultWidth = asset.stagedWidth || asset.width || 0
+  const resultHeight = asset.stagedHeight || asset.height || 0
+  const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
+  return {
+    assetId: asset.id,
+    name: asset.name,
+    outputPath,
+    source: {
+      name: asset.name || '',
+      sizeBytes: asset.sizeBytes || 0,
+      width: asset.width || 0,
+      height: asset.height || 0,
+    },
+    result: {
+      name: getResultFileName(asset, outputPath),
+      sizeBytes: resultSizeBytes,
+      width: resultWidth,
+      height: resultHeight,
+    },
+    summary: getPreviewMessage(asset),
+  }
+}
+
+function getResultFileName(asset, outputPath) {
+  const normalized = String(outputPath || '').replaceAll('\\', '/')
+  const fileName = normalized.split('/').pop()
+  return fileName || asset.name || ''
+}
+
+function getSizeDeltaText(before = 0, after = 0) {
+  const delta = Number(after || 0) - Number(before || 0)
+  if (!delta) return '0 B'
+  const prefix = delta > 0 ? '+' : '-'
+  return `${prefix}${formatBytes(Math.abs(delta))}`
+}
+
+function getDimensionDeltaText(before = 0, after = 0) {
+  const delta = Number(after || 0) - Number(before || 0)
+  if (!delta) return '0'
+  return `${delta > 0 ? '+' : ''}${delta}`
+}
+
+function formatDimensions(width = 0, height = 0) {
+  return `${width || '—'} × ${height || '—'}`
+}
+
+function formatResultStat(value, delta) {
+  return delta ? `${value} (${delta})` : value
+}
+
+function hasVisibleResultComparison() {
+  return !!getState().resultView?.items?.length
+}
+
+function refreshResultView() {
+  const state = getState()
+  const items = state.assets
+    .filter((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
+    .map(buildResultViewItem)
+    .filter((item) => item.outputPath)
+
+  if (!items.length) {
+    setResultView(null)
+    return
+  }
+
+  setResultView({
+    runId: state.activeRun?.runId || '',
+    toolId: state.activeTool,
+    mode: state.activeRun?.mode || 'save',
+    items,
+    failed: [],
+    createdAt: Date.now(),
+  })
+}
+
+function syncResultUiAfterSave() {
+  refreshResultView()
+}
+
+function syncResultUiAfterReplace(assetIds = []) {
+  clearAssetsResultState(assetIds)
+  refreshResultView()
+}
+
+function updateResultUiAfterProcess() {
+  refreshResultView()
+}
+
+function handleResultSaveCompletion() {
+  syncResultUiAfterSave()
+}
+
+function handleResultProcessCompletion() {
+  updateResultUiAfterProcess()
+}
+
+function handleResultReplaceCompletion(processed) {
+  syncResultUiAfterReplace((processed || []).map((item) => item.assetId).filter(Boolean))
+}
+
+function updateColorPreview(toolId, key, value) {
+  updateConfig(toolId, { [key]: value })
+}
+
+function normalizeColorInputValue(value = '') {
+  const text = String(value || '').trim().toUpperCase()
+  return /^#([0-9A-F]{6})$/.test(text) ? text : ''
+}
+
+function updateColorPickerPreview(value) {
+  const normalized = normalizeColorInputValue(value)
+  if (!normalized) return
+  const current = getState().colorPicker
+  if (current?.visible) {
+    setColorPicker({ ...current, value: normalized })
+  }
+}
+
+function syncColorTextInput(target) {
+  const wrapper = target.closest('.color-field')
+  const mirror = wrapper?.querySelector('.color-field__value')
+  const value = target.value.toUpperCase()
+  if (mirror) mirror.value = value
+  updateColorPickerPreview(value)
+}
+
+function syncColorMagnifierInput(target) {
+  const normalized = normalizeColorInputValue(target.value)
+  if (!normalized) return
+  updateColorPickerPreview(normalized)
+}
+
+function openColorPickerZoom(target) {
+  const field = target.closest('.color-field')
+  const nativeInput = field?.querySelector('.color-field__native')
+  if (!nativeInput) return
+  nativeInput.showPicker?.()
+  if (!nativeInput.showPicker) nativeInput.click()
+}
+
+function closeColorPickerZoom() {
+  setColorPicker(null)
+}
+
+function isColorPickerOpen() {
+  return !!getState().colorPicker?.visible
+}
+
+function closeColorPickerIfOpen() {
+  if (isColorPickerOpen()) closeColorPickerZoom()
+}
+
+function handleColorMagnifierAction(target) {
+  openColorPickerZoom(target)
+}
+
+
+function isResultViewOpen() {
+  return !!getState().resultView?.items?.length
+}
+
+function shouldShowResultActions() {
+  return !!getState().activeRun || isResultViewOpen()
+}
+
+function shouldKeepResultToolbar() {
+  return shouldShowResultActions()
+}
+
+function clearResultOnlyView() {
+  setResultView(null)
+}
+
+function closeResultWorkspace() {
+  clearResultOnlyView()
+}
+
+function closeResultView() {
+  closeResultWorkspace()
+}
+
+function maybeDismissResultView() {
+  closeResultWorkspace()
+}
+
+function ensureResultViewVisible() {
+  if (getState().resultView?.items?.length) return true
+  refreshResultView()
+  return !!getState().resultView?.items?.length
+}
+
+function showResultComparison() {
+  const visible = ensureResultViewVisible()
+  if (visible) closePreviewModal()
+  return visible
+}
+
+function openCurrentResultsPanel() {
+  return showResultComparison()
+}
+
+function clearAllResultOverlays() {
+  closePreviewModal()
+  closeColorPickerIfOpen()
+}
+
+function clearResultUiAfterToolChange() {
+  clearAllResultOverlays()
+  closeResultWorkspace()
+  setState({ activeRun: null })
+}
+
+function resetResultUiState() {
+  clearAllResultOverlays()
+  closeResultWorkspace()
+  setState({ activeRun: null })
+}
+
+function openResultComparisonPath(targetPath) {
+  return openResultPath(targetPath)
+}
+
+function continueProcessing() {
+  clearAllResultOverlays()
+  setResultView(null)
+  setState({ activeRun: null })
+}
+
+function getResultToolbarLabel() {
+  return hasVisibleResultComparison() ? '打开目录' : '显示结果'
+}
+
+function hasAnyResultAssets() {
+  return getState().assets.some((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
+}
+
+function buildResultActions() {
+  if (!shouldKeepResultToolbar()) return ''
+  return `
+    <div class="result-toolbar">
+      <button class="secondary-button" data-action="continue-processing">继续处理</button>
+      <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
+      <button class="primary-button" data-action="open-current-results">${getResultToolbarLabel()}</button>
+    </div>
+  `
+}
+
+function injectResultToolbar() {
+  const shell = document.querySelector('.app-shell')
+  if (!shell) return
+  const existing = shell.querySelector('.result-toolbar')
+  if (existing) existing.remove()
+  if (!shouldKeepResultToolbar()) return
+  shell.insertAdjacentHTML('beforeend', buildResultActions())
 }
 
 async function replaceAssetOriginal(assetId) {
@@ -150,15 +467,9 @@ async function replaceAssetOriginal(assetId) {
 
   setState({ isProcessing: true })
   try {
-    const result = await replaceOriginals([{
-      assetId: asset.id,
-      name: asset.name,
-      sourcePath: asset.sourcePath,
-      savedOutputPath: resultPath,
-      outputPath: resultPath,
-    }])
-    if (result?.processed?.length || result?.failed?.length) {
-      applyRunResult({ ...result, mode: 'save', toolId: getState().activeTool })
+    const result = await replaceOriginals([getReplacePayload(asset, resultPath)])
+    if (result?.processed?.length) {
+      handleResultReplaceCompletion(result.processed)
     }
     notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
   } catch (error) {
@@ -169,6 +480,10 @@ async function replaceAssetOriginal(assetId) {
 }
 
 async function openCurrentResultsDirectory() {
+  if (!hasVisibleResultComparison()) {
+    const visible = showResultComparison()
+    if (visible) return
+  }
   const asset = getState().assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item))
   if (!asset) {
     notify({ type: 'info', message: '当前没有可打开的结果目录。' })
@@ -187,15 +502,9 @@ async function replaceCurrentOriginals() {
 
   setState({ isProcessing: true })
   try {
-    const result = await replaceOriginals(assets.map((asset) => ({
-      assetId: asset.id,
-      name: asset.name,
-      sourcePath: asset.sourcePath,
-      savedOutputPath: getSavedOutputPath(asset) || getPreviewOutputPath(asset),
-      outputPath: getSavedOutputPath(asset) || getPreviewOutputPath(asset),
-    })))
-    if (result?.processed?.length || result?.failed?.length) {
-      applyRunResult({ ...result, mode: 'save', toolId: getState().activeTool })
+    const result = await replaceOriginals(assets.map((asset) => getReplacePayload(asset, getSavedOutputPath(asset) || getPreviewOutputPath(asset))))
+    if (result?.processed?.length) {
+      handleResultReplaceCompletion(result.processed)
     }
     notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
   } catch (error) {
@@ -203,34 +512,6 @@ async function replaceCurrentOriginals() {
   } finally {
     setState({ isProcessing: false })
   }
-}
-
-function continueProcessing() {
-  closePreviewModal()
-}
-
-function hasAnyResultAssets() {
-  return getState().assets.some((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
-}
-
-function buildResultActions() {
-  if (!hasAnyResultAssets()) return ''
-  return `
-    <div class="result-toolbar">
-      <button class="secondary-button" data-action="continue-processing">继续处理</button>
-      <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
-      <button class="primary-button" data-action="open-current-results">显示结果</button>
-    </div>
-  `
-}
-
-function injectResultToolbar() {
-  const shell = document.querySelector('.app-shell')
-  if (!shell) return
-  const existing = shell.querySelector('.result-toolbar')
-  if (existing) existing.remove()
-  if (!hasAnyResultAssets()) return
-  shell.insertAdjacentHTML('beforeend', buildResultActions())
 }
 
 
@@ -268,6 +549,8 @@ function openPreviewModal(asset) {
   setPreviewModal({
     name: asset.name,
     url: asset.previewUrl,
+    beforeUrl: asset.thumbnailUrl || asset.previewUrl,
+    afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
   })
   return true
@@ -813,6 +1096,18 @@ function getAssetsForTool(toolId, assets) {
   return assets.filter((asset) => getState().configs['manual-crop'].completedIds.includes(asset.id))
 }
 
+function findNextManualCropIndex(config, assets, startIndex) {
+  if (!assets.length) return 0
+  const handled = new Set([...(config.completedIds || []), ...(config.skippedIds || [])])
+  for (let index = startIndex; index < assets.length; index += 1) {
+    if (!handled.has(assets[index].id)) return index
+  }
+  for (let index = 0; index < startIndex; index += 1) {
+    if (!handled.has(assets[index].id)) return index
+  }
+  return Math.min(startIndex, assets.length - 1)
+}
+
 function shouldUseBulkSaveAction(action) {
   return action === 'save-all-results'
 }
@@ -926,6 +1221,7 @@ function getToolRunner(tool) {
 function applyResultAndNotify(result, successFallback, errorFallback) {
   if (result?.processed?.length || result?.failed?.length) {
     applyRunResult(result)
+    handleResultProcessCompletion()
   }
   if (result?.ok || result?.partial) {
     notify({ type: result.partial ? 'info' : 'success', message: result.message || successFallback })
@@ -1146,8 +1442,6 @@ function maybeHandleConfigActions(action, target) {
     updateConfig('resize', {
       width: target.dataset.width,
       height: target.dataset.height,
-      widthUnit: inferResizeUnit(target.dataset.width),
-      heightUnit: inferResizeUnit(target.dataset.height),
     })
     return true
   }
@@ -1691,7 +1985,10 @@ function canApplyResult(result) {
 }
 
 function maybeApplyResult(result) {
-  if (canApplyResult(result)) applyRunResult(result)
+  if (canApplyResult(result)) {
+    applyRunResult(result)
+    handleResultProcessCompletion()
+  }
 }
 
 function getCurrentToolConfig(toolId) {
@@ -1946,7 +2243,7 @@ function getPreviewOutputPath(asset) {
 }
 
 function getSavedOutputPath(asset) {
-  return asset.savedOutputPath || asset.outputPath || ''
+  return asset.savedOutputPath || ''
 }
 
 function hasSavedOutputPath(asset) {
@@ -2596,6 +2893,40 @@ function extractDroppedItems(event) {
 }
 
 function attachGlobalEvents() {
+  document.addEventListener('wheel', (event) => {
+    const scroller = event.target.closest('[data-horizontal-scroll]')
+    if (!scroller) return
+    if (scroller.scrollWidth <= scroller.clientWidth) return
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) && !event.shiftKey) return
+    scroller.scrollLeft += event.shiftKey ? (event.deltaX || event.deltaY) : event.deltaY
+    event.preventDefault()
+  }, { passive: false })
+
+  document.addEventListener('pointerdown', (event) => {
+    const target = event.target.closest('[data-action]')
+    if (!target) return
+    const { action } = target.dataset
+    if (action === 'drag-color-surface') {
+      beginColorPickerDrag(event, target, 'surface')
+      return
+    }
+    if (action === 'drag-color-hue') {
+      beginColorPickerDrag(event, target, 'hue')
+    }
+  })
+
+  document.addEventListener('pointerdown', (event) => {
+    const target = event.target.closest('[data-action]')
+    if (!target) return
+    if (target.dataset.action === 'drag-rotate') {
+      beginRotateDrag(event, target)
+      return
+    }
+    if (target.dataset.action === 'manual-crop-drag' || target.dataset.action === 'manual-crop-resize') {
+      beginManualCropDrag(event, target)
+    }
+  })
+
   document.addEventListener('click', async (event) => {
     const modalRoot = event.target.closest('.preview-modal')
     if (modalRoot && !event.target.closest('[data-action]')) {
@@ -2608,9 +2939,15 @@ function attachGlobalEvents() {
     const target = event.target.closest('[data-action]')
     if (!target) return
 
+    if (target.matches('.nav-item')) {
+      event.preventDefault()
+    }
+
     const { action } = target.dataset
 
     if (action === 'activate-tool') {
+      event.preventDefault()
+      clearResultUiAfterToolChange()
       setActiveTool(target.dataset.toolId)
       return
     }
@@ -2620,8 +2957,18 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'close-result-view') {
+      closeResultView()
+      return
+    }
+
     if (action === 'open-settings' || action === 'save-default-path') {
       await persistDefaultSavePath()
+      return
+    }
+
+    if (action === 'toggle-sidebar') {
+      setState({ sidebarCollapsed: !getState().sidebarCollapsed })
       return
     }
 
@@ -2641,7 +2988,8 @@ function attachGlobalEvents() {
     }
 
     if (action === 'clear-assets') {
-      setState({ assets: [], previewModal: null })
+      resetResultUiState()
+      setState({ assets: [], previewModal: null, resultView: null })
       return
     }
 
@@ -2661,7 +3009,11 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-file-input' || action === 'pick-demo') {
-      fileInput.click()
+      if (typeof window.imgbatch?.showOpenDialog === 'function') {
+        await pickInputsFromHost('file')
+      } else {
+        fileInput.click()
+      }
       return
     }
 
@@ -2685,6 +3037,16 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'open-result-path') {
+      await openResultComparisonPath(target.dataset.path)
+      return
+    }
+
+    if (action === 'open-color-picker') {
+      handleColorMagnifierAction(target)
+      return
+    }
+
     if (action === 'replace-asset-original') {
       await replaceAssetOriginal(target.dataset.assetId)
       return
@@ -2696,7 +3058,11 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-folder-input') {
-      folderInput.click()
+      if (typeof window.imgbatch?.showOpenDialog === 'function') {
+        await pickInputsFromHost('folder')
+      } else {
+        folderInput.click()
+      }
       return
     }
 
@@ -2704,16 +3070,6 @@ function attachGlobalEvents() {
       const toolId = target.dataset.toolId
       await savePreset(toolId, getState().configs[toolId])
       notify({ type: 'success', message: `已保存 ${toolId} 预设。` })
-      return
-    }
-
-    if (action === 'drag-rotate') {
-      beginRotateDrag(event, target)
-      return
-    }
-
-    if (action === 'manual-crop-drag' || action === 'manual-crop-resize') {
-      beginManualCropDrag(event, target)
       return
     }
 
@@ -2732,8 +3088,6 @@ function attachGlobalEvents() {
       updateConfig('resize', {
         width: target.dataset.width,
         height: target.dataset.height,
-        widthUnit: inferResizeUnit(target.dataset.width),
-        heightUnit: inferResizeUnit(target.dataset.height),
       })
       return
     }
@@ -2753,6 +3107,13 @@ function attachGlobalEvents() {
         }
       }
       updateConfig('manual-crop', nextPatch)
+      return
+    }
+
+    if (action === 'toggle-manual-crop-hud') {
+      const state = getState()
+      const config = state.configs['manual-crop']
+      updateConfig('manual-crop', { hudCollapsed: !(config.hudCollapsed !== false) })
       return
     }
 
@@ -2786,7 +3147,11 @@ function attachGlobalEvents() {
         if (completeIndex >= 0) completedIds.splice(completeIndex, 1)
       }
 
-      const nextIndex = Math.min(config.currentIndex + 1, Math.max(state.assets.length - 1, 0))
+      const nextIndex = findNextManualCropIndex(
+        { ...config, completedIds, skippedIds },
+        state.assets,
+        Math.min(config.currentIndex + 1, Math.max(state.assets.length - 1, 0)),
+      )
       updateConfig('manual-crop', {
         completedIds,
         skippedIds,
@@ -2813,6 +3178,15 @@ function attachGlobalEvents() {
     }
 
     const action = target.dataset.action
+    if (target.matches('.color-field__picker')) {
+      syncColorTextInput(target)
+      return
+    }
+
+    if (target.matches('.color-field__value')) {
+      syncColorMagnifierInput(target)
+    }
+
     if (action === 'set-config-range') {
       syncRangeControl(target)
       return
@@ -2835,7 +3209,11 @@ function attachGlobalEvents() {
     if (target === watermarkFileInput) {
       const file = target.files?.[0]
       const imagePath = await resolveWatermarkImagePath(file)
-      updateConfig('watermark', { imagePath })
+      if (!imagePath) {
+        notify({ type: 'error', message: '读取图片水印文件失败。' })
+      } else {
+        updateConfig('watermark', { imagePath })
+      }
       target.value = ''
       return
     }
@@ -2851,9 +3229,25 @@ function attachGlobalEvents() {
       return
     }
 
-    const action = target.dataset.action
+    const action = target.dataset.changeAction || target.dataset.action
     if (action === 'set-config-range') {
       commitRangeControl(target)
+      return
+    }
+
+    if (action === 'set-config-color') {
+      const value = target.value.toUpperCase()
+      updateColorPreview(target.dataset.toolId, target.dataset.key, value)
+      syncColorTextInput(target)
+      return
+    }
+
+    if (target.matches('.color-field__value')) {
+      const normalized = normalizeColorInputValue(target.value)
+      if (normalized) {
+        updateColorPreview(target.dataset.toolId, target.dataset.key, normalized)
+        syncColorMagnifierInput(target)
+      }
       return
     }
 
@@ -2917,6 +3311,37 @@ async function handleImport(items) {
   }
 }
 
+async function pickInputsFromHost(kind) {
+  const options = kind === 'folder'
+    ? {
+        title: '选择图片文件夹',
+        properties: ['openDirectory', 'multiSelections'],
+      }
+    : {
+        title: '选择图片',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: '图片文件', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif', 'avif', 'ico'] },
+        ],
+      }
+
+  const selected = await openInputDialog(options)
+  const paths = Array.isArray(selected?.filePaths)
+    ? selected.filePaths
+    : Array.isArray(selected)
+      ? selected
+      : []
+  if (paths.length) {
+    await handleImport(paths)
+  }
+
+  await showMainWindow()
+  window.setTimeout(() => {
+    void showMainWindow()
+    window.focus?.()
+  }, 120)
+}
+
 async function previewAsset(assetId) {
   const state = getState()
   const asset = state.assets.find((item) => item.id === assetId)
@@ -2952,6 +3377,11 @@ async function processCurrentTool() {
 
   if (!state.assets.length) {
     notify({ type: 'info', message: '请先导入图片，再开始处理。' })
+    return
+  }
+
+  if (tool.id === 'manual-crop' && !getAssetsForTool(tool.id, state.assets).length) {
+    notify({ type: 'info', message: '请先至少标记一张图片，再开始手动裁剪。' })
     return
   }
 
@@ -2995,7 +3425,7 @@ function createFileInput({ directory }) {
 function renderNotifications(items) {
   if (!items.length) return ''
   return `
-    <div style="position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:999;">
+    <div style="position:fixed;right:20px;top:92px;display:flex;flex-direction:column;gap:10px;z-index:999;">
       ${items.map((item) => `
         <button data-action="dismiss-notification" data-id="${item.id}" style="min-width:280px;padding:14px 16px;border-radius:18px;background:${getToastColor(item.type)};color:white;text-align:left;box-shadow:var(--shadow-float);cursor:pointer;">
           ${item.message}
@@ -3047,9 +3477,19 @@ function commitRangeControl(target) {
 
 function beginRotateDrag(event, target) {
   event.preventDefault()
+  const element = target.closest('[data-role="rotate-dial"]')
+  if (!element) return
+  const rect = element.getBoundingClientRect()
+  const centerX = rect.left + rect.width / 2
+  const centerY = rect.top + rect.height / 2
+  const state = getState()
+  const rotateConfig = state.configs.rotate || { angle: 0 }
   DRAG_CONTEXT.rotateDial = {
     toolId: target.dataset.toolId,
-    element: target.closest('[data-role="rotate-dial"]'),
+    pointerId: event.pointerId,
+    centerX,
+    centerY,
+    lastAngle: Number(rotateConfig.angle) || 0,
   }
   target.setPointerCapture?.(event.pointerId)
   handleRotateDrag(event)
@@ -3057,17 +3497,19 @@ function beginRotateDrag(event, target) {
 
 function handleRotateDrag(event) {
   const context = DRAG_CONTEXT.rotateDial
-  if (!context?.element) return
-  const rect = context.element.getBoundingClientRect()
-  const centerX = rect.left + rect.width / 2
-  const centerY = rect.top + rect.height / 2
-  const dx = event.clientX - centerX
-  const dy = event.clientY - centerY
-  const degrees = Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 450) % 360)
-  const signed = normalizeSignedAngle(degrees)
+  if (!context) return
+  if (context.pointerId != null && event.pointerId != null && event.pointerId !== context.pointerId) return
+  const dx = event.clientX - context.centerX
+  const dy = event.clientY - context.centerY
+  if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+  const radians = Math.atan2(dy, dx)
+  const signedDegrees = Math.round((((radians * 180) / Math.PI) + 450) % 360)
+  const signed = signedDegrees > 180 ? signedDegrees - 360 : signedDegrees
+  const nextAngle = signed
+  if (nextAngle === context.lastAngle) return
+  context.lastAngle = nextAngle
   updateConfig(context.toolId, {
-    angle: Math.abs(signed),
-    direction: signed >= 0 ? 'clockwise' : 'anticlockwise',
+    angle: nextAngle,
   })
 }
 
@@ -3088,6 +3530,7 @@ function beginManualCropDrag(event, target) {
   const area = getManualCropArea(asset, config)
   DRAG_CONTEXT.manualCrop = {
     assetId: asset.id,
+    pointerId: event.pointerId,
     ratioValue: config.ratioValue || '16:9',
     stageRect: imageRect,
     area,
@@ -3096,11 +3539,13 @@ function beginManualCropDrag(event, target) {
     mode: target.dataset.action === 'manual-crop-resize' ? 'resize' : 'move',
     handle: target.dataset.handle || '',
   }
+  target.setPointerCapture?.(event.pointerId)
 }
 
 function handleManualCropDrag(event) {
   const context = DRAG_CONTEXT.manualCrop
   if (!context) return
+  if (context.pointerId != null && event.pointerId != null && event.pointerId !== context.pointerId) return
   const state = getState()
   const config = state.configs['manual-crop']
   const asset = state.assets[config.currentIndex]
@@ -3154,31 +3599,43 @@ function resizeManualCropArea(context, event, asset) {
   const ratio = getManualCropRatio(context.ratioValue)
   const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
   const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
-  let { x, y, width, height } = context.area
+  const start = context.area
+  const left = start.x
+  const top = start.y
+  const right = start.x + start.width
+  const bottom = start.y + start.height
+  const centerX = start.x + start.width / 2
+  const centerY = start.y + start.height / 2
+  const handle = context.handle
 
-  if (context.handle.includes('r')) width += dx
-  if (context.handle.includes('l')) {
-    width -= dx
-    x += dx
-  }
-  if (context.handle.includes('b')) height += dy
-  if (context.handle.includes('t')) {
-    height -= dy
-    y += dy
-  }
-  if (context.handle === 'ml' || context.handle === 'mr') {
-    height = width / ratio
-  } else if (context.handle === 'tm' || context.handle === 'bm') {
-    width = height * ratio
+  let width = start.width
+  let height = start.height
+  let x = start.x
+  let y = start.y
+
+  if (handle === 'ml' || handle === 'mr') {
+    width = handle === 'ml' ? right - (left + dx) : start.width + dx
+    width = Math.max(40, width)
+    height = start.height
+    x = handle === 'ml' ? right - width : left
+    y = top
+  } else if (handle === 'tm' || handle === 'bm') {
+    height = handle === 'tm' ? bottom - (top + dy) : start.height + dy
+    height = Math.max(40, height)
+    width = start.width
+    y = handle === 'tm' ? bottom - height : top
+    x = left
   } else {
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      height = width / ratio
-    } else {
-      width = height * ratio
-    }
+    const widthByDrag = handle.includes('l') ? right - (left + dx) : start.width + dx
+    const heightByDrag = handle.includes('t') ? bottom - (top + dy) : start.height + dy
+    const widthFromHeight = Math.max(40, heightByDrag * ratio)
+    width = Math.max(40, Math.min(Math.abs(widthByDrag), Math.abs(widthFromHeight)))
+    height = Math.max(40, width / ratio)
+    x = handle.includes('l') ? right - width : left
+    y = handle.includes('t') ? bottom - height : top
   }
 
-  return clampManualCropArea({ x, y, width: Math.round(width), height: Math.round(height) }, asset)
+  return clampManualCropArea({ x, y, width, height }, asset)
 }
 
 function clampManualCropArea(area, asset) {
@@ -3211,8 +3668,11 @@ function parseValue(value) {
   return value
 }
 
-function inferResizeUnit(value) {
-  return String(value).trim().endsWith('%') ? '%' : 'px'
+function formatMeasureValue(value, fallbackUnit = 'px') {
+  const raw = String(value ?? '').trim()
+  if (!raw) return `0${fallbackUnit}`
+  if (raw.endsWith('px') || raw.endsWith('%')) return raw
+  return `${raw}${fallbackUnit}`
 }
 
 function describeToolConfig(toolId, config) {
@@ -3227,7 +3687,7 @@ function describeToolConfig(toolId, config) {
   if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
   if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
-  if (toolId === 'rotate') return `${config.direction === 'clockwise' ? '顺时针' : '逆时针'} ${config.angle}°`
+  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'

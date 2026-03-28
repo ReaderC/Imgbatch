@@ -1,49 +1,86 @@
-import { MANUAL_CROP_RATIOS } from './tool-pages.js'
+const MANUAL_CROP_RATIO_OPTIONS = [
+  { label: '1:1', value: '1:1' },
+  { label: '4:5', value: '4:5' },
+  { label: '16:9', value: '16:9' },
+  { label: '9:16', value: '9:16' },
+  { label: '4:3', value: '4:3' },
+  { label: '3:2', value: '3:2' },
+  { label: '3:4', value: '3:4' },
+  { label: '2:3', value: '2:3' },
+  { label: '21:9', value: '21:9' },
+]
 
 export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
   const current = state.assets[config.currentIndex] || state.assets[0]
+  const hudCollapsed = config.hudCollapsed !== false
   const completedCount = config.completedIds.length
   const skippedCount = config.skippedIds.length
+  const pendingCount = Math.max(0, state.assets.length - completedCount - skippedCount)
   const progressLabel = state.assets.length ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}` : '0 / 0'
-  const currentRatio = MANUAL_CROP_RATIOS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIOS[2]
+  const currentRatio = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIO_OPTIONS[2]
   const cropArea = current ? resolveCropArea(current, config) : null
-  const cropStyle = cropArea ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;` : ''
+  const cropStyle = cropArea
+    ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;`
+    : ''
+  const imageStyle = current
+    ? `style="aspect-ratio:${Math.max(1, current.width || 1)} / ${Math.max(1, current.height || 1)};"`
+    : ''
 
   return `
     <div class="manual-shell">
       <header class="manual-header">
         <div>
-          <div class="section-eyebrow">Precision Atelier</div>
           <h2 class="manual-title">手动裁剪</h2>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div class="manual-header__meta" data-horizontal-scroll>
           <span class="badge">${progressLabel}</span>
-          <span class="badge">完成 ${completedCount}</span>
-          <span class="badge">跳过 ${skippedCount}</span>
-          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭"><span class="material-symbols-outlined">close</span></button>
+          <span class="badge">已标记 ${completedCount}</span>
+          <span class="badge">待处理 ${pendingCount}</span>
+          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭">
+            <span class="material-symbols-outlined">close</span>
+          </button>
         </div>
       </header>
       <main class="manual-canvas" data-role="drop-surface" data-scroll-role="manual-canvas">
-        <div class="manual-hud">
-          <div>
-            <div class="card-label">Dimensions</div>
-            <div style="font-weight:800;font-family:'Manrope',sans-serif;">${current ? `${current.width || '—'} × ${current.height || '—'} px` : '未选择图片'}</div>
-          </div>
-          <div style="width:1px;height:40px;background:rgba(171,179,185,.4);"></div>
-          <div>
-            <div class="card-label">Target</div>
-            <div style="font-weight:800;font-family:'Manrope',sans-serif;color:var(--primary);">${current ? currentRatio.value : '—'} Ratio</div>
-          </div>
-          <div style="width:1px;height:40px;background:rgba(171,179,185,.4);"></div>
-          <div>
-            <div class="card-label">Current Asset</div>
-            <div style="font-weight:800;font-family:'Manrope',sans-serif;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${current ? escapeHtml(current.name) : '等待导入图片'}</div>
-          </div>
+        <div class="manual-hud ${hudCollapsed ? 'manual-hud--collapsed' : ''}">
+          <button class="manual-hud__toggle" data-action="toggle-manual-crop-hud" aria-expanded="${hudCollapsed ? 'false' : 'true'}">
+            <span class="material-symbols-outlined">${hudCollapsed ? 'chevron_right' : 'expand_more'}</span>
+            <span>${hudCollapsed ? '图片信息' : '收起信息'}</span>
+          </button>
+          ${hudCollapsed ? `
+            <div class="manual-hud__compact">
+              <span class="manual-hud__compact-text">${current ? escapeHtml(current.name) : '未选择图片'}</span>
+              <span class="manual-hud__compact-divider"></span>
+              <span class="manual-hud__compact-text">${current ? currentRatio.value : '—'}</span>
+            </div>
+          ` : `
+            <div class="manual-hud__content">
+              <div>
+                <div class="card-label">原图尺寸</div>
+                <div class="manual-hud__value">${current ? `${current.width || '—'} × ${current.height || '—'} px` : '未选择图片'}</div>
+              </div>
+              <div class="manual-hud__divider"></div>
+              <div>
+                <div class="card-label">目标比例</div>
+                <div class="manual-hud__value manual-hud__value--primary">${current ? currentRatio.value : '—'}</div>
+              </div>
+              <div class="manual-hud__divider"></div>
+              <div>
+                <div class="card-label">当前图片</div>
+                <div class="manual-hud__value manual-hud__value--name">${current ? escapeHtml(current.name) : '等待导入图片'}</div>
+              </div>
+            </div>
+          `}
         </div>
         <div class="manual-canvas__stage">
-          <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${current.width || 1}" data-asset-height="${current.height || 1}"` : ''}>
-            ${current ? `<img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" />` : '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:var(--surface-container-high);color:var(--on-surface-variant);">拖入图片后开始裁剪</div>'}
+          <button class="manual-stage-nav manual-stage-nav--prev" data-action="manual-crop-prev" title="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
+            <span class="material-symbols-outlined">navigate_before</span>
+          </button>
+          <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${current.width || 1}" data-asset-height="${current.height || 1}" ${imageStyle}` : ''}>
+            ${current ? `<img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" />` : `
+              <div class="manual-canvas__empty">先导入图片，再拖动裁剪框开始裁剪</div>
+            `}
             ${current ? `
               <div class="manual-crop-box" data-role="manual-crop-box" data-action="manual-crop-drag" style="${cropStyle}">
                 <span class="manual-handle manual-handle--tl" data-action="manual-crop-resize" data-handle="tl"></span>
@@ -57,21 +94,33 @@ export function renderManualCropPage(state) {
               </div>
             ` : ''}
           </div>
+          <button class="manual-stage-nav manual-stage-nav--next" data-action="manual-crop-next" title="下一张" ${!current || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
+            <span class="material-symbols-outlined">navigate_next</span>
+          </button>
         </div>
       </main>
       <footer class="manual-footer">
-        <div class="manual-footer__left">
-          <div class="manual-toolbar" style="gap:10px;flex-wrap:wrap;">
-            ${MANUAL_CROP_RATIOS.map((item) => `
-              <button class="${config.ratio === item.label ? 'footer-button primary' : 'footer-button'}" data-action="set-manual-crop-ratio" data-label="${item.label}" data-value="${item.value}">${item.label}</button>
+        <div class="manual-footer__left" data-horizontal-scroll>
+          <div class="manual-toolbar manual-toolbar--crop">
+            <button class="icon-button" data-action="open-folder-input" title="选择文件夹">
+              <span class="material-symbols-outlined">folder_open</span>
+            </button>
+            <button class="icon-button" data-action="open-file-input" title="选择图片">
+              <span class="material-symbols-outlined">add_photo_alternate</span>
+            </button>
+            ${MANUAL_CROP_RATIO_OPTIONS.map((item) => `
+              <button class="${config.ratio === item.label ? 'footer-button primary' : 'footer-button'}" data-action="set-manual-crop-ratio" data-label="${item.label}" data-value="${item.value}">${item.value}</button>
             `).join('')}
           </div>
         </div>
-        <div class="manual-footer__right" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button class="icon-button" data-action="manual-crop-prev" ${config.currentIndex <= 0 ? 'disabled' : ''}><span class="material-symbols-outlined">navigate_before</span></button>
-          <button class="footer-button" data-action="manual-crop-skip" ${!current ? 'disabled' : ''}>跳过并下一张</button>
-          <button class="footer-button primary" data-action="manual-crop-complete" ${!current ? 'disabled' : ''}>裁剪并下一张</button>
-          <button class="icon-button" data-action="manual-crop-next" ${!current || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}><span class="material-symbols-outlined">navigate_next</span></button>
+        <div class="manual-footer__right">
+          <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
+            <button class="footer-button" data-action="manual-crop-skip" ${!current ? 'disabled' : ''}>跳过并下一张</button>
+            <button class="footer-button primary" data-action="manual-crop-complete" ${!current ? 'disabled' : ''}>标记并下一张</button>
+            <button class="primary-button" data-action="process-current" ${!completedCount || state.isProcessing ? 'disabled' : ''}>
+              ${state.isProcessing ? '裁剪中…' : `开始裁剪 ${completedCount} 张`}
+            </button>
+          </div>
         </div>
       </footer>
     </div>
@@ -113,7 +162,7 @@ function getDefaultCropArea(width, height, ratioValue) {
 }
 
 function currentRatioValue(config) {
-  const matched = MANUAL_CROP_RATIOS.find((item) => item.label === config.ratio)
+  const matched = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio)
   return matched?.value || config.ratioValue || '16:9'
 }
 

@@ -13,6 +13,8 @@ const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
+const MAX_ASSET_CONCURRENCY = Math.max(1, Math.min(4, Math.floor(CPU_COUNT / 2) || 1))
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -41,10 +43,10 @@ function summarizeConfig(toolId, config = {}) {
   if (toolId === 'format') return `输出 ${config.targetFormat}`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
-  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
+  if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, config.unit || 'px')}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
   if (toolId === 'crop') return `裁剪 ${config.ratio}`
-  if (toolId === 'rotate') return `${config.direction === 'clockwise' ? '顺时针' : '逆时针'} ${config.angle}°`
+  if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
@@ -85,15 +87,29 @@ function uniqueStrings(values = []) {
   return Array.from(new Set((Array.isArray(values) ? values : []).map((value) => sanitizeText(value)).filter(Boolean)))
 }
 
+function inferMeasureUnit(value, fallbackUnit = 'px') {
+  const raw = String(value ?? '').trim()
+  if (raw.endsWith('%')) return '%'
+  if (raw.endsWith('px')) return 'px'
+  return fallbackUnit
+}
+
 function normalizeMeasure(value, fallbackValue, fallbackUnit = 'px') {
   const raw = String(value ?? '').trim()
-  const unit = raw.endsWith('%') ? '%' : raw.endsWith('px') ? 'px' : fallbackUnit
+  const unit = inferMeasureUnit(raw, fallbackUnit)
   const numericValue = Math.max(0, toNumber(raw, fallbackValue))
   return {
     value: numericValue,
     unit,
     raw: raw || `${fallbackValue}${unit}`,
   }
+}
+
+function formatMeasureValue(value, fallbackUnit = 'px') {
+  const raw = String(value ?? '').trim()
+  if (!raw) return `0${fallbackUnit}`
+  if (raw.endsWith('px') || raw.endsWith('%')) return raw
+  return `${raw}${fallbackUnit}`
 }
 
 function normalizeRunAssets(assets = []) {
@@ -234,10 +250,27 @@ function toPublicFileUrl(filePath) {
   return encodeURI(`file://${prefixed}`)
 }
 
-function readOutputMeta(outputPath) {
+async function readOutputMeta(outputPath, sharpLib = null) {
   const stat = fs.statSync(outputPath)
-  const image = nativeImage.createFromPath(outputPath)
-  const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+  let width = 0
+  let height = 0
+
+  if (sharpLib) {
+    try {
+      const metadata = await sharpLib(outputPath).metadata()
+      width = metadata.width || 0
+      height = metadata.height || 0
+    } catch {
+      width = 0
+      height = 0
+    }
+  } else {
+    const image = nativeImage.createFromPath(outputPath)
+    const size = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+    width = size.width
+    height = size.height
+  }
+
   return {
     outputPath,
     outputName: path.basename(outputPath),
@@ -253,7 +286,7 @@ function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
   return path.join(finalDirectory, outputName)
 }
 
-function savePreviewResult(baseDestinationPath, runFolderName, stagedItem) {
+async function savePreviewResult(baseDestinationPath, runFolderName, stagedItem) {
   const sourcePath = sanitizeText(stagedItem?.stagedPath)
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     throw new Error('预览结果不存在，无法保存')
@@ -294,9 +327,9 @@ function normalizeDirectResult(item = {}) {
   }
 }
 
-function stageResultToProcessed(asset, result, payload) {
+async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
-  const meta = readOutputMeta(stagedPath)
+  const meta = await readOutputMeta(stagedPath, sharpLib)
   return normalizePreviewResult({
     assetId: asset.id,
     name: asset.name,
@@ -309,9 +342,9 @@ function stageResultToProcessed(asset, result, payload) {
   }, payload)
 }
 
-function directResultToProcessed(asset, result) {
+async function directResultToProcessed(asset, result, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
-  const meta = readOutputMeta(outputPath)
+  const meta = await readOutputMeta(outputPath, sharpLib)
   return normalizeDirectResult({
     assetId: asset.id,
     name: asset.name,
@@ -325,6 +358,32 @@ function directResultToProcessed(asset, result) {
 
 function mergeResultToProcessed(result) {
   return normalizeDirectResult(result)
+}
+
+async function mapWithConcurrency(items, concurrency, iteratee) {
+  const list = Array.isArray(items) ? items : []
+  if (!list.length) return []
+
+  const workerCount = Math.max(1, Math.min(concurrency || 1, list.length))
+  const results = new Array(list.length)
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < list.length) {
+      const index = cursor
+      cursor += 1
+      results[index] = await iteratee(list[index], index)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
+function getAssetProcessingConcurrency(payload) {
+  if (payload.mode === 'preview-only') return 1
+  if (payload.assets.length <= 1) return 1
+  return Math.min(MAX_ASSET_CONCURRENCY, payload.assets.length)
 }
 
 function formatResultMessage(payload, processed, failed) {
@@ -428,7 +487,7 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'format') {
     return {
-      targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'BMP', 'GIF', 'ICO'], 'JPEG'),
+      targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF'], 'JPEG'),
       quality: clampNumber(config.quality, 1, 100, 90),
       keepTransparency: Boolean(config.keepTransparency),
       colorProfile: sanitizeText(config.colorProfile, 'sRGB'),
@@ -437,8 +496,8 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'resize') {
     return {
-      width: normalizeMeasure(config.width, 1920, sanitizeText(config.widthUnit, 'px')),
-      height: normalizeMeasure(config.height, 1080, sanitizeText(config.heightUnit, 'px')),
+      width: normalizeMeasure(config.width, 1920, inferMeasureUnit(config.width, 'px')),
+      height: normalizeMeasure(config.height, 1080, inferMeasureUnit(config.height, 'px')),
       lockAspectRatio: Boolean(config.lockAspectRatio),
     }
   }
@@ -447,7 +506,7 @@ function normalizeRunConfig(toolId, config = {}) {
     const normalizedPosition = String(config.position || '').replace('center-left', 'middle-left').replace('center-right', 'middle-right')
     return {
       type: pickOption(config.type, ['text', 'image'], 'text'),
-      text: sanitizeText(config.text, 'Precision Atelier'),
+      text: sanitizeText(config.text, '批量处理'),
       position: pickOption(normalizedPosition, ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'], 'center'),
       opacity: clampNumber(config.opacity, 0, 100, 60),
       fontSize: Math.max(1, toInteger(config.fontSize, 32)),
@@ -463,7 +522,7 @@ function normalizeRunConfig(toolId, config = {}) {
   if (toolId === 'corners') {
     return {
       radius: Math.max(0, toNumber(config.radius, 24)),
-      unit: pickOption(config.unit, ['px', '%'], 'px'),
+      unit: inferMeasureUnit(config.radius, 'px'),
       background: sanitizeText(config.background, '#ffffff'),
       keepTransparency: Boolean(config.keepTransparency),
     }
@@ -502,10 +561,8 @@ function normalizeRunConfig(toolId, config = {}) {
   }
 
   if (toolId === 'rotate') {
-    const normalizedDirection = config.direction === 'anticlockwise' ? 'counterclockwise' : config.direction
     return {
-      angle: toNumber(config.angle, 45),
-      direction: pickOption(normalizedDirection, ['clockwise', 'counterclockwise'], 'clockwise'),
+      angle: clampNumber(config.angle, -360, 360, 0),
       autoCrop: Boolean(config.autoCrop),
       keepAspectRatio: Boolean(config.keepAspectRatio),
       background: sanitizeText(config.background, '#ffffff'),
@@ -526,6 +583,7 @@ function normalizeRunConfig(toolId, config = {}) {
     return {
       pageSize: sanitizeText(config.pageSize, 'A4'),
       margin: sanitizeText(config.margin, 'narrow'),
+      background: sanitizeText(config.background, '#ffffff'),
     }
   }
 
@@ -685,7 +743,14 @@ function supportsLocalProcessing(toolId) {
 
 function getSharp() {
   try {
-    return require('sharp')
+    const sharp = require('sharp')
+    if (!getSharp.configured) {
+      const workerCount = Math.max(1, Math.floor(CPU_COUNT / MAX_ASSET_CONCURRENCY))
+      sharp.concurrency(workerCount)
+      sharp.cache({ memory: 128, items: Math.max(32, MAX_ASSET_CONCURRENCY * 16), files: 0 })
+      getSharp.configured = true
+    }
+    return sharp
   } catch {
     return null
   }
@@ -878,14 +943,14 @@ function buildTextWatermarkSvg(asset, config) {
 
   if (config.tiled) {
     const densityScale = 100 / Math.max(20, config.density || 100)
-    const stepX = Math.max(renderFontSize * Math.max(String(config.text || '').length, 4) * 0.9 * densityScale, renderFontSize * 2.4)
-    const stepY = Math.max(renderFontSize * 2.8 * densityScale, renderFontSize * 1.6)
-    const rows = Math.max(2, Math.ceil(height / stepY) + 1)
-    const cols = Math.max(2, Math.ceil(width / stepX) + 1)
+    const stepX = Math.max(renderFontSize * Math.max(String(config.text || '').length, 4) * 0.72 * densityScale, renderFontSize * 1.6)
+    const stepY = Math.max(renderFontSize * 1.65 * densityScale, renderFontSize * 1.15)
+    const rows = Math.max(2, Math.ceil(height / stepY) + 2)
+    const cols = Math.max(2, Math.ceil(width / stepX) + 2)
     const content = Array.from({ length: rows }).map((_, rowIndex) => {
-      const yOffset = Math.round(renderFontSize * 1.4 + rowIndex * stepY)
+      const yOffset = Math.round(renderFontSize * 1.15 + rowIndex * stepY)
       return Array.from({ length: cols }).map((__, colIndex) => {
-        const xOffset = Math.round(renderFontSize * 0.6 + colIndex * stepX + (rowIndex % 2 ? stepX / 2 : 0))
+        const xOffset = Math.round(renderFontSize * 0.45 + colIndex * stepX)
         return `<text x="${xOffset}" y="${yOffset}" font-size="${renderFontSize}" fill="${color}" transform="rotate(${config.rotation} ${xOffset} ${yOffset})">${text}</text>`
       }).join('')
     }).join('')
@@ -900,10 +965,12 @@ function buildTextWatermarkSvg(asset, config) {
     `)
   }
 
-  const x = Math.round(width / 2)
-  const y = Math.round(height / 2)
+  const textBoxWidth = Math.max(renderFontSize * Math.max(String(config.text || '').length, 2) * 0.72, renderFontSize * 2)
+  const textBoxHeight = Math.max(renderFontSize * 1.8, renderFontSize + 12)
+  const x = Math.round(textBoxWidth / 2)
+  const y = Math.round(textBoxHeight / 2)
   return Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(textBoxWidth)}" height="${Math.ceil(textBoxHeight)}">
       <style>
         text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
       </style>
@@ -914,14 +981,23 @@ function buildTextWatermarkSvg(asset, config) {
 
 async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const imagePath = sanitizeText(config.imagePath)
-  if (!imagePath || !fs.existsSync(imagePath)) {
+  if (!imagePath) {
+    throw new Error('图片水印文件不存在')
+  }
+
+  const isDataUrl = imagePath.startsWith('data:image/')
+  const input = isDataUrl
+    ? Buffer.from(imagePath.slice(imagePath.indexOf(',') + 1), 'base64')
+    : imagePath
+
+  if (!isDataUrl && !fs.existsSync(imagePath)) {
     throw new Error('图片水印文件不存在')
   }
 
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
-  return sharpLib(imagePath)
+  return sharpLib(input)
     .rotate(config.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
@@ -978,31 +1054,52 @@ function resolvePathForReveal(targetPath) {
 }
 
 async function revealPath(targetPath) {
-  const resolved = resolvePathForReveal(targetPath)
+  const normalizedTarget = path.normalize(sanitizeText(targetPath))
+  const resolved = resolvePathForReveal(normalizedTarget)
   if (!resolved) return false
   try {
-    await shell.openPath(resolved)
-    return true
+    if (typeof shell.showItemInFolder === 'function' && normalizedTarget && fs.existsSync(normalizedTarget) && !fs.statSync(normalizedTarget).isDirectory()) {
+      shell.showItemInFolder(normalizedTarget)
+      return true
+    }
+    const directoryEntry = path.join(resolved, '.')
+    if (typeof shell.showItemInFolder === 'function' && fs.existsSync(resolved)) {
+      shell.showItemInFolder(directoryEntry)
+      return true
+    }
+    const error = await shell.openPath(resolved)
+    return !error
   } catch {
     return false
   }
 }
 
+function normalizeFsPath(value, fallback = '') {
+  const text = sanitizeText(value, fallback)
+  if (!text) return ''
+  return path.normalize(text.replaceAll('/', path.sep))
+}
+
 function replaceOriginalWithSaved(item = {}) {
-  const sourcePath = sanitizeText(item.savedOutputPath || item.outputPath)
-  const targetPath = sanitizeText(item.sourcePath)
+  const sourcePath = normalizeFsPath(item.savedOutputPath || item.outputPath)
+  const targetPath = normalizeFsPath(item.sourcePath)
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     throw new Error('处理结果不存在，无法替换原图')
   }
-  if (!targetPath || !fs.existsSync(targetPath)) {
+  if (!targetPath) {
     throw new Error('原图不存在，无法替换')
   }
+  ensureDirectory(path.dirname(targetPath))
   fs.copyFileSync(sourcePath, targetPath)
+  if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
+    fs.unlinkSync(sourcePath)
+  }
   return {
     assetId: item.assetId,
     name: item.name,
-    outputPath: targetPath,
-    savedOutputPath: sourcePath,
+    outputPath: '',
+    savedOutputPath: '',
+    sourcePath: targetPath,
   }
 }
 
@@ -1080,8 +1177,7 @@ function mapFlipOutputFormat(asset, config) {
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
-  const angle = config.direction === 'counterclockwise' ? -config.angle : config.angle
-  let transformed = createTransformer(sharpLib, asset).rotate(angle, { background: getRotateBackground(config.background) })
+  let transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: getRotateBackground(config.background) })
 
   if (config.keepAspectRatio && asset.width && asset.height) {
     transformed = transformed.resize({ width: asset.width, height: asset.height, fit: 'contain', background: getRotateBackground(config.background) })
@@ -1198,6 +1294,13 @@ function getPdfMarginValue(margin, pageWidth) {
   return Math.round(pageWidth * 0.04)
 }
 
+function getPdfMarginValueResolved(margin, pageWidth) {
+  if (margin === 'none') return 0
+  if (margin === 'wide') return Math.round(pageWidth * 0.08)
+  if (margin === 'normal') return Math.round(pageWidth * 0.06)
+  return Math.round(pageWidth * 0.04)
+}
+
 async function writeMergeImageAsset(sharpLib, payload) {
   const format = 'png'
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
@@ -1253,6 +1356,7 @@ async function writeMergePdfAsset(payload) {
   if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
+  const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
@@ -1265,7 +1369,14 @@ async function writeMergePdfAsset(payload) {
       ? [embedded.width, embedded.height]
       : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
     const page = pdf.addPage(pageSize)
-    const margin = getPdfMarginValue(payload.config.margin, pageSize[0])
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageSize[0],
+      height: pageSize[1],
+      color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+    })
+    const margin = getPdfMarginValueResolved(payload.config.margin, pageSize[0])
     const drawableWidth = pageSize[0] - margin * 2
     const drawableHeight = pageSize[1] - margin * 2
     const scale = Math.min(drawableWidth / embedded.width, drawableHeight / embedded.height)
@@ -1312,7 +1423,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   return outputPath
 }
 
-async function executeSingleAssetTool(payload, sharpLib) {
+async function executeSingleAssetToolLegacy(payload, sharpLib) {
   const processed = []
   const failed = []
 
@@ -1355,6 +1466,55 @@ async function executeSingleAssetTool(payload, sharpLib) {
 
 function isMergeTool(toolId) {
   return ['merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
+}
+
+async function executeSingleAssetTool(payload, sharpLib) {
+  const outcomes = await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), async (asset) => {
+    if (!isProcessableAsset(asset)) {
+      return {
+        processed: null,
+        failed: { assetId: asset.id, name: asset.name, error: `鏆備笉鏀寔澶勭悊 ${asset.ext || 'unknown'} 鏍煎紡` },
+      }
+    }
+
+    try {
+      let result = null
+      if (payload.toolId === 'compression') result = await writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'format') result = await writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'resize') result = await writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'watermark') result = await writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'rotate') result = await writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'flip') result = await writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'corners') result = await writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'padding') result = await writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
+      if (payload.toolId === 'crop') result = await writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
+      if (payload.toolId === 'manual-crop') {
+        const manualArea = payload.config.cropAreas?.[asset.id]
+        const manualConfig = {
+          ratio: payload.config.ratioValue || payload.config.ratio,
+          area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
+        }
+        result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
+      }
+
+      return {
+        processed: await (payload.mode === 'direct'
+          ? directResultToProcessed(asset, result, sharpLib)
+          : stageResultToProcessed(asset, result, payload, sharpLib)),
+        failed: null,
+      }
+    } catch (error) {
+      return {
+        processed: null,
+        failed: { assetId: asset.id, name: asset.name, error: error?.message || '澶勭悊澶辫触' },
+      }
+    }
+  })
+
+  return {
+    processed: outcomes.map((item) => item?.processed).filter(Boolean),
+    failed: outcomes.map((item) => item?.failed).filter(Boolean),
+  }
 }
 
 function saveAppSettings(settings = {}) {
@@ -1409,7 +1569,7 @@ async function executeSaveFlow(payload) {
 
   for (const item of payload.stagedItems) {
     try {
-      const saved = savePreviewResult(payload.destinationPath, payload.runFolderName, item)
+      const saved = await savePreviewResult(payload.destinationPath, payload.runFolderName, item)
       processed.push(normalizeDirectResult({
         assetId: item.assetId,
         name: item.name,
@@ -1472,8 +1632,8 @@ function createProcessedOutput(asset, result, payload) {
     : directResultToProcessed(asset, result)
 }
 
-function createMergeOutput(outputPath, payload) {
-  const meta = readOutputMeta(outputPath)
+async function createMergeOutput(outputPath, payload) {
+  const meta = await readOutputMeta(outputPath)
   return mergeResultToProcessed({
     assetId: payload.assets[0]?.id || payload.toolId,
     name: path.basename(outputPath),
@@ -1578,6 +1738,30 @@ async function executeLocalTool(payload) {
 }
 
 const toolsApi = {
+  showOpenDialog(options = {}) {
+    const hostApi = getHostApi()
+    if (typeof hostApi.showOpenDialog !== 'function') return undefined
+    return hostApi.showOpenDialog(options)
+  },
+
+  async showMainWindow() {
+    const hostApi = getHostApi()
+    if (typeof hostApi.showMainWindow !== 'function') return false
+    return hostApi.showMainWindow()
+  },
+
+  async revealPath(targetPath) {
+    return revealPath(targetPath)
+  },
+
+  async replaceOriginals(items = []) {
+    return replaceOriginals(items)
+  },
+
+  resolveInputPaths(items = []) {
+    return resolveInputPaths(items)
+  },
+
   getEnvironment() {
     const hostApi = getHostApi()
     return {
