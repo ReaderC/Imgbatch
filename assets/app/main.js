@@ -930,10 +930,6 @@ function canGenerateSingleAssetPreview(toolId) {
   return shouldOpenRealPreview(toolId)
 }
 
-function getPreviewResultAsset(assetId, toolId, fallbackAsset, result) {
-  return getPreviewedAssetFromResult(assetId, toolId, fallbackAsset, result)
-}
-
 function isAlreadyPreviewed(toolId, asset) {
   return !!getPreviewReuseAsset(toolId, asset)
 }
@@ -1041,20 +1037,8 @@ function getPreviewToolState(toolId, asset) {
   return canOpenExistingPreview(toolId, asset)
 }
 
-function shouldPreviewWithProcessing(toolId) {
-  return canPreviewTool(toolId)
-}
-
-function getPreviewExistingAsset(toolId, asset) {
-  return getPreviewToolState(toolId, asset) ? asset : null
-}
-
 async function executePreview(tool, asset) {
   await previewToolAsset(tool, asset)
-}
-
-function getPreviewActionTool(state) {
-  return TOOL_MAP[state.activeTool]
 }
 
 function canOpenToolPreview(toolId, asset) {
@@ -1088,10 +1072,6 @@ async function runPreviewFlow(tool, asset) {
     return
   }
   await executePreview(tool, asset)
-}
-
-function getPreviewableAsset(toolId, asset) {
-  return canPreviewTool(toolId) ? asset : null
 }
 
 function shouldShowPreviewNotification(toolId) {
@@ -1216,10 +1196,6 @@ async function performAssetPreview(asset) {
   const tool = getPreviewFlowTool()
   if (!tool || !asset) return
   await previewAssetWithTool(tool, asset)
-}
-
-function shouldNotifyPreviewSuccess(toolId) {
-  return isDirectPreviewTool(toolId)
 }
 
 function createToolPreviewFailure(error, tool) {
@@ -1371,10 +1347,6 @@ function getSelectedTool() {
   return resolveToolById(getState().activeTool)
 }
 
-function getPreviewableAssetCount(assets) {
-  return assets.length
-}
-
 function getConfiguredToolSummary(tool) {
   return describeToolConfig(tool.id, getState().configs[tool.id])
 }
@@ -1428,10 +1400,6 @@ function isPreviewSaved(asset) {
   return asset?.previewStatus === 'saved'
 }
 
-function shouldOpenSettingsTool(toolId) {
-  return toolId === SETTINGS_TOOL_ID
-}
-
 function getSettingsHint() {
   return `默认保存路径：${getDefaultSavePathLabel()}`
 }
@@ -1440,30 +1408,12 @@ function notifySettingsHint() {
   notify({ type: 'info', message: getSettingsHint() })
 }
 
-function maybeNotifySettingsHint(action) {
-  if (action === 'open-settings') notifySettingsHint()
-}
-
 function getBulkSaveMessage() {
   return canSaveAllCurrentResults() ? '可批量保存当前预览结果。' : '当前没有可批量保存的预览结果。'
 }
 
-function maybeNotifyBulkSaveState() {
-  if (!canSaveAllCurrentResults()) {
-    notify({ type: 'info', message: getBulkSaveMessage() })
-  }
-}
-
-function createNoopPromise() {
-  return Promise.resolve()
-}
-
 function ensurePreviewableTool(tool) {
   return !!tool && isPreviewableTool(tool.id)
-}
-
-function getToolProcessingCount(tool) {
-  return getToolAssets(tool).length
 }
 
 function getSavePathSummary() {
