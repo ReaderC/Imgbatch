@@ -3489,6 +3489,19 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'confirm-native-color') {
+      const field = target.closest('.color-field')
+      const nativeInput = field?.querySelector('.color-field__native')
+      const normalized = normalizeColorInputValue(nativeInput?.value || '')
+      if (!normalized) {
+        notify({ type: 'info', message: '请先选择有效颜色。' })
+        return
+      }
+      updateColorPreview(target.dataset.toolId, target.dataset.key, normalized)
+      syncColorTextInput(nativeInput)
+      return
+    }
+
     if (action === 'replace-asset-original') {
       await replaceAssetOriginal(target.dataset.assetId)
       return

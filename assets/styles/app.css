@@ -2007,6 +2007,7 @@ body {
   min-width: 0;
   min-height: 0;
   height: 100%;
+  background: #F0F4F8;
 }
 
 .workspace:not(.workspace--result) .panel {
@@ -2016,6 +2017,8 @@ body {
 .workspace:not(.workspace--result) .queue {
   padding: 14px 14px 12px;
   gap: 10px;
+  border-left: 0 !important;
+  box-shadow: none !important;
 }
 
 .workspace:not(.workspace--result) .panel-hero {
@@ -2023,7 +2026,28 @@ body {
   background: transparent;
   box-shadow: none;
   border-radius: 0;
-  border-bottom: 1px solid rgba(91, 94, 114, 0.1);
+  border-bottom: 0;
+}
+
+.workspace:not(.workspace--result) .queue,
+.workspace:not(.workspace--result) .queue-footer {
+  background: #F0F4F8 !important;
+}
+
+.workspace:not(.workspace--result) .queue {
+  border-left: 0 !important;
+  border-inline-start: 0 !important;
+  box-shadow: none !important;
+}
+
+.workspace:not(.workspace--result) .queue-footer {
+  border-top: 0 !important;
+  box-shadow: none !important;
+}
+
+.color-field__confirm {
+  min-width: 58px;
+  padding-inline: 12px;
 }
 
 .workspace:not(.workspace--result) .settings-section {
@@ -4575,20 +4599,21 @@ body {
 }
 
 .manual-handle {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   z-index: 4;
   touch-action: none;
+  box-shadow: 0 2px 8px rgba(73, 86, 180, 0.18);
 }
 
-.manual-handle--tl { top: -8px; left: -8px; }
-.manual-handle--tr { top: -8px; right: -8px; }
-.manual-handle--bl { bottom: -8px; left: -8px; }
-.manual-handle--br { bottom: -8px; right: -8px; }
-.manual-handle--tm { top: -8px; left: calc(50% - 8px); }
-.manual-handle--bm { bottom: -8px; left: calc(50% - 8px); }
-.manual-handle--ml { left: -8px; top: calc(50% - 8px); }
-.manual-handle--mr { right: -8px; top: calc(50% - 8px); }
+.manual-handle--tl { top: -9px; left: -9px; }
+.manual-handle--tr { top: -9px; right: -9px; }
+.manual-handle--bl { bottom: -9px; left: -9px; }
+.manual-handle--br { bottom: -9px; right: -9px; }
+.manual-handle--tm { top: -9px; left: calc(50% - 9px); }
+.manual-handle--bm { bottom: -9px; left: calc(50% - 9px); }
+.manual-handle--ml { left: -9px; top: calc(50% - 9px); }
+.manual-handle--mr { right: -9px; top: calc(50% - 9px); }
 
 /* Final manual-crop / compact-queue overrides */
 .manual-shell {

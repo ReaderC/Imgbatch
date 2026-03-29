@@ -454,6 +454,14 @@ function renderColorField({ label, toolId, key, value = '#FFFFFF', disabled = fa
           data-key="${key}"
           ${disabled ? 'disabled' : ''}
         />
+        <button
+          type="button"
+          class="secondary-button secondary-button--compact color-field__confirm"
+          data-action="confirm-native-color"
+          data-tool-id="${toolId}"
+          data-key="${key}"
+          ${disabled ? 'disabled' : ''}
+        >确定</button>
       </span>
     </label>
   `
