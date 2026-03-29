@@ -2302,22 +2302,6 @@ function maybeNotifySettingsSaved(settings) {
   notify({ type: 'success', message: getSettingsSavedMessage(settings) })
 }
 
-function getStateAssets() {
-  return getState().assets
-}
-
-function getStateActiveTool() {
-  return getState().activeTool
-}
-
-function getStateDestinationPath() {
-  return getState().destinationPath
-}
-
-function getStateConfigs() {
-  return getState().configs
-}
-
 function shouldSaveAllResults() {
   return hasPreviewableResults()
 }
@@ -2328,10 +2312,6 @@ function maybeNotifyBulkSaveUnavailable() {
     return true
   }
   return false
-}
-
-function getSettingsDefaultValue() {
-  return getSettingsPromptDefaultValue()
 }
 
 function shouldUseWindowPrompt() {
@@ -2419,26 +2399,6 @@ function maybeHandleClickAction(action, target, event) {
   return shouldProcessClickAction(action, target, event)
 }
 
-function getSettingsResultLabel() {
-  return getSettingsPreviewText()
-}
-
-function maybeNotifySettingsResultLabel() {
-  notify({ type: 'info', message: getSettingsResultLabel() })
-}
-
-function normalizeImportedAssets(assets) {
-  return assets
-}
-
-function getSafeImportedAssets(assets) {
-  return normalizeImportedAssets(assets)
-}
-
-function appendSafeImportedAssets(assets) {
-  appendImportedAssets(getSafeImportedAssets(assets))
-}
-
 function shouldDisplayPreviewDetails(asset) {
   return shouldUsePreviewSummary(asset)
 }
@@ -2449,14 +2409,6 @@ function maybeDisplayPreviewDetails(asset) {
     return true
   }
   return false
-}
-
-function getToolExecutionPlaceholder(tool, assets) {
-  return getToolRunnerMessage(tool, assets)
-}
-
-function maybeNotifyToolPlaceholder(tool, assets) {
-  notify({ type: 'info', message: getToolExecutionPlaceholder(tool, assets) })
 }
 
 function shouldSkipPreviewSaveTool(tool) {
@@ -2475,7 +2427,7 @@ function getDefaultSavePathState() {
 }
 
 function shouldUseDefaultSavePathState() {
-  return !!getDefaultSavePathState()
+  return !!getSettingsDefaultSavePath()
 }
 
 function getSettingsStatusText() {
@@ -2575,11 +2527,6 @@ function maybeHandleSaveAllAction() {
 
 function getCurrentActiveTool() {
   return getSelectedTool()
-}
-
-function getCurrentToolAssets() {
-  const tool = getCurrentActiveTool()
-  return tool ? getToolAssets(tool) : []
 }
 
 function maybeHandleCurrentToolExecution() {
@@ -3031,10 +2978,6 @@ function shouldShowPreviewSavePath(tool) {
 
 function maybeShowPreviewSavePath(tool) {
   if (shouldShowPreviewSavePath(tool)) maybeNotifyPreviewSavePath()
-}
-
-function getAllPreviewSaveItems() {
-  return getActionableSaveItems()
 }
 
 function routeAssetPreview(asset) {

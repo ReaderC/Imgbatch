@@ -528,11 +528,6 @@ function getMeasureInputValue(value, fallback = '') {
   return stringValue
 }
 
-function getMeasureHint(value, fallbackUnit = 'px') {
-  const unit = String(value ?? '').trim().endsWith('%') ? '%' : fallbackUnit
-  return `填写纯数字默认按 px 处理，输入 % 使用百分比，当前单位 ${unit}`
-}
-
 function getMeasureUnit(value, fallbackUnit = 'px') {
   const stringValue = String(value ?? '').trim()
   if (stringValue.endsWith('%')) return '%'
