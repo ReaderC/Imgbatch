@@ -1882,19 +1882,8 @@ function maybeHandleSaveAllAction() {
   return true
 }
 
-function getCurrentActiveTool() {
-  return getSelectedTool()
-}
-
-function maybeHandleCurrentToolExecution() {
-  const tool = getCurrentActiveTool()
-  if (!tool) return true
-  if (maybeHandleUtilityTool(tool)) return true
-  return false
-}
-
 function getResultInfoMessage(result) {
-  return result?.message || '操作已完成。'
+  return result?.message || '??????'
 }
 
 function notifyResultInfo(result) {
@@ -1911,13 +1900,13 @@ function shouldShowPreviewPath(asset) {
 
 function maybeNotifyPreviewPath(asset) {
   if (shouldShowPreviewPath(asset)) {
-    notify({ type: 'info', message: `预览文件：${getPreviewOutputPath(asset)}` })
+    notify({ type: 'info', message: `?????${getPreviewOutputPath(asset)}` })
   }
 }
 
 function maybeNotifySaveReadyState() {
   if (shouldShowPendingSaveItemsCount()) {
-    notify({ type: 'info', message: `当前有 ${getPendingSaveItemsCount()} 项结果可保存。` })
+    notify({ type: 'info', message: `??? ${getPendingSaveItemsCount()} ???????` })
   }
 }
 
@@ -1979,7 +1968,7 @@ function shouldShowSettingsChangeNotice() {
 
 function maybeShowSettingsChangeNotice() {
   if (shouldShowSettingsChangeNotice()) {
-    notify({ type: 'info', message: `默认保存路径已更新为：${getSettingsDefaultSavePath()}` })
+    notify({ type: 'info', message: `???????????${getSettingsDefaultSavePath()}` })
   }
 }
 
@@ -1994,12 +1983,8 @@ function normalizeSettingsBootstrap(settings) {
   return settings || { defaultSavePath: '' }
 }
 
-function getCurrentSavePathHint() {
-  return getSavePathSummary()
-}
-
 function maybeNotifyCurrentSavePathHint() {
-  notify({ type: 'info', message: `保存路径：${getCurrentSavePathHint()}` })
+  notify({ type: 'info', message: `?????${getSavePathSummary()}` })
 }
 
 function shouldShowCurrentSavePathHint(tool) {
