@@ -17,11 +17,13 @@ const DRAG_CONTEXT = {
   rotateDial: null,
   manualCrop: null,
 }
+let resultMarqueeFrame = 0
 
 document.body.append(fileInput, folderInput, watermarkFileInput)
 subscribe(render)
 render(getState())
 attachGlobalEvents()
+window.addEventListener('resize', queueResultMarqueeSync)
 bootstrapSettings().finally(() => {
   bootstrapLaunchInputs().finally(() => {
     attachLaunchSubscription()
@@ -329,6 +331,22 @@ function syncColorMagnifierInput(target) {
   const normalized = normalizeColorInputValue(target.value)
   if (!normalized) return
   updateColorPickerPreview(normalized)
+}
+
+function syncResultMarquees() {
+  document.querySelectorAll('.result-strip__value, .result-strip__meta').forEach((node) => {
+    const marquee = node.querySelector('.result-strip__marquee')
+    if (!marquee) return
+    node.classList.toggle('is-marquee', marquee.scrollWidth > node.clientWidth + 1)
+  })
+}
+
+function queueResultMarqueeSync() {
+  if (resultMarqueeFrame) cancelAnimationFrame(resultMarqueeFrame)
+  resultMarqueeFrame = requestAnimationFrame(() => {
+    resultMarqueeFrame = 0
+    syncResultMarquees()
+  })
 }
 
 function openColorPickerZoom(target) {
@@ -1432,10 +1450,12 @@ function maybeHandleConfigActions(action, target) {
   if (action === 'set-config' && target.dataset.toolId === 'crop' && target.dataset.key === 'ratio') {
     const ratio = parseValue(target.dataset.value)
     updateConfig('crop', { ratio, useCustomRatio: ratio === 'Custom' })
+    closeConfigSelect(target)
     return true
   }
   if (shouldSetConfigAction(action)) {
     updateConfig(target.dataset.toolId, { [target.dataset.key]: parseValue(target.dataset.value) })
+    closeConfigSelect(target)
     return true
   }
   if (shouldApplyResizePresetAction(action)) {
@@ -1453,6 +1473,32 @@ function maybeHandleConfigActions(action, target) {
     return true
   }
   return false
+}
+
+function closeConfigSelect(target) {
+  const shell = target?.closest?.('.select-shell')
+  if (!shell) return
+  shell.classList.remove('is-open')
+  const trigger = shell.querySelector('.select-shell__value')
+  if (trigger) trigger.setAttribute('aria-expanded', 'false')
+}
+
+function closeAllConfigSelects(exceptShell = null) {
+  document.querySelectorAll('.select-shell.is-open').forEach((shell) => {
+    if (exceptShell && shell === exceptShell) return
+    shell.classList.remove('is-open')
+    const trigger = shell.querySelector('.select-shell__value')
+    if (trigger) trigger.setAttribute('aria-expanded', 'false')
+  })
+}
+
+function toggleConfigSelect(target) {
+  const shell = target?.closest?.('.select-shell')
+  if (!shell) return
+  const willOpen = !shell.classList.contains('is-open')
+  closeAllConfigSelects(shell)
+  shell.classList.toggle('is-open', willOpen)
+  target.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
 function maybeHandleManualCropActions(action) {
@@ -2786,6 +2832,7 @@ function render(state) {
   app.innerHTML = renderAppShell(state) + renderNotifications(state.notifications)
   injectResultToolbar()
   restoreUiSnapshot(snapshot)
+  queueResultMarqueeSync()
 }
 
 function attachLaunchSubscription() {
@@ -2936,6 +2983,10 @@ function attachGlobalEvents() {
       return
     }
 
+    if (!event.target.closest('.select-shell')) {
+      closeAllConfigSelects()
+    }
+
     const target = event.target.closest('[data-action]')
     if (!target) return
 
@@ -2969,6 +3020,11 @@ function attachGlobalEvents() {
 
     if (action === 'toggle-sidebar') {
       setState({ sidebarCollapsed: !getState().sidebarCollapsed })
+      return
+    }
+
+    if (action === 'toggle-config-select') {
+      toggleConfigSelect(target)
       return
     }
 
@@ -3076,11 +3132,13 @@ function attachGlobalEvents() {
     if (action === 'set-config' && target.dataset.toolId === 'crop' && target.dataset.key === 'ratio') {
       const ratio = parseValue(target.dataset.value)
       updateConfig('crop', { ratio, useCustomRatio: ratio === 'Custom' })
+      closeConfigSelect(target)
       return
     }
 
     if (action === 'set-config') {
       updateConfig(target.dataset.toolId, { [target.dataset.key]: parseValue(target.dataset.value) })
+      closeConfigSelect(target)
       return
     }
 

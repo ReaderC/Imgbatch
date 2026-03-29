@@ -104,10 +104,6 @@ function renderPrimaryAction(asset, tool) {
   }
 
   const previewStatus = getToolPreviewStatus(asset, tool.id)
-  if (previewStatus === 'staged' && asset.stagedOutputPath) {
-    return `<button class="queue-item__action" data-action="save-asset-result" data-asset-id="${asset.id}">保存</button>`
-  }
-
   if (previewStatus === 'saved') {
     return `
       <div class="queue-item__action-stack">
@@ -128,7 +124,7 @@ function renderResultMeta(asset, tool) {
     return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">预览结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
   }
   if (previewStatus === 'staged') {
-    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">待保存结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
+    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">处理结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
   }
   if (previewStatus === 'saved') {
     return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">已保存结果：${formatBytes(asset.stagedSizeBytes || asset.sizeBytes)} · ${asset.stagedWidth || asset.width || '—'} × ${asset.stagedHeight || asset.height || '—'}</span></div>`
@@ -154,8 +150,8 @@ function getToolSummary(toolId, state, asset) {
   if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} · ${config.width}×${config.height}`
   if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
   if (toolId === 'flip') {
-    const dirs = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
-    return dirs.length ? `${dirs.join(' + ')}翻转` : '未翻转'
+    const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
+    return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `页面 ${config.pageSize} · 边距 ${config.margin}`
   if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px`

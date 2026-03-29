@@ -381,20 +381,31 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', place
 }
 
 function renderSelectField({ label, toolId, key, value, options }) {
+  const normalizedOptions = options.map((option) => Array.isArray(option) ? option : [option, option])
+  const activeOption = normalizedOptions.find((option) => option[0] === value) || normalizedOptions[0] || ['', '']
   return `
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
         <span class="setting-row__label">${label}</span>
       </span>
-      <span class="select-shell">
-        <select class="text-input select-input" data-action="set-config-select" data-tool-id="${toolId}" data-key="${key}">
-          ${options.map((option) => {
-            const tuple = Array.isArray(option) ? option : [option, option]
-            return `<option value="${escapeAttribute(tuple[0])}" ${tuple[0] === value ? 'selected' : ''}>${escapeAttribute(tuple[1])}</option>`
-          }).join('')}
-        </select>
-        <span class="material-symbols-outlined select-shell__icon">expand_more</span>
-      </span>
+      <div class="select-shell">
+        <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false">
+          <span class="select-shell__text">${escapeAttribute(activeOption[1])}</span>
+          <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+        </button>
+        <div class="select-shell__menu" role="listbox">
+          ${normalizedOptions.map((option) => `
+            <button
+              type="button"
+              class="select-shell__option ${option[0] === value ? 'is-active' : ''}"
+              data-action="set-config"
+              data-tool-id="${toolId}"
+              data-key="${key}"
+              data-value="${escapeAttribute(option[0])}"
+            >${escapeAttribute(option[1])}</button>
+          `).join('')}
+        </div>
+      </div>
     </label>
   `
 }
