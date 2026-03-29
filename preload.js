@@ -1119,49 +1119,54 @@ function getWatermarkRenderScale(asset) {
 }
 
 function buildTextWatermarkSvg(asset, config) {
-  const width = Math.max(asset.width || 1920, config.fontSize * 4)
-  const height = Math.max(asset.height || 1080, config.fontSize * 3)
   const color = normalizeHexColor(config.color, config.opacity / 100)
   const text = escapeSvgText(config.text)
   const renderScale = getWatermarkRenderScale(asset)
   const renderFontSize = Math.max(12, Math.round(config.fontSize * renderScale))
-
-  if (config.tiled) {
-    const densityScale = 100 / Math.max(20, config.density || 100)
-    const stepX = Math.max(renderFontSize * Math.max(String(config.text || '').length, 4) * 0.72 * densityScale, renderFontSize * 1.6)
-    const stepY = Math.max(renderFontSize * 1.65 * densityScale, renderFontSize * 1.15)
-    const rows = Math.max(2, Math.ceil(height / stepY) + 2)
-    const cols = Math.max(2, Math.ceil(width / stepX) + 2)
-    const content = Array.from({ length: rows }).map((_, rowIndex) => {
-      const yOffset = Math.round(renderFontSize * 1.15 + rowIndex * stepY)
-      return Array.from({ length: cols }).map((__, colIndex) => {
-        const xOffset = Math.round(renderFontSize * 0.45 + colIndex * stepX)
-        return `<text x="${xOffset}" y="${yOffset}" font-size="${renderFontSize}" fill="${color}" transform="rotate(${config.rotation} ${xOffset} ${yOffset})">${text}</text>`
-      }).join('')
-    }).join('')
-
-    return Buffer.from(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        <style>
-          text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
-        </style>
-        ${content}
-      </svg>
-    `)
-  }
-
-  const textBoxWidth = Math.max(renderFontSize * Math.max(String(config.text || '').length, 2) * 0.72, renderFontSize * 2)
-  const textBoxHeight = Math.max(renderFontSize * 1.8, renderFontSize + 12)
-  const x = Math.round(textBoxWidth / 2)
-  const y = Math.round(textBoxHeight / 2)
+  const textLength = Math.max(String(config.text || '').length, 2)
+  const textBoxWidth = Math.max(renderFontSize * textLength * 0.82, renderFontSize * 2.2)
+  const textBoxHeight = Math.max(renderFontSize * 1.9, renderFontSize + 14)
+  const rotation = Math.abs(toNumber(config.rotation, 0)) % 180
+  const radians = rotation * (Math.PI / 180)
+  const rotatedWidth = Math.abs(textBoxWidth * Math.cos(radians)) + Math.abs(textBoxHeight * Math.sin(radians))
+  const rotatedHeight = Math.abs(textBoxWidth * Math.sin(radians)) + Math.abs(textBoxHeight * Math.cos(radians))
+  const padding = Math.max(18, Math.round(renderFontSize * 1.1))
+  const width = Math.ceil(rotatedWidth + padding * 2)
+  const height = Math.ceil(rotatedHeight + padding * 2)
+  const x = Math.round(width / 2)
+  const y = Math.round(height / 2)
   return Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(textBoxWidth)}" height="${Math.ceil(textBoxHeight)}">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <style>
         text { font-family: Arial, Helvetica, sans-serif; font-weight: 600; }
       </style>
       <text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="${renderFontSize}" fill="${color}" transform="rotate(${config.rotation} ${x} ${y})">${text}</text>
     </svg>
   `)
+}
+
+async function createTiledWatermarkBuffer(sharpLib, input, density) {
+  const meta = await sharpLib(input).metadata()
+  const width = Math.max(1, meta.width || 1)
+  const height = Math.max(1, meta.height || 1)
+  const densityScale = 100 / Math.max(20, density || 100)
+  const gap = Math.max(12, Math.round(Math.max(width, height) * 0.28 * densityScale))
+  const canvasWidth = width + gap
+  const canvasHeight = height + gap
+  const left = Math.max(0, Math.round((canvasWidth - width) / 2))
+  const top = Math.max(0, Math.round((canvasHeight - height) / 2))
+
+  return sharpLib({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input, left, top }])
+    .png()
+    .toBuffer()
 }
 
 async function createImageWatermarkBuffer(sharpLib, asset, config) {
@@ -1191,11 +1196,12 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
 }
 
 async function buildWatermarkComposite(sharpLib, asset, config) {
-  const input = config.type === 'image'
+  let input = config.type === 'image'
     ? await createImageWatermarkBuffer(sharpLib, asset, config)
     : buildTextWatermarkSvg(asset, config)
 
   if (config.tiled) {
+    input = await createTiledWatermarkBuffer(sharpLib, input, config.density)
     return {
       input,
       tile: true,

@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
 import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -101,6 +101,14 @@ function openPresetDialog(toolId, mode = 'apply') {
 
 function closePresetDialog() {
   setPresetDialog(null)
+}
+
+function openConfirmDialog(dialog) {
+  setConfirmDialog({ visible: true, ...dialog })
+}
+
+function closeConfirmDialog() {
+  setConfirmDialog(null)
 }
 
 function updatePresetDialog(patch) {
@@ -276,7 +284,6 @@ async function removeSelectedPreset() {
   const presets = getState().presetsByTool?.[dialog.toolId] || []
   const preset = presets.find((item) => item.id === dialog.selectedPresetId)
   if (!preset) return
-  if (!window.confirm(`确认删除预设“${preset.name}”吗？`)) return
   const next = normalizeLoadedPresets(await deletePreset(dialog.toolId, dialog.selectedPresetId))
   setToolPresets(dialog.toolId, next)
   const defaultPresetByTool = { ...getDefaultPresetMap() }
@@ -287,6 +294,21 @@ async function removeSelectedPreset() {
   }
   updatePresetDialog({ selectedPresetId: next[0]?.id || '' })
   notify({ type: 'success', message: `已删除预设：${preset.name}` })
+}
+
+function confirmDeleteSelectedPreset() {
+  const dialog = getState().presetDialog
+  if (!dialog?.toolId || !dialog.selectedPresetId) return
+  const presets = getState().presetsByTool?.[dialog.toolId] || []
+  const preset = presets.find((item) => item.id === dialog.selectedPresetId)
+  if (!preset) return
+  openConfirmDialog({
+    title: '删除预设',
+    subtitle: TOOL_MAP[dialog.toolId]?.label || dialog.toolId,
+    message: `确认删除预设“${preset.name}”吗？删除后不可恢复。`,
+    confirmLabel: '删除',
+    confirmAction: 'confirm-delete-selected-preset',
+  })
 }
 
 function isPreviewSaveTool(toolId) {
@@ -3495,6 +3517,15 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'close-confirm-dialog') {
+      const clickedInsideDialog = !!event.target.closest('.app-modal__dialog')
+      const clickedCloseIcon = !!event.target.closest('.app-modal__close')
+      const clickedCancelButton = !!target.closest('.app-modal__footer [data-action="close-confirm-dialog"]')
+      if (clickedInsideDialog && !clickedCloseIcon && !clickedCancelButton) return
+      closeConfirmDialog()
+      return
+    }
+
     if (action === 'select-preset') {
       updatePresetDialog({ selectedPresetId: target.dataset.presetId })
       return
@@ -3524,6 +3555,12 @@ function attachGlobalEvents() {
     }
 
     if (action === 'delete-selected-preset') {
+      confirmDeleteSelectedPreset()
+      return
+    }
+
+    if (action === 'confirm-delete-selected-preset') {
+      closeConfirmDialog()
       await removeSelectedPreset()
       return
     }

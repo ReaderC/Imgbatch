@@ -28,6 +28,7 @@ export function renderAppShell(state) {
           </div>
         `}
       ${renderPresetModal(state)}
+      ${renderConfirmModal(state.confirmDialog)}
       ${renderPreviewModal(state.previewModal)}
     </div>
   `
@@ -163,6 +164,29 @@ function renderPresetModal(state) {
             data-action="${dialog.mode === 'save' ? 'confirm-save-preset' : dialog.mode === 'rename' ? 'confirm-rename-preset' : 'confirm-apply-preset'}"
             ${dialog.mode === 'apply' && !dialog.selectedPresetId ? 'disabled' : ''}
           >${dialog.mode === 'save' ? '保存预设' : dialog.mode === 'rename' ? '保存名称' : '应用预设'}</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function renderConfirmModal(dialog) {
+  if (!dialog?.visible) return ''
+
+  return `
+    <div class="app-modal" data-action="close-confirm-dialog">
+      <div class="app-modal__dialog app-modal__dialog--preset">
+        <button class="app-modal__close" data-action="close-confirm-dialog" title="关闭">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <div class="app-modal__header">
+          <div class="app-modal__title">${escapeHtml(dialog.title || '请确认')}</div>
+          ${dialog.subtitle ? `<div class="app-modal__subtitle">${escapeHtml(dialog.subtitle)}</div>` : ''}
+        </div>
+        <div class="preset-empty">${escapeHtml(dialog.message || '')}</div>
+        <div class="app-modal__footer">
+          <button type="button" class="secondary-button" data-action="close-confirm-dialog">取消</button>
+          <button type="button" class="primary-button" data-action="${escapeHtml(dialog.confirmAction || '')}">${escapeHtml(dialog.confirmLabel || '确认')}</button>
         </div>
       </div>
     </div>

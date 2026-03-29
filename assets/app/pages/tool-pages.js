@@ -154,8 +154,8 @@ function renderFormatConfig(config) {
 function renderResizeConfig(config) {
   return renderSettingsSection(`
     ${renderFieldGrid(`
-      ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), hint: getMeasureHint(config.width, 'px') })}
-      ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), hint: getMeasureHint(config.height, 'px') })}
+      ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
+      ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
@@ -210,7 +210,7 @@ function renderWatermarkConfig(config) {
 function renderCornersConfig(config) {
   return renderSettingsSection(`
     ${renderFieldGrid(`
-      ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), hint: getMeasureHint(config.radius, 'px') })}
+      ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), unitMode: getMeasureUnit(config.radius, 'px') })}
     `)}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
@@ -356,15 +356,16 @@ function renderSegmented(toolId, key, activeValue, options) {
   `
 }
 
-function renderInputField({ label, toolId, key, type = 'text', value = '', placeholder = '', min, max, step, disabled = false, hint = '' }) {
+function renderInputField({ label, toolId, key, type = 'text', value = '', placeholder = '', min, max, step, disabled = false, hint = '', hintClass = '', unitMode = '' }) {
+  const hasUnitSwitch = unitMode === 'px' || unitMode === '%'
   return `
     <label class="setting-row setting-row--stack ${disabled ? 'is-disabled' : ''}">
       <span class="setting-row__header">
         <span class="setting-row__label">${label}</span>
       </span>
-      <span class="input-shell">
+      <span class="input-shell ${hasUnitSwitch ? 'input-shell--measure' : ''}">
         <input
-          class="text-input"
+          class="text-input ${hasUnitSwitch ? 'text-input--measure' : ''}"
           type="${type}"
           data-action="set-config-input"
           data-tool-id="${toolId}"
@@ -376,8 +377,14 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', place
           ${step !== undefined ? `step="${step}"` : ''}
           ${disabled ? 'disabled' : ''}
         />
+        ${hasUnitSwitch ? `
+          <span class="measure-unit-toggle" aria-hidden="true">
+            <span class="measure-unit-toggle__option ${unitMode === 'px' ? 'is-active' : ''}">px</span>
+            <span class="measure-unit-toggle__option ${unitMode === '%' ? 'is-active' : ''}">%</span>
+          </span>
+        ` : ''}
       </span>
-      ${hint ? `<span class="setting-row__hint">${escapeAttribute(hint)}</span>` : ''}
+      ${hint ? `<span class="setting-row__hint ${escapeAttribute(hintClass)}">${escapeAttribute(hint)}</span>` : ''}
     </label>
   `
 }
@@ -516,6 +523,12 @@ function getMeasureInputValue(value, fallback = '') {
 function getMeasureHint(value, fallbackUnit = 'px') {
   const unit = String(value ?? '').trim().endsWith('%') ? '%' : fallbackUnit
   return `填写纯数字默认按 px 处理，输入 % 使用百分比，当前单位 ${unit}`
+}
+
+function getMeasureUnit(value, fallbackUnit = 'px') {
+  const stringValue = String(value ?? '').trim()
+  if (stringValue.endsWith('%')) return '%'
+  return fallbackUnit
 }
 
 function formatMeasureValue(value, fallbackUnit = 'px') {

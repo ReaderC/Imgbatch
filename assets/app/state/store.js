@@ -17,6 +17,7 @@ const state = {
   },
   settingsDialog: null,
   presetDialog: null,
+  confirmDialog: null,
   presetsByTool: {},
   previewModal: null,
   resultView: null,
@@ -67,6 +68,11 @@ export function setSettingsDialog(settingsDialog) {
 
 export function setPresetDialog(presetDialog) {
   state.presetDialog = presetDialog
+  emit()
+}
+
+export function setConfirmDialog(confirmDialog) {
+  state.confirmDialog = confirmDialog
   emit()
 }
 
