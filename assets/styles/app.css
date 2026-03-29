@@ -1654,6 +1654,10 @@ body {
   background: #F0F4F8 !important;
 }
 
+.workspace:not(.workspace--result) .empty-state--queue {
+  box-shadow: none !important;
+}
+
 .workspace:not(.workspace--result) .queue-footer {
   border-top: 0 !important;
   box-shadow: none !important;

@@ -1667,14 +1667,6 @@ function maybeProcessUtilityTool(tool) {
   return processUtilityTool(tool?.id)
 }
 
-function shouldShowPreviewResult(asset) {
-  return shouldUsePreviewSummary(asset)
-}
-
-function showPreviewResult(asset) {
-  previewAssetResult(asset)
-}
-
 function shouldProcessPreviewSave(tool) {
   return shouldPreviewSaveTool(tool)
 }
@@ -2009,34 +2001,6 @@ function getActionTargetAsset(target) {
   return getAssetById(target.dataset.assetId)
 }
 
-function maybeHandleClickAssetSave(action, target) {
-  if (!shouldUseSingleSaveAction(action)) return false
-  const asset = getActionTargetAsset(target)
-  return maybeHandleSingleAssetSave(asset)
-}
-
-function maybeHandleClickSaveAll(action) {
-  if (!shouldUseBulkSaveAction(action)) return false
-  return maybeHandleSaveAllAction()
-}
-
-function maybeHandleClickPreview(action, target) {
-  if (!shouldPreviewAssetAction(action)) return false
-  const asset = getActionTargetAsset(target)
-  if (!asset) {
-    notifyMissingAsset()
-    return true
-  }
-  return maybeHandleAssetPreview(asset)
-}
-
-function maybeHandleClickProcess(action) {
-  if (!shouldProcessCurrentAction(action)) return false
-  if (maybeHandleCurrentToolExecution()) return true
-  void processCurrentTool()
-  return true
-}
-
 function maybeHandleClickSettings(action) {
   if (!isSettingsAction(action)) return false
   maybeHandleSettingsPersistence()
@@ -2048,27 +2012,8 @@ function shouldUseImmediateAction(action) {
   return maybeHandleClickSettings(action)
 }
 
-function maybeHandleImmediateAction(action) {
-  return shouldUseImmediateAction(action)
-}
-
 function getSettingsModeHint() {
   return getSettingsPreviewText()
-}
-
-function applyExecutionResult(result) {
-  maybeApplyResult(result)
-  maybeNotifyResultOutputPath(result)
-  maybeNotifyResultInfo(result)
-  maybeNotifySaveReadyState()
-}
-
-function applyPersistedSettings(settings) {
-  updateCurrentSettings(settings)
-}
-
-function shouldUsePersistedSettings(settings) {
-  return !!settings
 }
 
 function normalizeSettingsBootstrap(settings) {
