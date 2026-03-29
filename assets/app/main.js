@@ -1,7 +1,7 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setPreviewModal, setResultView, setSearchQuery, setState, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, getLaunchInputs, importItems, loadSettings, openInputDialog, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
+import { buildStagedItems, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -34,9 +34,187 @@ async function bootstrapSettings() {
   try {
     const settings = await loadSettings()
     updateSettings(settings)
+    void applyDefaultPresetForTool(getState().activeTool, true)
   } catch {
     // ignore settings bootstrap errors
   }
+}
+
+function getDefaultPresetMap() {
+  return getState().settings.defaultPresetByTool || {}
+}
+
+function createSettingsDialogState() {
+  const settings = getState().settings
+  return {
+    visible: true,
+    saveLocationMode: settings.saveLocationMode || 'source',
+    saveLocationCustomPath: settings.saveLocationCustomPath || settings.defaultSavePath || '',
+  }
+}
+
+function openSettingsDialog() {
+  setSettingsDialog(createSettingsDialogState())
+}
+
+function closeSettingsDialog() {
+  setSettingsDialog(null)
+}
+
+function updateSettingsDialog(patch) {
+  const current = getState().settingsDialog
+  if (!current) return
+  setSettingsDialog({ ...current, ...patch })
+}
+
+function normalizeLoadedPresets(presets = []) {
+  return (Array.isArray(presets) ? presets : []).map((preset, index) => ({
+    id: String(preset?.id || `preset-${index + 1}`),
+    name: String(preset?.name || `预设 ${index + 1}`),
+    config: preset?.config && typeof preset.config === 'object' ? preset.config : preset || {},
+    createdAt: preset?.createdAt || '',
+  }))
+}
+
+async function ensureToolPresetsLoaded(toolId, force = false) {
+  const cached = getState().presetsByTool?.[toolId]
+  if (!force && Array.isArray(cached)) return cached
+  const presets = normalizeLoadedPresets(await loadPresets(toolId))
+  setToolPresets(toolId, presets)
+  return presets
+}
+
+function openPresetDialog(toolId, mode = 'apply') {
+  const presets = getState().presetsByTool?.[toolId] || []
+  setPresetDialog({
+    visible: true,
+    mode,
+    toolId,
+    name: '',
+    selectedPresetId: mode === 'apply' ? (presets[0]?.id || '') : '',
+    setAsDefault: false,
+  })
+}
+
+function closePresetDialog() {
+  setPresetDialog(null)
+}
+
+function updatePresetDialog(patch) {
+  const current = getState().presetDialog
+  if (!current) return
+  setPresetDialog({ ...current, ...patch })
+}
+
+async function applyDefaultPresetForTool(toolId, silent = false) {
+  const defaultPresetId = getDefaultPresetMap()?.[toolId]
+  if (!defaultPresetId) return false
+  const presets = await ensureToolPresetsLoaded(toolId)
+  const preset = presets.find((item) => item.id === defaultPresetId)
+  if (!preset?.config) return false
+  updateConfig(toolId, preset.config)
+  if (!silent) notify({ type: 'success', message: `已应用默认预设：${preset.name}` })
+  return true
+}
+
+async function saveSettingsFromDialog() {
+  const dialog = getState().settingsDialog
+  if (!dialog) return
+  if (dialog.saveLocationMode === 'custom' && !String(dialog.saveLocationCustomPath || '').trim()) {
+    notify({ type: 'info', message: '请先选择自定义保存目录。' })
+    return
+  }
+  const payload = {
+    saveLocationMode: dialog.saveLocationMode || 'source',
+    saveLocationCustomPath: dialog.saveLocationCustomPath || '',
+  }
+  const settings = await saveSettings(payload)
+  updateSettings(settings)
+  closeSettingsDialog()
+  notify({ type: 'success', message: '已保存默认图片保存位置。' })
+}
+
+async function chooseSettingsCustomPath() {
+  const selected = await openInputDialog({
+    title: '选择默认保存目录',
+    properties: ['openDirectory'],
+  })
+  const paths = Array.isArray(selected?.filePaths) ? selected.filePaths : Array.isArray(selected) ? selected : []
+  if (!paths.length) return
+  updateSettingsDialog({ saveLocationMode: 'custom', saveLocationCustomPath: String(paths[0] || '') })
+}
+
+async function openApplyPresetDialog(toolId) {
+  const presets = await ensureToolPresetsLoaded(toolId)
+  setPresetDialog({
+    visible: true,
+    mode: 'apply',
+    toolId,
+    name: '',
+    selectedPresetId: presets[0]?.id || '',
+    setAsDefault: false,
+  })
+}
+
+function openSavePresetDialog(toolId) {
+  setPresetDialog({
+    visible: true,
+    mode: 'save',
+    toolId,
+    name: '',
+    selectedPresetId: '',
+    setAsDefault: false,
+  })
+}
+
+async function confirmSavePresetDialog() {
+  const dialog = getState().presetDialog
+  if (!dialog?.toolId) return
+  const name = String(dialog.name || '').trim()
+  if (!name) {
+    notify({ type: 'info', message: '请先输入预设名称。' })
+    return
+  }
+  const presets = normalizeLoadedPresets(await savePreset(dialog.toolId, {
+    name,
+    config: getState().configs[dialog.toolId],
+  }))
+  setToolPresets(dialog.toolId, presets)
+  const savedPreset = presets[presets.length - 1]
+  if (dialog.setAsDefault && savedPreset?.id) {
+    const settings = await saveSettings({
+      defaultPresetByTool: {
+        ...getDefaultPresetMap(),
+        [dialog.toolId]: savedPreset.id,
+      },
+    })
+    updateSettings(settings)
+  }
+  closePresetDialog()
+  notify({ type: 'success', message: `已保存预设：${name}` })
+}
+
+async function confirmApplyPresetDialog() {
+  const dialog = getState().presetDialog
+  if (!dialog?.toolId || !dialog.selectedPresetId) return
+  const presets = await ensureToolPresetsLoaded(dialog.toolId)
+  const preset = presets.find((item) => item.id === dialog.selectedPresetId)
+  if (!preset?.config) {
+    notify({ type: 'error', message: '未找到要应用的预设。' })
+    return
+  }
+  updateConfig(dialog.toolId, preset.config)
+  if (dialog.setAsDefault) {
+    const settings = await saveSettings({
+      defaultPresetByTool: {
+        ...getDefaultPresetMap(),
+        [dialog.toolId]: preset.id,
+      },
+    })
+    updateSettings(settings)
+  }
+  closePresetDialog()
+  notify({ type: 'success', message: `已应用预设：${preset.name}` })
 }
 
 function isPreviewSaveTool(toolId) {
@@ -1204,7 +1382,7 @@ function createSettingsToolResult() {
 
 function processUtilityTool(toolId) {
   if (!isUtilityTool(toolId)) return null
-  void persistDefaultSavePath()
+  openSettingsDialog()
   return createSettingsToolResult()
 }
 
@@ -1379,7 +1557,7 @@ function maybeHandleSaveActions(action, target) {
 function maybeHandleSettingsActions(action) {
   if (!isSettingsAction(action)) return false
   maybeNotifySettingsHint(action)
-  void persistDefaultSavePath()
+  openSettingsDialog()
   return true
 }
 
@@ -1531,7 +1709,7 @@ function notifyDestinationSummary() {
 function maybeHandleOpenSettingsAction(action) {
   if (action !== 'open-settings') return false
   notifyDestinationSummary()
-  void persistDefaultSavePath()
+  openSettingsDialog()
   return true
 }
 
@@ -3000,6 +3178,7 @@ function attachGlobalEvents() {
       event.preventDefault()
       clearResultUiAfterToolChange()
       setActiveTool(target.dataset.toolId)
+      void applyDefaultPresetForTool(target.dataset.toolId, true)
       return
     }
 
@@ -3014,12 +3193,32 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-settings' || action === 'save-default-path') {
-      await persistDefaultSavePath()
+      openSettingsDialog()
+      return
+    }
+
+    if (action === 'close-settings-modal') {
+      closeSettingsDialog()
       return
     }
 
     if (action === 'toggle-sidebar') {
       setState({ sidebarCollapsed: !getState().sidebarCollapsed })
+      return
+    }
+
+    if (action === 'set-settings-save-mode') {
+      updateSettingsDialog({ saveLocationMode: target.dataset.value })
+      return
+    }
+
+    if (action === 'pick-settings-custom-path') {
+      await chooseSettingsCustomPath()
+      return
+    }
+
+    if (action === 'save-settings-dialog') {
+      await saveSettingsFromDialog()
       return
     }
 
@@ -3119,6 +3318,36 @@ function attachGlobalEvents() {
       } else {
         folderInput.click()
       }
+      return
+    }
+
+    if (action === 'save-preset') {
+      openSavePresetDialog(target.dataset.toolId)
+      return
+    }
+
+    if (action === 'open-preset-dialog') {
+      await openApplyPresetDialog(target.dataset.toolId)
+      return
+    }
+
+    if (action === 'close-preset-dialog') {
+      closePresetDialog()
+      return
+    }
+
+    if (action === 'select-preset') {
+      updatePresetDialog({ selectedPresetId: target.dataset.presetId })
+      return
+    }
+
+    if (action === 'confirm-save-preset') {
+      await confirmSavePresetDialog()
+      return
+    }
+
+    if (action === 'confirm-apply-preset') {
+      await confirmApplyPresetDialog()
       return
     }
 
@@ -3245,6 +3474,11 @@ function attachGlobalEvents() {
       syncColorMagnifierInput(target)
     }
 
+    if (action === 'change-preset-name') {
+      updatePresetDialog({ name: target.value })
+      return
+    }
+
     if (action === 'set-config-range') {
       syncRangeControl(target)
       return
@@ -3288,6 +3522,11 @@ function attachGlobalEvents() {
     }
 
     const action = target.dataset.changeAction || target.dataset.action
+    if (action === 'toggle-preset-default') {
+      updatePresetDialog({ setAsDefault: !!target.checked })
+      return
+    }
+
     if (action === 'set-config-range') {
       commitRangeControl(target)
       return

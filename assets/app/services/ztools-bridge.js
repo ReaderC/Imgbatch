@@ -10,6 +10,16 @@ export async function importItems(items) {
   return browserImportItems(items)
 }
 
+export async function openInputDialog(options = {}) {
+  if (!hasBridge() || typeof window.imgbatch.showOpenDialog !== 'function') return null
+  return window.imgbatch.showOpenDialog(options)
+}
+
+export async function showMainWindow() {
+  if (!hasBridge() || typeof window.imgbatch.showMainWindow !== 'function') return false
+  return window.imgbatch.showMainWindow()
+}
+
 export async function savePreset(toolId, preset) {
   if (!hasBridge()) return []
   return window.imgbatch.savePreset(toolId, preset)
@@ -87,14 +97,24 @@ export async function resolveInputPaths(items = []) {
 
 export async function loadSettings() {
   if (!hasBridge() || typeof window.imgbatch.loadSettings !== 'function') {
-    return { defaultSavePath: '' }
+    return {
+      defaultSavePath: '',
+      saveLocationMode: 'source',
+      saveLocationCustomPath: '',
+      defaultPresetByTool: {},
+    }
   }
   return window.imgbatch.loadSettings()
 }
 
 export async function saveSettings(settings) {
   if (!hasBridge() || typeof window.imgbatch.saveSettings !== 'function') {
-    return { defaultSavePath: settings?.defaultSavePath || '' }
+    return {
+      defaultSavePath: settings?.defaultSavePath || '',
+      saveLocationMode: settings?.saveLocationMode || 'source',
+      saveLocationCustomPath: settings?.saveLocationCustomPath || '',
+      defaultPresetByTool: settings?.defaultPresetByTool || {},
+    }
   }
   return window.imgbatch.saveSettings(settings)
 }

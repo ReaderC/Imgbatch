@@ -24,7 +24,134 @@ export function renderAppShell(state) {
             ${renderImageQueue(state)}
           </div>
         `}
+      ${renderSettingsModal(state.settingsDialog)}
+      ${renderPresetModal(state)}
       ${renderPreviewModal(state.previewModal)}
+    </div>
+  `
+}
+
+function renderSettingsModal(dialog) {
+  if (!dialog?.visible) return ''
+
+  const mode = dialog.saveLocationMode || 'source'
+  const customPath = dialog.saveLocationCustomPath || ''
+  const options = [
+    ['source', '原图目录'],
+    ['downloads', '下载目录'],
+    ['pictures', '图片目录'],
+    ['desktop', '桌面'],
+    ['custom', '手动选择'],
+  ]
+
+  return `
+    <div class="app-modal" data-action="close-settings-modal">
+      <div class="app-modal__dialog app-modal__dialog--settings">
+        <button class="app-modal__close" data-action="close-settings-modal" title="关闭">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <div class="app-modal__header">
+          <div class="app-modal__title">设置</div>
+          <div class="app-modal__subtitle">配置默认图片保存位置</div>
+        </div>
+        <div class="settings-panel">
+          <div class="settings-panel__group">
+            <div class="settings-panel__label">默认保存位置</div>
+            <div class="settings-option-list">
+              ${options.map(([value, label]) => `
+                <button
+                  type="button"
+                  class="settings-option ${mode === value ? 'is-active' : ''}"
+                  data-action="set-settings-save-mode"
+                  data-value="${value}"
+                >${label}</button>
+              `).join('')}
+            </div>
+          </div>
+          <div class="settings-panel__group">
+            <div class="settings-panel__label">当前路径</div>
+            <div class="settings-path-row">
+              <div class="settings-path">${escapeHtml(getSaveLocationSummary(mode, customPath))}</div>
+              ${mode === 'custom'
+                ? `<button type="button" class="secondary-button" data-action="pick-settings-custom-path">选择位置</button>`
+                : ''}
+            </div>
+          </div>
+        </div>
+        <div class="app-modal__footer">
+          <button type="button" class="secondary-button" data-action="close-settings-modal">取消</button>
+          <button type="button" class="primary-button" data-action="save-settings-dialog">保存设置</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function renderPresetModal(state) {
+  const dialog = state.presetDialog
+  if (!dialog?.visible) return ''
+
+  const presets = state.presetsByTool?.[dialog.toolId] || []
+  const toolLabel = TOOL_MAP[dialog.toolId]?.label || dialog.toolId
+  const modeTitle = dialog.mode === 'save' ? '保存预设' : '使用预设'
+
+  return `
+    <div class="app-modal" data-action="close-preset-dialog">
+      <div class="app-modal__dialog app-modal__dialog--preset">
+        <button class="app-modal__close" data-action="close-preset-dialog" title="关闭">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <div class="app-modal__header">
+          <div class="app-modal__title">${modeTitle}</div>
+          <div class="app-modal__subtitle">${escapeHtml(toolLabel)}</div>
+        </div>
+        ${dialog.mode === 'save'
+          ? `
+            <div class="preset-form">
+              <label class="setting-row setting-row--stack">
+                <span class="setting-row__header">
+                  <span class="setting-row__label">预设名称</span>
+                </span>
+                <input class="text-input" data-action="change-preset-name" value="${escapeHtml(dialog.name || '')}" placeholder="例如：电商白底图" />
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" data-action="toggle-preset-default" ${dialog.setAsDefault ? 'checked' : ''} />
+                <span>设为当前工具默认配置</span>
+              </label>
+            </div>
+          `
+          : `
+            <div class="preset-picker">
+              ${presets.length
+                ? presets.map((preset) => `
+                    <button
+                      type="button"
+                      class="preset-card ${dialog.selectedPresetId === preset.id ? 'is-active' : ''}"
+                      data-action="select-preset"
+                      data-preset-id="${preset.id}"
+                    >
+                      <span class="preset-card__name">${escapeHtml(preset.name || '未命名预设')}</span>
+                      <span class="preset-card__meta">${escapeHtml(formatPresetTime(preset.createdAt))}</span>
+                    </button>
+                  `).join('')
+                : '<div class="preset-empty">当前工具还没有保存过预设。</div>'}
+              <label class="checkbox-row">
+                <input type="checkbox" data-action="toggle-preset-default" ${dialog.setAsDefault ? 'checked' : ''} />
+                <span>设为当前工具默认配置</span>
+              </label>
+            </div>
+          `}
+        <div class="app-modal__footer">
+          <button type="button" class="secondary-button" data-action="close-preset-dialog">取消</button>
+          <button
+            type="button"
+            class="primary-button"
+            data-action="${dialog.mode === 'save' ? 'confirm-save-preset' : 'confirm-apply-preset'}"
+            ${dialog.mode === 'save' && !String(dialog.name || '').trim() ? 'disabled' : ''}
+            ${dialog.mode === 'apply' && !dialog.selectedPresetId ? 'disabled' : ''}
+          >${dialog.mode === 'save' ? '保存预设' : '应用预设'}</button>
+        </div>
+      </div>
     </div>
   `
 }
@@ -187,4 +314,19 @@ function escapeHtml(value = '') {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
+}
+
+function getSaveLocationSummary(mode, customPath) {
+  if (mode === 'source') return '原图所在目录'
+  if (mode === 'downloads') return '系统下载目录'
+  if (mode === 'pictures') return '系统图片目录'
+  if (mode === 'desktop') return '桌面'
+  return customPath || '未选择自定义目录'
+}
+
+function formatPresetTime(value) {
+  if (!value) return '未记录时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
 }

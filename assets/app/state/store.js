@@ -11,7 +11,13 @@ const state = {
   activeRun: null,
   settings: {
     defaultSavePath: '',
+    saveLocationMode: 'source',
+    saveLocationCustomPath: '',
+    defaultPresetByTool: {},
   },
+  settingsDialog: null,
+  presetDialog: null,
+  presetsByTool: {},
   previewModal: null,
   resultView: null,
   colorPicker: null,
@@ -51,6 +57,24 @@ export function setState(patch) {
 
 export function updateSettings(patch) {
   state.settings = { ...state.settings, ...patch }
+  emit()
+}
+
+export function setSettingsDialog(settingsDialog) {
+  state.settingsDialog = settingsDialog
+  emit()
+}
+
+export function setPresetDialog(presetDialog) {
+  state.presetDialog = presetDialog
+  emit()
+}
+
+export function setToolPresets(toolId, presets) {
+  state.presetsByTool = {
+    ...state.presetsByTool,
+    [toolId]: Array.isArray(presets) ? presets : [],
+  }
   emit()
 }
 

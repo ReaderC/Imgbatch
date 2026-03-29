@@ -14,6 +14,7 @@ const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ic
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
+const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const MAX_ASSET_CONCURRENCY = Math.max(1, Math.min(4, Math.floor(CPU_COUNT / 2) || 1))
@@ -157,20 +158,35 @@ function getCommonParentDirectory(paths = []) {
   return path.join(firstRoot, ...commonSegments)
 }
 
-function resolveDestinationPath(destinationPath, assets = [], defaultSavePath = '') {
-  const customDestination = sanitizeText(destinationPath)
-  if (customDestination) {
+function resolveConfiguredSavePath(settings = {}, assets = []) {
+  const mode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
+  const customPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
+
+  if (mode === 'custom' && customPath) {
     return {
-      destinationPath: path.resolve(customDestination),
-      strategy: 'custom',
+      destinationPath: path.resolve(customPath),
+      strategy: 'custom-setting',
     }
   }
 
-  const normalizedDefaultSavePath = sanitizeText(defaultSavePath)
-  if (normalizedDefaultSavePath) {
+  if (mode === 'downloads') {
     return {
-      destinationPath: path.resolve(normalizedDefaultSavePath),
-      strategy: 'default-setting',
+      destinationPath: path.join(os.homedir(), 'Downloads'),
+      strategy: 'downloads',
+    }
+  }
+
+  if (mode === 'pictures') {
+    return {
+      destinationPath: path.join(os.homedir(), 'Pictures'),
+      strategy: 'pictures',
+    }
+  }
+
+  if (mode === 'desktop') {
+    return {
+      destinationPath: path.join(os.homedir(), 'Desktop'),
+      strategy: 'desktop',
     }
   }
 
@@ -184,23 +200,35 @@ function resolveDestinationPath(destinationPath, assets = [], defaultSavePath = 
 
   if (sourceDirs.length === 1) {
     return {
-      destinationPath: path.join(sourceDirs[0], OUTPUT_DIR_NAME),
-      strategy: 'source-sibling',
+      destinationPath: sourceDirs[0],
+      strategy: 'source-directory',
     }
   }
 
   const commonParent = getCommonParentDirectory(sourceDirs)
   if (commonParent) {
     return {
-      destinationPath: path.join(commonParent, OUTPUT_DIR_NAME),
+      destinationPath: commonParent,
       strategy: 'shared-parent',
     }
   }
 
   return {
-    destinationPath: path.join(sourceDirs[0], OUTPUT_DIR_NAME),
+    destinationPath: sourceDirs[0],
     strategy: 'first-source',
   }
+}
+
+function resolveDestinationPath(destinationPath, assets = [], settings = {}) {
+  const customDestination = sanitizeText(destinationPath)
+  if (customDestination) {
+    return {
+      destinationPath: path.resolve(customDestination),
+      strategy: 'custom',
+    }
+  }
+
+  return resolveConfiguredSavePath(settings, assets)
 }
 
 function buildRunFolderName(createdAt, toolId) {
@@ -233,10 +261,6 @@ function createPreviewDirectory(toolId, createdAt) {
 function getAppSettings() {
   const hostApi = getHostApi()
   return hostApi.dbStorage?.getItem?.(SETTINGS_STORAGE_KEY) || {}
-}
-
-function getDefaultSavePath() {
-  return sanitizeText(getAppSettings()?.defaultSavePath)
 }
 
 function isPreviewSaveTool(toolId) {
@@ -429,8 +453,16 @@ function buildSavedResultWithReveal(payload, processed, failed) {
 }
 
 function buildSettingsPayload(settings = {}) {
+  const defaultPresetByTool = settings?.defaultPresetByTool && typeof settings.defaultPresetByTool === 'object'
+    ? Object.fromEntries(Object.entries(settings.defaultPresetByTool).map(([toolId, presetId]) => [sanitizeText(toolId), sanitizeText(presetId)]).filter((entry) => entry[0] && entry[1]))
+    : {}
+  const saveLocationMode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
+  const saveLocationCustomPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
   return {
-    defaultSavePath: sanitizeText(settings.defaultSavePath),
+    defaultSavePath: saveLocationMode === 'custom' ? saveLocationCustomPath : '',
+    saveLocationMode,
+    saveLocationCustomPath,
+    defaultPresetByTool,
   }
 }
 
@@ -462,8 +494,7 @@ function createDirectPayload(toolId, config, assets, destinationPath) {
 }
 
 function createSavePayload(toolId, stagedItems = [], destinationPath) {
-  const defaultSavePath = getDefaultSavePath()
-  const output = resolveDestinationPath(destinationPath, [], defaultSavePath)
+  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
   const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
   const firstItem = normalizedItems[0] || {}
   return {
@@ -628,8 +659,7 @@ function normalizeRunConfig(toolId, config = {}) {
 function prepareRunPayload(toolId, config, assets, destinationPath) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
-  const defaultSavePath = getDefaultSavePath()
-  const output = resolveDestinationPath(destinationPath, normalizedAssets, defaultSavePath)
+  const output = resolveDestinationPath(destinationPath, normalizedAssets, getAppSettings())
   const createdAt = new Date().toISOString()
   const run = createRunDescriptor(output.destinationPath, toolId, createdAt)
 
@@ -2208,7 +2238,13 @@ const toolsApi = {
     const hostApi = getHostApi()
     const key = `imgbatch:preset:${toolId}`
     const current = hostApi.dbStorage?.getItem?.(key) || []
-    const next = [...current, preset]
+    const normalizedPreset = {
+      id: sanitizeText(preset?.id, `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+      name: sanitizeText(preset?.name, '未命名预设'),
+      config: preset?.config && typeof preset.config === 'object' ? preset.config : {},
+      createdAt: sanitizeText(preset?.createdAt, new Date().toISOString()),
+    }
+    const next = [...current, normalizedPreset]
     hostApi.dbStorage?.setItem?.(key, next)
     return next
   },
