@@ -3198,6 +3198,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'close-settings-modal') {
+      if (event.target.closest('.app-modal__dialog') && !event.target.closest('.app-modal__close')) return
       closeSettingsDialog()
       return
     }
@@ -3332,6 +3333,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'close-preset-dialog') {
+      if (event.target.closest('.app-modal__dialog') && !event.target.closest('.app-modal__close')) return
       closePresetDialog()
       return
     }

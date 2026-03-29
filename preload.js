@@ -2,6 +2,7 @@ const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
 
 const IMAGE_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.avif', '.ico'
@@ -158,6 +159,43 @@ function getCommonParentDirectory(paths = []) {
   return path.join(firstRoot, ...commonSegments)
 }
 
+function getWindowsKnownFolderFromRegistry(valueName, fallbackPath) {
+  try {
+    const output = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders', '/v', valueName], {
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    const line = output.split(/\r?\n/).find((item) => item.includes(valueName))
+    if (!line) return fallbackPath
+    const match = line.match(/REG_\w+\s+(.+)$/)
+    if (!match?.[1]) return fallbackPath
+    const resolved = match[1].trim().replace(/%([^%]+)%/g, (_, key) => process.env[key] || '')
+    return resolved || fallbackPath
+  } catch {
+    return fallbackPath
+  }
+}
+
+function getSystemFolderPath(name) {
+  const hostApi = getHostApi()
+  const names = Array.isArray(name) ? name : [name]
+  for (const item of names) {
+    const resolved = sanitizeText(hostApi.getPath?.(item))
+    if (resolved) return path.resolve(resolved)
+  }
+
+  if (process.platform === 'win32') {
+    if (names.includes('desktop')) return path.resolve(getWindowsKnownFolderFromRegistry('Desktop', path.join(os.homedir(), 'Desktop')))
+    if (names.includes('downloads')) return path.resolve(getWindowsKnownFolderFromRegistry('{374DE290-123F-4565-9164-39C4925E467B}', path.join(os.homedir(), 'Downloads')))
+    if (names.includes('pictures')) return path.resolve(getWindowsKnownFolderFromRegistry('My Pictures', path.join(os.homedir(), 'Pictures')))
+  }
+
+  if (names.includes('desktop')) return path.join(os.homedir(), 'Desktop')
+  if (names.includes('downloads')) return path.join(os.homedir(), 'Downloads')
+  if (names.includes('pictures')) return path.join(os.homedir(), 'Pictures')
+  return ''
+}
+
 function resolveConfiguredSavePath(settings = {}, assets = []) {
   const mode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
   const customPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
@@ -170,22 +208,25 @@ function resolveConfiguredSavePath(settings = {}, assets = []) {
   }
 
   if (mode === 'downloads') {
+    const targetPath = getSystemFolderPath(['downloads', 'download'])
     return {
-      destinationPath: path.join(os.homedir(), 'Downloads'),
+      destinationPath: targetPath,
       strategy: 'downloads',
     }
   }
 
   if (mode === 'pictures') {
+    const targetPath = getSystemFolderPath(['pictures', 'picture', 'images'])
     return {
-      destinationPath: path.join(os.homedir(), 'Pictures'),
+      destinationPath: targetPath,
       strategy: 'pictures',
     }
   }
 
   if (mode === 'desktop') {
+    const targetPath = getSystemFolderPath('desktop')
     return {
-      destinationPath: path.join(os.homedir(), 'Desktop'),
+      destinationPath: targetPath,
       strategy: 'desktop',
     }
   }
