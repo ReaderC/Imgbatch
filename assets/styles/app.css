@@ -725,12 +725,6 @@ body {
   border-radius: 22px !important;
 }
 
-.workspace--result .result-page {
-  width: 100%;
-  max-width: none;
-  padding-top: 18px !important;
-}
-
 .result-page__header {
   justify-content: space-between;
   align-items: flex-start;
@@ -923,12 +917,6 @@ body {
 .workspace--result {
   display: block !important;
   width: 100%;
-  min-width: 0;
-}
-
-.workspace--result .result-page {
-  width: 100%;
-  max-width: none;
   min-width: 0;
 }
 
@@ -3986,6 +3974,7 @@ body {
 .workspace--result .result-page {
   width: 100%;
   max-width: none;
+  min-width: 0;
   padding: 18px 16px 88px;
   background: #F0F4F8;
 }
