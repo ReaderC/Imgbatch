@@ -1740,14 +1740,6 @@ function applySettingsState(settings) {
   updateSettings(createSettingsStatePatch(settings))
 }
 
-function ensureSettingsLoaded() {
-  return getSettingsState()
-}
-
-function getSaveActionDestination() {
-  return getCurrentDestinationPath()
-}
-
 function resolveSelectedAsset(assetId) {
   return resolvePreviewAsset(assetId)
 }
@@ -1827,20 +1819,12 @@ function showSettingsInfoMessage() {
   notify({ type: 'info', message: createSettingsInfoMessage() })
 }
 
-function maybeShowSettingsInfo(tool) {
-  if (shouldOpenSettingsTool(tool?.id)) showSettingsInfoMessage()
-}
-
 function getSelectionSummary(assets) {
   return `${getProcessedAssetCount(assets)} 张`
 }
 
 function createProcessMessage(tool, assets) {
   return `${normalizeToolLabel(tool)} · ${getSelectionSummary(assets)} · ${getRunSummary(tool)}`
-}
-
-function notifyProcessPlaceholder(tool, assets) {
-  notify({ type: 'info', message: createProcessMessage(tool, assets) })
 }
 
 function getEffectiveAssets(tool) {
@@ -1880,32 +1864,8 @@ function shouldUsePreviewSummary(asset) {
   return ['staged', 'saved', 'stale'].includes(getPreviewStatus(asset))
 }
 
-function maybePreviewSummary(tool, asset) {
-  if (shouldUsePreviewSummary(asset)) {
-    previewAssetResult(asset)
-    return true
-  }
-  return false
-}
-
 function createSavePathHint() {
   return `保存位置：${getSavePathSummary()}`
-}
-
-function maybeNotifySavePathHint() {
-  notify({ type: 'info', message: createSavePathHint() })
-}
-
-function shouldHandleProcessingTool(tool) {
-  return canRunTool(tool)
-}
-
-function getProcessingAssets(tool) {
-  return getEffectiveAssets(tool)
-}
-
-function resolveProcessingResult(tool, assets) {
-  return getProcessRunnerResult(tool, assets)
 }
 
 function updateCurrentSettings(settings) {
