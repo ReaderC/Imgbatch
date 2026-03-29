@@ -1408,10 +1408,6 @@ function notifySettingsHint() {
   notify({ type: 'info', message: getSettingsHint() })
 }
 
-function getBulkSaveMessage() {
-  return canSaveAllCurrentResults() ? '可批量保存当前预览结果。' : '当前没有可批量保存的预览结果。'
-}
-
 function ensurePreviewableTool(tool) {
   return !!tool && isPreviewableTool(tool.id)
 }
@@ -1810,10 +1806,6 @@ function shouldUsePreviewSummary(asset) {
   return ['staged', 'saved', 'stale'].includes(getPreviewStatus(asset))
 }
 
-function createSavePathHint() {
-  return `保存位置：${getSavePathSummary()}`
-}
-
 function updateCurrentSettings(settings) {
   applySettingsState(settings)
 }
@@ -1828,10 +1820,6 @@ function setRunLockState(value) {
 
 function getBulkSaveTargetItems() {
   return getBulkSaveItems()
-}
-
-function shouldSaveAnything() {
-  return canBulkSave()
 }
 
 function shouldUseUtilityTool(tool) {
@@ -1878,24 +1866,12 @@ function maybeNotifyToolExecutionIntro(tool, assets) {
   if (shouldNotifyToolExecutionIntro(tool)) notifyToolExecutionIntro(tool, assets)
 }
 
-function shouldShowBulkSaveHint() {
-  return canBulkSaveAllCurrentResults()
-}
-
-function getSettingsMessage() {
-  return createSettingsInfoMessage()
-}
-
 function getToolFallbackResult(tool, assets) {
   return getRunFallbackMessage(tool, assets)
 }
 
 function applyImportedAssets(assets) {
   appendAssets(assets)
-}
-
-function maybeAppendImportedAssets(assets) {
-  if (assets?.length) applyImportedAssets(assets)
 }
 
 function createRunPlaceholderMessage(tool, assets) {
@@ -1953,10 +1929,6 @@ function getPreviewOutputDimensions(asset) {
 
 function getPreviewOutputSummary(asset) {
   return `${formatBytes(asset.stagedSizeBytes)} · ${getPreviewOutputDimensions(asset)}`
-}
-
-function createPreviewReadyMessage(asset) {
-  return `预览已生成：${truncate(asset.name, 20)} · ${getPreviewOutputSummary(asset)}`
 }
 
 function getSettingsPromptTitle() {
@@ -2022,10 +1994,6 @@ function maybeNotifySettingsSaved(settings) {
   notify({ type: 'success', message: getSettingsSavedMessage(settings) })
 }
 
-function shouldSaveAllResults() {
-  return hasPreviewableResults()
-}
-
 function shouldUseWindowPrompt() {
   return typeof window?.prompt === 'function'
 }
@@ -2044,14 +2012,6 @@ function notifyPreviewSummary(asset) {
 
 function shouldUsePreviewNotification(asset) {
   return shouldUsePreviewSummary(asset)
-}
-
-function maybeNotifyPreviewSummary(asset) {
-  if (shouldUsePreviewNotification(asset)) notifyPreviewSummary(asset)
-}
-
-function getToolRunnerMessage(tool, assets) {
-  return createRunPlaceholderMessage(tool, assets)
 }
 
 function ensureAssetsAvailable(assets) {
