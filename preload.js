@@ -1005,9 +1005,17 @@ function createIcoBuffer(pngBuffer, width, height) {
 async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('compression', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
+  const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
+
+  const ensureCompressedOutputIsSmaller = (outputSizeBytes) => {
+    if (!originalSizeBytes || outputSizeBytes < originalSizeBytes) return
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath)
+    throw new Error('压缩结果未小于原图，已跳过该文件')
+  }
 
   if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
     await withOutputFormat(createTransformer(sharpLib, asset), format, Math.round(config.quality)).toFile(outputPath)
+    ensureCompressedOutputIsSmaller(fs.statSync(outputPath).size)
     return outputPath
   }
 
@@ -1022,6 +1030,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
 
   fs.writeFileSync(outputPath, chosenBuffer)
+  ensureCompressedOutputIsSmaller(chosenBuffer.length)
   return { outputPath, outputSizeBytes: chosenBuffer.length }
 }
 
@@ -1827,7 +1836,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
     if (!isProcessableAsset(asset)) {
       return {
         processed: null,
-        failed: { assetId: asset.id, name: asset.name, error: `鏆備笉鏀寔澶勭悊 ${asset.ext || 'unknown'} 鏍煎紡` },
+        failed: { assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` },
       }
     }
 
@@ -1860,7 +1869,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
     } catch (error) {
       return {
         processed: null,
-        failed: { assetId: asset.id, name: asset.name, error: error?.message || '澶勭悊澶辫触' },
+        failed: { assetId: asset.id, name: asset.name, error: error?.message || '处理失败' },
       }
     }
   })

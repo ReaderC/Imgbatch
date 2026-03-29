@@ -1334,24 +1334,12 @@ function resolvePreviewAsset(assetId) {
   return getState().assets.find((item) => item.id === assetId)
 }
 
-function previewAssetResult(asset) {
-  notify({ type: 'info', message: getPreviewMessage(asset) })
-}
-
-function getSettingsHint() {
-  return `默认保存路径：${getDefaultSavePathLabel()}`
-}
-
 function ensurePreviewableTool(tool) {
   return !!tool && isPreviewableTool(tool.id)
 }
 
 function getSavePathSummary() {
   return getCurrentDestinationPath() || '将按源目录推导输出位置'
-}
-
-function notifySavePathSummary() {
-  notify({ type: 'info', message: `当前保存路径：${getSavePathSummary()}` })
 }
 
 function previewGenericAsset(tool, asset) {
@@ -1743,23 +1731,8 @@ function maybeShowPreviewSummary(asset) {
   return false
 }
 
-function getSettingsPreviewText() {
-  return getDestinationSummaryMessage()
-}
-
 function canApplyResult(result) {
   return !!(result?.processed?.length || result?.failed?.length)
-}
-
-function maybeApplyResult(result) {
-  if (canApplyResult(result)) {
-    applyRunResult(result)
-    handleResultProcessCompletion()
-  }
-}
-
-function getCurrentToolConfig(toolId) {
-  return getState().configs[toolId]
 }
 
 function maybeHandleSingleSaveState(asset) {
@@ -1770,33 +1743,8 @@ function getSettingsSavedMessage(settings) {
   return createSettingsSuccessMessage(settings)
 }
 
-function maybeNotifySettingsSaved(settings) {
-  notify({ type: 'success', message: getSettingsSavedMessage(settings) })
-}
-
 function shouldUseWindowPrompt() {
   return typeof window?.prompt === 'function'
-}
-
-function ensureSettingsPrompt() {
-  return shouldUseWindowPrompt() ? openSettingsPrompt() : null
-}
-
-function ensureAssetsAvailable(assets) {
-  if (!assets.length) {
-    notifyNoImages()
-    return false
-  }
-  return true
-}
-
-function maybeHandleUtilityTool(tool) {
-  const result = maybeProcessUtilityTool(tool)
-  if (result) {
-    notify({ type: 'success', message: result.message })
-    return true
-  }
-  return false
 }
 
 function getActionableSaveItems() {
@@ -1817,35 +1765,6 @@ function maybeWarnNoActionableSaveItems() {
 
 function getPendingSaveItemsCount() {
   return getActionableSaveItems().length
-}
-
-function shouldShowPendingSaveItemsCount() {
-  return getPendingSaveItemsCount() > 0
-}
-
-function notifySavedOutputPath(result) {
-  if (result?.destinationPath) {
-    notify({ type: 'info', message: `保存输出目录：${result.destinationPath}` })
-  }
-}
-
-function maybeNotifySavedOutputPath(result) {
-  if (result?.mode === 'save') notifySavedOutputPath(result)
-}
-
-function maybeNotifyRunOutputPath(result) {
-  if (result?.mode === 'preview-save') {
-    notify({ type: 'info', message: `预览输出目录：${result.destinationPath}` })
-  }
-}
-
-function maybeNotifyResultOutputPath(result) {
-  maybeNotifySavedOutputPath(result)
-  maybeNotifyRunOutputPath(result)
-}
-
-function updateSettingsAfterSave(settings) {
-  applySettingsState(settings)
 }
 
 function getPreviewOutputPath(asset) {
@@ -1882,109 +1801,8 @@ function maybeHandleSaveAllAction() {
   return true
 }
 
-function getResultInfoMessage(result) {
-  return result?.message || '??????'
-}
-
-function notifyResultInfo(result) {
-  notify({ type: 'info', message: getResultInfoMessage(result) })
-}
-
-function maybeNotifyResultInfo(result) {
-  if (result?.mode === 'preview-save' || result?.mode === 'save') notifyResultInfo(result)
-}
-
 function shouldShowPreviewPath(asset) {
   return !!getPreviewOutputPath(asset)
-}
-
-function maybeNotifyPreviewPath(asset) {
-  if (shouldShowPreviewPath(asset)) {
-    notify({ type: 'info', message: `?????${getPreviewOutputPath(asset)}` })
-  }
-}
-
-function maybeNotifySaveReadyState() {
-  if (shouldShowPendingSaveItemsCount()) {
-    notify({ type: 'info', message: `??? ${getPendingSaveItemsCount()} ???????` })
-  }
-}
-
-function canUpdateSettings() {
-  return true
-}
-
-function maybeApplySettings(settings) {
-  if (canUpdateSettings()) updateSettingsAfterSave(settings)
-}
-
-function shouldOpenSettingsPrompt() {
-  return shouldUseWindowPrompt()
-}
-
-function maybeOpenSettingsPrompt() {
-  return shouldOpenSettingsPrompt() ? ensureSettingsPrompt() : null
-}
-
-function getSettingsPromptResult() {
-  return maybeOpenSettingsPrompt()
-}
-
-function getSettingsPayloadFromPrompt() {
-  const value = getSettingsPromptResult()
-  if (isSettingsPromptCancelled(value)) return null
-  return createSettingsPayload(value)
-}
-
-function maybeCreateSettingsPayload() {
-  return getSettingsPayloadFromPrompt()
-}
-
-function hasSettingsPayload(payload) {
-  return !!payload
-}
-
-function maybePersistSettingsPayload() {
-  const payload = maybeCreateSettingsPayload()
-  if (!hasSettingsPayload(payload)) return null
-  return saveSettings(payload)
-}
-
-function shouldHandleSettingsPersistence(settings) {
-  return !!settings
-}
-
-function maybeHandleSettingsPersistence() {
-  const settings = maybePersistSettingsPayload()
-  if (!shouldHandleSettingsPersistence(settings)) return false
-  maybeApplySettings(settings)
-  maybeNotifySettingsSaved(settings)
-  return true
-}
-
-function shouldShowSettingsChangeNotice() {
-  return hasDefaultSavePath()
-}
-
-function maybeShowSettingsChangeNotice() {
-  if (shouldShowSettingsChangeNotice()) {
-    notify({ type: 'info', message: `???????????${getSettingsDefaultSavePath()}` })
-  }
-}
-
-function maybeHandleClickSettings(action) {
-  if (!isSettingsAction(action)) return false
-  maybeHandleSettingsPersistence()
-  maybeShowSettingsChangeNotice()
-  return true
-}
-
-function normalizeSettingsBootstrap(settings) {
-  return settings || { defaultSavePath: '' }
-}
-
-function maybeNotifyCurrentSavePathHint() {
-  notify({ type: 'info', message: `?????${getSavePathSummary()}` })
 }
 
 function shouldShowCurrentSavePathHint(tool) {

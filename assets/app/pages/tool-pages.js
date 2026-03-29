@@ -82,7 +82,7 @@ function renderPresetFooter(toolId, state) {
   const presets = state.presetsByTool?.[toolId] || []
   return `
     <div class="panel-footer-actions">
-      <button class="secondary-button" data-action="open-preset-dialog" data-tool-id="${toolId}">使用预设${presets.length ? ` (${presets.length})` : ''}</button>
+      <button class="secondary-button" data-action="open-preset-dialog" data-tool-id="${toolId}">使用预设</button>
       <button class="secondary-button" data-action="save-preset" data-tool-id="${toolId}">保存预设</button>
     </div>
   `
