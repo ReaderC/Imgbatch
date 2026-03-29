@@ -2399,18 +2399,6 @@ function maybeHandleClickAction(action, target, event) {
   return shouldProcessClickAction(action, target, event)
 }
 
-function shouldDisplayPreviewDetails(asset) {
-  return shouldUsePreviewSummary(asset)
-}
-
-function maybeDisplayPreviewDetails(asset) {
-  if (shouldDisplayPreviewDetails(asset)) {
-    notifyPreviewSummary(asset)
-    return true
-  }
-  return false
-}
-
 function shouldSkipPreviewSaveTool(tool) {
   return !shouldPreviewSaveTool(tool)
 }

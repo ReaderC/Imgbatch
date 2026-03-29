@@ -46,10 +46,6 @@ body {
   z-index: 20;
 }
 
-.preview-modal {
-  z-index: 1000;
-}
-
 .nav-item,
 .nav-item * {
   pointer-events: auto;
@@ -73,18 +69,6 @@ body {
 .result-toolbar,
 .result-toolbar * {
   pointer-events: auto;
-}
-
-.preview-modal {
-  pointer-events: auto;
-}
-
-.preview-modal__dialog {
-  pointer-events: auto;
-}
-
-.workspace--result {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .result-page {
