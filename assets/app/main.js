@@ -1568,20 +1568,12 @@ function getPreviewStatusMessage(asset) {
   return getPreviewMessage(asset)
 }
 
-function getRunFallbackMessage(tool, assets) {
-  return getProcessFallbackMessage(tool, assets.length)
-}
-
 function getRunSummary(tool) {
   return getConfiguredToolSummary(tool)
 }
 
 function shouldPreviewSaveTool(tool) {
   return ensurePreviewableTool(tool)
-}
-
-function getDestinationPathForExecution() {
-  return getCurrentDestinationPath()
 }
 
 function createSettingsStatePatch(settings) {
@@ -1683,14 +1675,6 @@ function showPreviewResult(asset) {
   previewAssetResult(asset)
 }
 
-function maybeShowPreviewResult(asset) {
-  if (shouldShowPreviewResult(asset)) {
-    showPreviewResult(asset)
-    return true
-  }
-  return false
-}
-
 function shouldProcessPreviewSave(tool) {
   return shouldPreviewSaveTool(tool)
 }
@@ -1717,10 +1701,6 @@ function getSavableBulkItems() {
 
 function createSettingsSuccessMessage(settings) {
   return settings.defaultSavePath ? '已保存默认保存路径。' : '已清空默认保存路径。'
-}
-
-function notifySettingsSaved(settings) {
-  notify({ type: 'success', message: createSettingsSuccessMessage(settings) })
 }
 
 function isSettingsPromptCancelled(value) {
@@ -1827,10 +1807,6 @@ function maybeHandleUtilityTool(tool) {
   return false
 }
 
-function shouldEmitSavePathHint(tool) {
-  return shouldPreviewSaveTool(tool)
-}
-
 function getActionableSaveItems() {
   return getSavableBulkItems()
 }
@@ -1845,14 +1821,6 @@ function maybeWarnNoActionableSaveItems() {
     return true
   }
   return false
-}
-
-function shouldSkipPreviewSaveTool(tool) {
-  return !shouldPreviewSaveTool(tool)
-}
-
-function shouldUseDefaultSavePathState() {
-  return !!getSettingsDefaultSavePath()
 }
 
 function getPendingSaveItemsCount() {
