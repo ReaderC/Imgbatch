@@ -1650,14 +1650,13 @@ body {
   background: #F0F4F8 !important;
 }
 
+.workspace:not(.workspace--result) .queue-list {
+  background: #F0F4F8 !important;
+}
+
 .workspace:not(.workspace--result) .queue-footer {
   border-top: 0 !important;
   box-shadow: none !important;
-}
-
-.color-field__confirm {
-  min-width: 58px;
-  padding-inline: 12px;
 }
 
 .workspace:not(.workspace--result) .settings-section {
@@ -1769,19 +1768,35 @@ body {
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) {
-  --sidebar-width: clamp(176px, 16vw, 220px) !important;
-  grid-template-columns: clamp(176px, 16vw, 220px) minmax(0, 1fr) !important;
+  --sidebar-width: clamp(156px, 14vw, 196px) !important;
+  grid-template-columns: clamp(156px, 14vw, 196px) minmax(0, 1fr) !important;
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .sidebar {
-  width: clamp(176px, 16vw, 220px) !important;
-  padding: 16px 12px 14px !important;
-  gap: 12px !important;
+  width: clamp(156px, 14vw, 196px) !important;
+  padding: 12px 10px 10px !important;
+  gap: 8px !important;
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .sidebar__brand-copy,
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-item__label {
   display: block !important;
+}
+
+.app-shell:not(.app-shell--sidebar-collapsed) .sidebar__nav {
+  gap: 4px !important;
+  padding-right: 0 !important;
+}
+
+.app-shell:not(.app-shell--sidebar-collapsed) .nav-item {
+  min-height: 40px !important;
+  padding: 0 10px !important;
+  gap: 8px !important;
+  border-radius: 14px !important;
+}
+
+.app-shell:not(.app-shell--sidebar-collapsed) .nav-item__label {
+  font-size: 13px !important;
 }
 
 @media (max-width: 720px) {
