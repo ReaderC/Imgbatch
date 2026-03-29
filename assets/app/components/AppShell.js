@@ -7,6 +7,7 @@ import { renderToolPage } from '../pages/index.js'
 export function renderAppShell(state) {
   const tool = TOOL_MAP[state.activeTool]
   const isResultView = !!state.resultView?.items?.length
+  const isSettingsView = !!state.settingsDialog?.visible
 
   if (tool.mode === 'manual' && !isResultView) {
     return renderToolPage(tool.id, state)
@@ -16,7 +17,9 @@ export function renderAppShell(state) {
     <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}">
       ${renderSideNav(state.activeTool, state.sidebarCollapsed)}
       ${renderTopBar(state)}
-      ${isResultView
+      ${isSettingsView
+        ? `<div class="workspace workspace--settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
+        : isResultView
         ? `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`
         : `
           <div class="workspace">
@@ -24,14 +27,13 @@ export function renderAppShell(state) {
             ${renderImageQueue(state)}
           </div>
         `}
-      ${renderSettingsModal(state.settingsDialog)}
       ${renderPresetModal(state)}
       ${renderPreviewModal(state.previewModal)}
     </div>
   `
 }
 
-function renderSettingsModal(dialog) {
+function renderSettingsWorkspace(dialog) {
   if (!dialog?.visible) return ''
 
   const mode = dialog.saveLocationMode || 'source'
@@ -45,27 +47,33 @@ function renderSettingsModal(dialog) {
   ]
 
   return `
-    <div class="app-modal" data-action="close-settings-modal">
-      <div class="app-modal__dialog app-modal__dialog--settings">
-        <button class="app-modal__close" data-action="close-settings-modal" title="关闭">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-        <div class="app-modal__header">
-          <div class="app-modal__title">设置</div>
-          <div class="app-modal__subtitle">配置默认图片保存位置</div>
+    <section class="settings-page">
+      <div class="settings-page__header">
+        <div>
+          <h2 class="hero-title">设置</h2>
+          <div class="queue-subtitle">配置默认图片保存位置与基础偏好</div>
         </div>
+        <button class="secondary-button" data-action="close-settings-modal">返回</button>
+      </div>
+      <div class="settings-page__content">
         <div class="settings-panel">
           <div class="settings-panel__group">
             <div class="settings-panel__label">默认保存位置</div>
-            <div class="settings-option-list">
-              ${options.map(([value, label]) => `
+            <div class="select-shell settings-select ${dialog.settingsSelectOpen ? 'is-open' : ''}">
+              <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="${dialog.settingsSelectOpen ? 'true' : 'false'}">
+                <span class="select-shell__text">${escapeHtml((options.find(([value]) => value === mode) || options[0])[1])}</span>
+                <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${options.map(([value, label]) => `
                 <button
                   type="button"
-                  class="settings-option ${mode === value ? 'is-active' : ''}"
+                  class="select-shell__option ${mode === value ? 'is-active' : ''}"
                   data-action="set-settings-save-mode"
                   data-value="${value}"
                 >${label}</button>
-              `).join('')}
+                `).join('')}
+              </div>
             </div>
           </div>
           <div class="settings-panel__group">
@@ -78,12 +86,12 @@ function renderSettingsModal(dialog) {
             </div>
           </div>
         </div>
-        <div class="app-modal__footer">
+        <div class="settings-page__actions">
           <button type="button" class="secondary-button" data-action="close-settings-modal">取消</button>
           <button type="button" class="primary-button" data-action="save-settings-dialog">保存设置</button>
         </div>
       </div>
-    </div>
+    </section>
   `
 }
 

@@ -5020,6 +5020,37 @@ body {
   margin-top: 20px;
 }
 
+.workspace--settings {
+  display: block;
+  overflow: auto;
+}
+
+.settings-page {
+  width: 100%;
+  min-height: 100%;
+  padding: 28px 32px 40px;
+}
+
+.settings-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.settings-page__content {
+  display: grid;
+  gap: 20px;
+  max-width: 760px;
+}
+
+.settings-page__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .settings-panel,
 .preset-form,
 .preset-picker {
@@ -5046,6 +5077,10 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.settings-select {
+  width: 100%;
 }
 
 .settings-option,
@@ -5111,8 +5146,14 @@ body {
   }
 
   .settings-path-row,
-  .app-modal__footer {
+  .app-modal__footer,
+  .settings-page__header,
+  .settings-page__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .settings-page {
+    padding: 20px 16px 32px;
   }
 }

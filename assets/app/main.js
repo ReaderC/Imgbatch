@@ -50,6 +50,7 @@ function createSettingsDialogState() {
     visible: true,
     saveLocationMode: settings.saveLocationMode || 'source',
     saveLocationCustomPath: settings.saveLocationCustomPath || settings.defaultSavePath || '',
+    settingsSelectOpen: false,
   }
 }
 
@@ -3210,6 +3211,7 @@ function attachGlobalEvents() {
 
     if (action === 'set-settings-save-mode') {
       updateSettingsDialog({ saveLocationMode: target.dataset.value })
+      closeConfigSelect(target)
       return
     }
 
