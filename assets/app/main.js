@@ -334,11 +334,6 @@ function getStagedItemByAssetId(assetId) {
   }
 }
 
-function getActiveToolLabel() {
-  const tool = TOOL_MAP[getState().activeTool]
-  return tool?.label || getState().activeTool
-}
-
 async function saveAssetResult(assetId) {
   const state = getState()
   const stagedItem = getStagedItemByAssetId(assetId)
@@ -640,10 +635,6 @@ function closeResultView() {
   closeResultWorkspace()
 }
 
-function maybeDismissResultView() {
-  closeResultWorkspace()
-}
-
 function ensureResultViewVisible() {
   if (getState().resultView?.items?.length) return true
   refreshResultView()
@@ -654,10 +645,6 @@ function showResultComparison() {
   const visible = ensureResultViewVisible()
   if (visible) closePreviewModal()
   return visible
-}
-
-function openCurrentResultsPanel() {
-  return showResultComparison()
 }
 
 function clearAllResultOverlays() {
@@ -688,10 +675,6 @@ function continueProcessing() {
 
 function getResultToolbarLabel() {
   return hasVisibleResultComparison() ? '打开目录' : '显示结果'
-}
-
-function hasAnyResultAssets() {
-  return getState().assets.some((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
 }
 
 function buildResultActions() {
@@ -931,10 +914,6 @@ function shouldOpenRealPreview(toolId) {
   return isPreviewableTool(toolId) && !isMergePreviewTool(toolId)
 }
 
-function getPreviewFailureMessage(error, tool) {
-  return error?.message || `${tool.label} 预览失败。`
-}
-
 function getPreviewReuseAsset(toolId, asset) {
   return shouldReusePreviewResult(toolId, asset) ? asset : null
 }
@@ -1021,10 +1000,6 @@ function getPreviewStatusFallback(tool, asset) {
   return getPreviewPlaceholderMessage(tool, asset)
 }
 
-function getPreviewAssetMessage(tool, asset) {
-  return getGenericPreviewMessage(tool, asset)
-}
-
 function notifyPreviewReady(tool) {
   notify({ type: 'success', message: buildPreviewNotification(tool) })
 }
@@ -1082,21 +1057,6 @@ function getPreviewExistingAsset(toolId, asset) {
   return getPreviewToolState(toolId, asset) ? asset : null
 }
 
-function ensurePreviewable(tool, asset) {
-  const existing = getPreviewExistingAsset(tool.id, asset)
-  if (existing && openPreviewModal(existing)) {
-    return { handled: true }
-  }
-  if (!shouldPreviewWithProcessing(tool.id)) {
-    return { handled: false }
-  }
-  return { handled: false }
-}
-
-function notifyPreviewProcessing(error, tool) {
-  notifyPreviewFailure(error, tool)
-}
-
 async function executePreview(tool, asset) {
   await previewToolAsset(tool, asset)
 }
@@ -1142,10 +1102,6 @@ function getPreviewableAsset(toolId, asset) {
   return canPreviewTool(toolId) ? asset : null
 }
 
-function resolvePreviewTool(state) {
-  return getPreviewActionTool(state)
-}
-
 function shouldShowPreviewNotification(toolId) {
   return isDirectPreviewTool(toolId)
 }
@@ -1158,10 +1114,6 @@ function maybeNotifyDirectPreviewReady(tool) {
 
 async function handleToolPreview(tool, asset) {
   await runPreviewFlow(tool, asset)
-}
-
-function getDirectPreviewAsset(toolId, asset) {
-  return getPreviewableAsset(toolId, asset)
 }
 
 function canHandlePreview(tool, asset) {
@@ -1278,12 +1230,6 @@ function shouldNotifyPreviewSuccess(toolId) {
   return isDirectPreviewTool(toolId)
 }
 
-function notifyToolPreviewSuccess(tool) {
-  if (shouldNotifyPreviewSuccess(tool.id)) {
-    notifyPreviewReady(tool)
-  }
-}
-
 function createToolPreviewFailure(error, tool) {
   return error?.message || `${tool.label} 预览失败。`
 }
@@ -1322,22 +1268,6 @@ async function triggerAssetPreview(assetId) {
     return
   }
   await previewAssetWithTool(tool, asset)
-}
-
-function canPreviewCurrentTool(toolId) {
-  return isPreviewSupported(toolId)
-}
-
-function resolvePreviewMessage(tool, asset) {
-  return getPreviewPlaceholderMessage(tool, asset)
-}
-
-function notifyPreviewUnsupported(tool, asset) {
-  notify({ type: 'info', message: resolvePreviewMessage(tool, asset) })
-}
-
-function getPreviewProcessingTool() {
-  return resolvePreviewToolByState()
 }
 
 function getProcessSuccessMessage(result, tool) {
