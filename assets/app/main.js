@@ -1724,10 +1724,6 @@ function getDestinationPathForExecution() {
   return getCurrentDestinationPath()
 }
 
-function getCurrentState() {
-  return getState()
-}
-
 function handleRunResult(result, tool, assets) {
   return applyResultAndNotify(result, getProcessSuccessMessage(result, tool), getRunFallbackMessage(tool, assets))
 }
@@ -1880,28 +1876,12 @@ function setRunLockState(value) {
   setProcessing(value)
 }
 
-function shouldSavePreviewAsset(asset) {
-  return canSaveAsset(asset)
-}
-
-function getSingleSaveItem(asset) {
-  return getStagedItemByAssetId(asset.id)
-}
-
 function getBulkSaveTargetItems() {
   return getBulkSaveItems()
 }
 
 function shouldSaveAnything() {
   return canBulkSave()
-}
-
-function maybeNotifyNoSaveTargets() {
-  if (!shouldSaveAnything()) {
-    notifyNoPreviewToSave()
-    return true
-  }
-  return false
 }
 
 function shouldUseUtilityTool(tool) {
@@ -1952,34 +1932,12 @@ function shouldShowBulkSaveHint() {
   return canBulkSaveAllCurrentResults()
 }
 
-function maybeShowBulkSaveHint() {
-  if (shouldShowBulkSaveHint()) {
-    notify({ type: 'info', message: '当前结果可直接使用“全部保存”。' })
-  }
-}
-
-function getSaveResultState() {
-  return getPreviewSaveAssets().length
-}
-
 function getSettingsMessage() {
   return createSettingsInfoMessage()
 }
 
-function maybeNotifySettingsMessage() {
-  notify({ type: 'info', message: getSettingsMessage() })
-}
-
-function getToolPreviewHint(tool, asset) {
-  return getToolPreviewSummary(tool, asset)
-}
-
 function getToolFallbackResult(tool, assets) {
   return getRunFallbackMessage(tool, assets)
-}
-
-function finalizeProcessingResult(result, tool, assets) {
-  return handleRunResult(result, tool, assets)
 }
 
 function applyImportedAssets(assets) {
@@ -1988,10 +1946,6 @@ function applyImportedAssets(assets) {
 
 function maybeAppendImportedAssets(assets) {
   if (assets?.length) applyImportedAssets(assets)
-}
-
-function getPreviewState(asset) {
-  return getPreviewStatus(asset)
 }
 
 function createRunPlaceholderMessage(tool, assets) {
@@ -2014,25 +1968,9 @@ function canSaveNow() {
   return getSavableBulkItems().length > 0
 }
 
-function maybeNotifyCannotSaveNow() {
-  if (!canSaveNow()) {
-    notifyNoPreviewToSave()
-    return true
-  }
-  return false
-}
-
 function ensurePreviewActionState(asset) {
   if (maybeShowPreviewResult(asset)) return true
   return false
-}
-
-function maybeHandlePreviewResult(asset) {
-  return ensurePreviewActionState(asset)
-}
-
-function getToolForAction() {
-  return getSelectedTool()
 }
 
 function createSettingsSuccessMessage(settings) {
@@ -2063,10 +2001,6 @@ function shouldProcessClickAction(action, target, event) {
   return shouldShortCircuitClickAction(action, target, event)
 }
 
-function handleImportedAssets(assets) {
-  maybeAppendImportedAssets(assets)
-}
-
 function getPreviewOutputDimensions(asset) {
   return `${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}`
 }
@@ -2079,18 +2013,6 @@ function createPreviewReadyMessage(asset) {
   return `预览已生成：${truncate(asset.name, 20)} · ${getPreviewOutputSummary(asset)}`
 }
 
-function maybeNotifyPreviewReady(asset) {
-  if (isPreviewReady(asset)) notify({ type: 'info', message: createPreviewReadyMessage(asset) })
-}
-
-function maybeNotifySaveCompleted(asset) {
-  if (isPreviewSaved(asset)) notify({ type: 'success', message: `已保存 ${truncate(asset.name, 20)}。` })
-}
-
-function maybeNotifyPreviewExpired(asset) {
-  if (isPreviewExpired(asset)) notifyStalePreview()
-}
-
 function getSettingsPromptTitle() {
   return '默认保存路径'
 }
@@ -2101,10 +2023,6 @@ function openSettingsPrompt() {
 
 function hasPreviewableResults() {
   return getPreviewSaveAssets().length > 0
-}
-
-function getProcessTargetCount(tool) {
-  return getToolAssets(tool).length
 }
 
 function getPreviewSummary(asset) {
@@ -2121,10 +2039,6 @@ function maybeShowPreviewSummary(asset) {
 
 function getSettingsPreviewText() {
   return getDestinationSummaryMessage()
-}
-
-function maybeShowSettingsPreview() {
-  notify({ type: 'info', message: getSettingsPreviewText() })
 }
 
 function canApplyResult(result) {
@@ -2164,14 +2078,6 @@ function maybeNotifySettingsSaved(settings) {
 
 function shouldSaveAllResults() {
   return hasPreviewableResults()
-}
-
-function maybeNotifyBulkSaveUnavailable() {
-  if (!shouldSaveAllResults()) {
-    notifyNoPreviewToSave()
-    return true
-  }
-  return false
 }
 
 function shouldUseWindowPrompt() {
