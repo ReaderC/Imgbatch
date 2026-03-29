@@ -2103,10 +2103,6 @@ body {
   border-radius: 8px;
 }
 
-.workspace--result .result-page {
-  padding-bottom: 108px;
-}
-
 @media (max-width: 960px) {
   .result-page__compare {
     grid-template-columns: minmax(0, 1fr);
@@ -2275,10 +2271,6 @@ body {
   }
 }
 
-.workspace--result .result-page {
-  padding-bottom: 88px;
-}
-
 .result-toolbar {
   position: fixed;
   left: 50%;
@@ -2375,19 +2367,6 @@ body {
 
 .workspace--result {
   grid-template-columns: minmax(0, 1fr);
-}
-
-.preview-modal__dialog {
-  position: relative;
-  width: min(1100px, 100%);
-  max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 24px;
-  background: var(--surface-container-lowest);
-  box-shadow: var(--shadow-float);
 }
 
 .result-page__summary,
