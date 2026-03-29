@@ -1568,16 +1568,8 @@ function getPreviewStatusMessage(asset) {
   return getPreviewMessage(asset)
 }
 
-function getReadyAssets(tool) {
-  return getToolAssets(tool)
-}
-
 function getRunFallbackMessage(tool, assets) {
   return getProcessFallbackMessage(tool, assets.length)
-}
-
-function isEmptyAssets(assets) {
-  return !assets.length
 }
 
 function getRunSummary(tool) {
@@ -1586,10 +1578,6 @@ function getRunSummary(tool) {
 
 function shouldPreviewSaveTool(tool) {
   return ensurePreviewableTool(tool)
-}
-
-function getToolRunnerForExecution(tool) {
-  return getToolRunner(tool)
 }
 
 function getDestinationPathForExecution() {
@@ -1643,16 +1631,8 @@ function getPreviewSaveAssets() {
   return getState().assets.filter((asset) => asset.previewStatus === 'staged' && asset.stagedOutputPath)
 }
 
-function canBulkSave() {
-  return getPreviewSaveAssets().length > 0
-}
-
 function getBulkSaveItems() {
   return buildStagedItems(getPreviewSaveAssets())
-}
-
-function getPreviewStaleAssets() {
-  return getState().assets.filter((asset) => asset.previewStatus === 'stale')
 }
 
 function normalizeToolLabel(tool) {
@@ -1687,14 +1667,6 @@ function updateCurrentSettings(settings) {
   applySettingsState(settings)
 }
 
-function getRunLockState() {
-  return isProcessingLocked()
-}
-
-function setRunLockState(value) {
-  setProcessing(value)
-}
-
 function getBulkSaveTargetItems() {
   return getBulkSaveItems()
 }
@@ -1727,16 +1699,8 @@ function getToolExecutionIntro(tool, assets) {
   return `${normalizeToolLabel(tool)} 正在处理 ${getSelectionSummary(assets)}`
 }
 
-function notifyToolExecutionIntro(tool, assets) {
-  notify({ type: 'info', message: getToolExecutionIntro(tool, assets) })
-}
-
 function shouldNotifyToolExecutionIntro(tool) {
   return shouldProcessPreviewSave(tool)
-}
-
-function getToolFallbackResult(tool, assets) {
-  return getRunFallbackMessage(tool, assets)
 }
 
 function shouldSaveStagedItem(item) {
@@ -1749,11 +1713,6 @@ function filterSavableItems(items) {
 
 function getSavableBulkItems() {
   return filterSavableItems(getBulkSaveTargetItems())
-}
-
-function ensurePreviewActionState(asset) {
-  if (maybeShowPreviewResult(asset)) return true
-  return false
 }
 
 function createSettingsSuccessMessage(settings) {
@@ -1800,10 +1759,6 @@ function openSettingsPrompt() {
   return window.prompt(getSettingsPromptTitle(), getSettingsPromptDefaultValue())
 }
 
-function hasPreviewableResults() {
-  return getPreviewSaveAssets().length > 0
-}
-
 function getPreviewSummary(asset) {
   return getPreviewStatusMessage(asset)
 }
@@ -1835,10 +1790,6 @@ function getCurrentToolConfig(toolId) {
   return getState().configs[toolId]
 }
 
-function getToolRunArgs(tool, assets) {
-  return [tool.id, getCurrentToolConfig(tool.id), assets, getDestinationPathForExecution()]
-}
-
 function maybeHandleSingleSaveState(asset) {
   return handleSavableAssetState(asset)
 }
@@ -1859,14 +1810,6 @@ function ensureSettingsPrompt() {
   return shouldUseWindowPrompt() ? openSettingsPrompt() : null
 }
 
-function getPreviewSummaryMessage(asset) {
-  return getPreviewStatusMessage(asset)
-}
-
-function shouldUsePreviewNotification(asset) {
-  return shouldUsePreviewSummary(asset)
-}
-
 function ensureAssetsAvailable(assets) {
   if (!assets.length) {
     notifyNoImages()
@@ -1882,10 +1825,6 @@ function maybeHandleUtilityTool(tool) {
     return true
   }
   return false
-}
-
-function maybeNotifySavePath() {
-  notifySavePathSummary()
 }
 
 function shouldEmitSavePathHint(tool) {
@@ -1955,10 +1894,6 @@ function getPreviewOutputPath(asset) {
 
 function getSavedOutputPath(asset) {
   return asset.savedOutputPath || ''
-}
-
-function hasSavedOutputPath(asset) {
-  return !!getSavedOutputPath(asset)
 }
 
 function canPreviewAsset(asset) {
@@ -2088,16 +2023,8 @@ function getResultNotificationType(result) {
   return 'error'
 }
 
-function notifyResult(result, fallback) {
-  notify({ type: getResultNotificationType(result), message: result?.message || fallback })
-}
-
 function getSaveAllItems() {
   return getActionableSaveItems()
-}
-
-function hasSaveAllItems() {
-  return getSaveAllItems().length > 0
 }
 
 function shouldShowSettingsChangeNotice() {
@@ -2157,19 +2084,6 @@ function maybeHandleImmediateAction(action) {
   return shouldUseImmediateAction(action)
 }
 
-function getActionResult(action, target, event) {
-  return maybeHandleImmediateAction(action)
-    || maybeHandleClickAssetSave(action, target)
-    || maybeHandleClickSaveAll(action)
-    || maybeHandleBasicAssetActions(action, target)
-    || maybeHandleClickPreview(action, target)
-    || maybeHandleClickProcess(action)
-    || maybeHandleOpenInputActions(action)
-    || maybeHandlePresetAction(action, target)
-    || maybeHandleToolActions(action, target, event)
-    || maybeHandleConfigActions(action, target)
-}
-
 function getSettingsModeHint() {
   return getSettingsPreviewText()
 }
@@ -2226,16 +2140,6 @@ function canUsePromptApi() {
 
 function getPromptApiResult() {
   return canUsePromptApi() ? openSettingsPrompt() : null
-}
-
-function resolveSettingsPayloadFromPrompt() {
-  const result = getPromptApiResult()
-  if (isSettingsPromptCancelled(result)) return null
-  return createSettingsPayload(result)
-}
-
-function normalizeBootstrapSettings(settings) {
-  return normalizeSettingsBootstrap(settings)
 }
 
 function getPreviewSavePathMessage() {
