@@ -52,7 +52,7 @@ function renderQueueItem(asset, tool, state, index, total) {
         <p class="queue-item__name" title="${escapeHtml(asset.name)}">${escapeHtml(asset.name)}</p>
         <div class="queue-item__subline queue-item__subline--meta">
           <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
-          <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
+          <span class="queue-pill">${asset.width || '—'} 脳 ${asset.height || '—'}</span>
           <span class="queue-pill">${asset.ext.toUpperCase()}</span>
         </div>
         <div class="queue-item__subline queue-item__subline--summary">
@@ -86,8 +86,8 @@ function renderCompactQueueTicker(asset, tool, state) {
     asset.ext.toUpperCase(),
     getToolSummary(tool.id, state, asset),
     formatBytes(asset.sizeBytes),
-    `${asset.width || '—'} × ${asset.height || '—'}`,
-  ].join(' · ')
+    `${asset.width || '—'} 脳 ${asset.height || '—'}`,
+  ].join(' 路 ')
   return `
     <div class="queue-item__compact-ticker" aria-label="${escapeHtml(text)}">
       <div class="queue-item__compact-track">
@@ -121,16 +121,16 @@ function renderResultMeta(asset, tool) {
   if (!PREVIEW_SAVE_TOOLS.has(tool.id)) return ''
   const previewStatus = getToolPreviewStatus(asset, tool.id)
   if (previewStatus === 'previewed') {
-    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">预览结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
+    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">预览结果：${formatBytes(asset.stagedSizeBytes)} 路 ${asset.stagedWidth || '—'} 脳 ${asset.stagedHeight || '—'}</span></div>`
   }
   if (previewStatus === 'staged') {
-    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">处理结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
+    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">处理结果：${formatBytes(asset.stagedSizeBytes)} 路 ${asset.stagedWidth || '—'} 脳 ${asset.stagedHeight || '—'}</span></div>`
   }
   if (previewStatus === 'saved') {
-    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">已保存结果：${formatBytes(asset.stagedSizeBytes || asset.sizeBytes)} · ${asset.stagedWidth || asset.width || '—'} × ${asset.stagedHeight || asset.height || '—'}</span></div>`
+    return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">已保存结果：${formatBytes(asset.stagedSizeBytes || asset.sizeBytes)} 路 ${asset.stagedWidth || asset.width || '—'} 脳 ${asset.stagedHeight || asset.height || '—'}</span></div>`
   }
   if (previewStatus === 'stale') {
-    return `<div class="queue-item__subline queue-item__subline--hint"><span>当前预览已过期，修改参数后请重新预览或重新处理。</span></div>`
+    return '<div class="queue-item__subline queue-item__subline--hint"><span>当前预览已过期，修改参数后请重新预览或重新处理。</span></div>'
   }
   return ''
 }
@@ -143,19 +143,19 @@ function getToolSummary(toolId, state, asset) {
   const config = state.configs[toolId]
   if (toolId === 'compression') return getCompressionEstimateSummary(config, asset)
   if (toolId === 'format') return `输出格式 ${config.targetFormat}`
-  if (toolId === 'resize') return `目标尺寸 ${normalizeResizeValue(config.width)} × ${normalizeResizeValue(config.height)}`
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文字' : '图片'}水印 · ${config.position} · ${config.opacity}%`
-  if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, 'px')} · ${config.keepTransparency ? '透明背景' : config.background}`
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px · ${config.opacity}%`
-  if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} · ${config.width}×${config.height}`
+  if (toolId === 'resize') return `目标尺寸 ${normalizeResizeValue(config.width)} 脳 ${normalizeResizeValue(config.height)}`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文字' : '图片'}水印 路 ${config.position} 路 ${config.opacity}%`
+  if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, 'px')} 路 ${config.keepTransparency ? '透明背景' : config.background}`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px 路 ${config.opacity}%`
+  if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} 路 ${config.width}脳${config.height}`
   if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
-  if (toolId === 'merge-pdf') return `页面 ${config.pageSize} · 边距 ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px`
-  if (toolId === 'merge-gif') return `${config.width}×${config.height} · ${config.interval}s`
+  if (toolId === 'merge-pdf') return `页面 ${config.pageSize} 路 边距 ${config.margin}`
+  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'} 路 宽度 ${config.pageWidth}px`
+  if (toolId === 'merge-gif') return `${config.width}脳${config.height} 路 ${config.interval}s`
   return '待处理'
 }
 

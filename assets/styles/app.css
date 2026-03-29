@@ -1663,6 +1663,11 @@ body {
   box-shadow: none !important;
 }
 
+.workspace:not(.workspace--result) .queue-toolbar {
+  background: #F0F4F8 !important;
+  box-shadow: none !important;
+}
+
 .workspace:not(.workspace--result) .settings-section {
   padding: 4px 0;
   background: transparent;
@@ -3271,7 +3276,7 @@ body {
   position: sticky;
   bottom: 0;
   padding-top: 8px;
-  background: linear-gradient(180deg, rgba(247, 249, 252, 0) 0%, rgba(247, 249, 252, 0.94) 24%, rgba(247, 249, 252, 1) 100%);
+  background: #F0F4F8;
 }
 
 .queue-toolbar {

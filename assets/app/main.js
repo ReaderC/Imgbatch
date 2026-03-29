@@ -1893,10 +1893,6 @@ function maybeHandleCurrentToolExecution() {
   return false
 }
 
-function shouldUseStagedPreview(tool) {
-  return shouldPreviewSaveTool(tool)
-}
-
 function getResultInfoMessage(result) {
   return result?.message || '操作已完成。'
 }
@@ -1977,16 +1973,6 @@ function maybeHandleSettingsPersistence() {
   return true
 }
 
-function getResultNotificationType(result) {
-  if (result?.ok) return 'success'
-  if (result?.partial) return 'info'
-  return 'error'
-}
-
-function getSaveAllItems() {
-  return getActionableSaveItems()
-}
-
 function shouldShowSettingsChangeNotice() {
   return hasDefaultSavePath()
 }
@@ -1997,23 +1983,11 @@ function maybeShowSettingsChangeNotice() {
   }
 }
 
-function getActionTargetAsset(target) {
-  return getAssetById(target.dataset.assetId)
-}
-
 function maybeHandleClickSettings(action) {
   if (!isSettingsAction(action)) return false
   maybeHandleSettingsPersistence()
   maybeShowSettingsChangeNotice()
   return true
-}
-
-function shouldUseImmediateAction(action) {
-  return maybeHandleClickSettings(action)
-}
-
-function getSettingsModeHint() {
-  return getSettingsPreviewText()
 }
 
 function normalizeSettingsBootstrap(settings) {
@@ -2051,26 +2025,8 @@ function canUsePromptApi() {
   return typeof window?.prompt === 'function'
 }
 
-function getPromptApiResult() {
-  return canUsePromptApi() ? openSettingsPrompt() : null
-}
-
 function getPreviewSavePathMessage() {
   return `保存目录：${getSavePathSummary()}`
-}
-
-function maybeNotifyPreviewSavePath() {
-  notify({ type: 'info', message: getPreviewSavePathMessage() })
-}
-
-function shouldShowPreviewSavePath(tool) {
-  return shouldPreviewSaveTool(tool)
-}
-
-function routeAssetPreview(asset) {
-  if (maybeHandlePreviewOnly(asset)) return true
-  previewAssetResult(asset)
-  return true
 }
 
 function getToolProcessingSummary(tool, assets) {
