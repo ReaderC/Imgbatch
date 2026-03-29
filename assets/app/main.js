@@ -1349,14 +1349,6 @@ function shouldSetManualCropRatioAction(action) {
   return action === 'set-manual-crop-ratio'
 }
 
-function shouldNavigateManualCropAction(action) {
-  return action === 'manual-crop-prev' || action === 'manual-crop-next'
-}
-
-function shouldCommitManualCropAction(action) {
-  return action === 'manual-crop-skip' || action === 'manual-crop-complete'
-}
-
 function isUtilityTool(toolId) {
   return toolId === SETTINGS_TOOL_ID
 }
@@ -2622,10 +2614,6 @@ function maybeHandleSettingsMode(action) {
   return true
 }
 
-function getClickHandlerResult(action, target, event) {
-  return maybeHandleSettingsMode(action) || shouldHandleAction(action, target, event)
-}
-
 function getToolProcessingAssets(tool) {
   return getToolAssets(tool)
 }
@@ -2755,19 +2743,6 @@ function maybePersistDefaultSavePath() {
 
 function shouldHandleSettingsClick(action) {
   return action === 'open-settings' || action === 'save-default-path'
-}
-
-function maybeHandleSettingsClick(action) {
-  if (!shouldHandleSettingsClick(action)) return false
-  return maybePersistDefaultSavePath()
-}
-
-function getProcessTool() {
-  return getSelectedTool()
-}
-
-function getProcessAssets(tool) {
-  return getToolAssets(tool)
 }
 
 function shouldSkipToolExecution(tool, assets) {
