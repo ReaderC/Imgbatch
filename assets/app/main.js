@@ -1914,10 +1914,6 @@ function getSavableBulkItems() {
   return filterSavableItems(getBulkSaveTargetItems())
 }
 
-function canSaveNow() {
-  return getSavableBulkItems().length > 0
-}
-
 function ensurePreviewActionState(asset) {
   if (maybeShowPreviewResult(asset)) return true
   return false
@@ -2175,12 +2171,6 @@ function hasSavedOutputPath(asset) {
   return !!getSavedOutputPath(asset)
 }
 
-function maybeNotifyAssetOutput(asset) {
-  if (hasSavedOutputPath(asset)) {
-    notify({ type: 'info', message: `输出：${getSavedOutputPath(asset)}` })
-  }
-}
-
 function canPreviewAsset(asset) {
   return !!asset
 }
@@ -2193,10 +2183,6 @@ function maybeHandleAssetPreview(asset) {
 
 function getAssetById(assetId) {
   return resolveSelectedAsset(assetId)
-}
-
-function getToolExecutionResult(tool, assets) {
-  return runToolExecution(tool, assets)
 }
 
 function maybeHandleSingleAssetSave(asset) {
@@ -2260,14 +2246,6 @@ function canUpdateSettings() {
 
 function maybeApplySettings(settings) {
   if (canUpdateSettings()) updateSettingsAfterSave(settings)
-}
-
-function getProcessingState() {
-  return getRunLockState()
-}
-
-function setProcessingState(value) {
-  setRunLockState(value)
 }
 
 function shouldOpenSettingsPrompt() {
@@ -2547,18 +2525,6 @@ function maybeSaveSettingsFromPrompt() {
   const payload = resolveSettingsPayloadFromPrompt()
   if (!payload) return null
   return saveSettings(payload)
-}
-
-function maybePersistDefaultSavePath() {
-  const settings = maybeSaveSettingsFromPrompt()
-  if (!settings) return false
-  maybeApplySettings(settings)
-  notifySettingsSaved(settings)
-  return true
-}
-
-function shouldHandleSettingsClick(action) {
-  return action === 'open-settings' || action === 'save-default-path'
 }
 
 function shouldSkipToolExecution(tool, assets) {
