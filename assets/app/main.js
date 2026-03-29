@@ -117,6 +117,14 @@ function updatePresetDialog(patch) {
   setPresetDialog({ ...current, ...patch })
 }
 
+function normalizeMeasureToggleValue(value, nextUnit) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return nextUnit === '%' ? '%' : 'px'
+  const numeric = raw.replace(/(px|%)$/i, '').trim()
+  if (!numeric) return nextUnit === '%' ? '%' : 'px'
+  return nextUnit === '%' ? `${numeric}%` : `${numeric}px`
+}
+
 async function applyDefaultPresetForTool(toolId, silent = false) {
   const defaultPresetId = getDefaultPresetMap()?.[toolId]
   if (!defaultPresetId) return false
@@ -651,7 +659,9 @@ function isResultViewOpen() {
 }
 
 function shouldShowResultActions() {
-  return !!getState().activeRun || isResultViewOpen()
+  const activeRun = getState().activeRun
+  const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
+  return !!hasBatchRun || isResultViewOpen()
 }
 
 function shouldKeepResultToolbar() {
@@ -3576,6 +3586,17 @@ function attachGlobalEvents() {
       const ratio = parseValue(target.dataset.value)
       updateConfig('crop', { ratio, useCustomRatio: ratio === 'Custom' })
       closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'set-measure-unit') {
+      const toolId = target.dataset.toolId
+      const key = target.dataset.key
+      const nextUnit = target.dataset.unit === '%' ? '%' : 'px'
+      const input = target.closest('.input-shell')?.querySelector('.text-input')
+      const liveValue = input?.value
+      const currentValue = getState().configs?.[toolId]?.[key]
+      updateConfig(toolId, { [key]: normalizeMeasureToggleValue(liveValue ?? currentValue, nextUnit) })
       return
     }
 

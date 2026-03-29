@@ -589,7 +589,7 @@ function normalizeRunConfig(toolId, config = {}) {
       rotation: toNumber(config.rotation, 0),
       margin: Math.max(0, toInteger(config.margin, 24)),
       tiled: Boolean(config.tiled),
-      density: clampNumber(config.density, 20, 200, 100),
+      density: clampNumber(config.density, 20, 250, 100),
       imagePath: sanitizeText(config.imagePath),
     }
   }
@@ -1149,8 +1149,10 @@ async function createTiledWatermarkBuffer(sharpLib, input, density) {
   const meta = await sharpLib(input).metadata()
   const width = Math.max(1, meta.width || 1)
   const height = Math.max(1, meta.height || 1)
-  const densityScale = 100 / Math.max(20, density || 100)
-  const gap = Math.max(12, Math.round(Math.max(width, height) * 0.28 * densityScale))
+  const clampedDensity = clampNumber(density, 20, 250, 100)
+  const densityProgress = (clampedDensity - 20) / 230
+  const gapRatio = 0.42 - densityProgress * 0.405
+  const gap = Math.max(2, Math.round(Math.max(width, height) * gapRatio))
   const canvasWidth = width + gap
   const canvasHeight = height + gap
   const left = Math.max(0, Math.round((canvasWidth - width) / 2))
@@ -1199,6 +1201,13 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
   let input = config.type === 'image'
     ? await createImageWatermarkBuffer(sharpLib, asset, config)
     : buildTextWatermarkSvg(asset, config)
+
+  if (config.type === 'text') {
+    input = await sharpLib(input)
+      .trim()
+      .png()
+      .toBuffer()
+  }
 
   if (config.tiled) {
     input = await createTiledWatermarkBuffer(sharpLib, input, config.density)

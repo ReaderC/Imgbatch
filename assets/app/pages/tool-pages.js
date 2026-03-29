@@ -191,7 +191,7 @@ function renderWatermarkConfig(config) {
     `)}
     ${renderRangeField({ label: '透明度', toolId: 'watermark', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
     ${renderToggleRow('平铺模式', '', 'watermark', 'tiled', config.tiled)}
-    ${config.tiled ? renderRangeField({ label: '平铺密度', toolId: 'watermark', key: 'density', min: 20, max: 200, value: config.density || 100, suffix: '%' }) : ''}
+    ${config.tiled ? renderRangeField({ label: '平铺密度', toolId: 'watermark', key: 'density', min: 20, max: 250, value: config.density || 100, suffix: '%' }) : ''}
     ${config.tiled ? '' : `
       <div>
         <div class="card-label" style="margin-bottom:6px;">锚点位置</div>
@@ -378,9 +378,9 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', place
           ${disabled ? 'disabled' : ''}
         />
         ${hasUnitSwitch ? `
-          <span class="measure-unit-toggle" aria-hidden="true">
-            <span class="measure-unit-toggle__option ${unitMode === 'px' ? 'is-active' : ''}">px</span>
-            <span class="measure-unit-toggle__option ${unitMode === '%' ? 'is-active' : ''}">%</span>
+          <span class="measure-unit-toggle" role="group" aria-label="${escapeAttribute(label)} 单位切换">
+            <button type="button" class="measure-unit-toggle__option ${unitMode === 'px' ? 'is-active' : ''}" data-action="set-measure-unit" data-tool-id="${toolId}" data-key="${key}" data-unit="px">px</button>
+            <button type="button" class="measure-unit-toggle__option ${unitMode === '%' ? 'is-active' : ''}" data-action="set-measure-unit" data-tool-id="${toolId}" data-key="${key}" data-unit="%">%</button>
           </span>
         ` : ''}
       </span>

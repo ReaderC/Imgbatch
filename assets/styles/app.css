@@ -3216,10 +3216,13 @@ body {
   padding: 3px;
   border-radius: 999px;
   background: rgba(91, 94, 114, 0.08);
-  pointer-events: none;
 }
 
 .measure-unit-toggle__option {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   min-width: 28px;
   padding: 3px 8px;
   border-radius: 999px;
@@ -3229,6 +3232,15 @@ body {
   color: var(--on-surface-variant);
   text-align: center;
   transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.measure-unit-toggle__option:hover {
+  color: var(--on-surface);
+}
+
+.measure-unit-toggle__option:focus-visible {
+  outline: 2px solid rgba(73, 86, 180, 0.28);
+  outline-offset: 1px;
 }
 
 .measure-unit-toggle__option.is-active {
