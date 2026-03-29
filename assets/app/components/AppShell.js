@@ -101,7 +101,7 @@ function renderPresetModal(state) {
 
   const presets = state.presetsByTool?.[dialog.toolId] || []
   const toolLabel = TOOL_MAP[dialog.toolId]?.label || dialog.toolId
-  const modeTitle = dialog.mode === 'save' ? '保存预设' : '使用预设'
+  const modeTitle = dialog.mode === 'save' ? '保存预设' : dialog.mode === 'rename' ? '重命名预设' : '使用预设'
 
   return `
     <div class="app-modal" data-action="close-preset-dialog">
@@ -113,7 +113,7 @@ function renderPresetModal(state) {
           <div class="app-modal__title">${modeTitle}</div>
           <div class="app-modal__subtitle">${escapeHtml(toolLabel)}</div>
         </div>
-        ${dialog.mode === 'save'
+        ${(dialog.mode === 'save' || dialog.mode === 'rename')
           ? `
             <div class="preset-form">
               <label class="setting-row setting-row--stack">
@@ -151,13 +151,18 @@ function renderPresetModal(state) {
           `}
         <div class="app-modal__footer">
           <button type="button" class="secondary-button" data-action="close-preset-dialog">取消</button>
+          ${dialog.mode === 'apply' && dialog.selectedPresetId
+            ? `<button type="button" class="secondary-button" data-action="rename-selected-preset">重命名</button>`
+            : ''}
+          ${dialog.mode === 'apply' && dialog.selectedPresetId
+            ? `<button type="button" class="secondary-button" data-action="delete-selected-preset">删除</button>`
+            : ''}
           <button
             type="button"
             class="primary-button"
-            data-action="${dialog.mode === 'save' ? 'confirm-save-preset' : 'confirm-apply-preset'}"
-            ${dialog.mode === 'save' && !String(dialog.name || '').trim() ? 'disabled' : ''}
+            data-action="${dialog.mode === 'save' ? 'confirm-save-preset' : dialog.mode === 'rename' ? 'confirm-rename-preset' : 'confirm-apply-preset'}"
             ${dialog.mode === 'apply' && !dialog.selectedPresetId ? 'disabled' : ''}
-          >${dialog.mode === 'save' ? '保存预设' : '应用预设'}</button>
+          >${dialog.mode === 'save' ? '保存预设' : dialog.mode === 'rename' ? '保存名称' : '应用预设'}</button>
         </div>
       </div>
     </div>

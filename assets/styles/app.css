@@ -5157,3 +5157,63 @@ body {
     padding: 20px 16px 32px;
   }
 }
+
+/* Final tooltip + topbar density overrides */
+.app-tooltip {
+  position: fixed;
+  z-index: 1400;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(29, 34, 48, 0.94);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 14px 28px rgba(15, 18, 28, 0.24);
+  pointer-events: none;
+}
+
+.app-shell {
+  grid-template-rows: 64px minmax(0, 1fr) !important;
+}
+
+.topbar {
+  min-height: 64px !important;
+  padding: 0 20px 0 24px !important;
+  background: #F0F4F8 !important;
+  border-bottom: 0 !important;
+  backdrop-filter: none !important;
+}
+
+.topbar__title {
+  font-size: 18px;
+}
+
+.topbar .sidebar__brand-subtitle {
+  font-size: 12px;
+}
+
+.topbar__actions {
+  right: 20px !important;
+}
+
+.topbar__meta > .primary-button,
+.topbar__meta > .secondary-button {
+  min-height: 38px !important;
+}
+
+.panel-footer-actions {
+  gap: 10px;
+}
+
+.panel-footer-actions .secondary-button,
+.panel-footer-actions .ghost-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
+.app-modal__footer [data-action='delete-selected-preset'] {
+  background: rgba(190, 55, 55, 0.1);
+  color: #b23a3a;
+}

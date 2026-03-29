@@ -30,6 +30,16 @@ export async function loadPresets(toolId) {
   return window.imgbatch.loadPresets(toolId)
 }
 
+export async function renamePreset(toolId, presetId, name) {
+  if (!hasBridge()) return []
+  return window.imgbatch.renamePreset(toolId, presetId, name)
+}
+
+export async function deletePreset(toolId, presetId) {
+  if (!hasBridge()) return []
+  return window.imgbatch.deletePreset(toolId, presetId)
+}
+
 export async function runTool(toolId, config, assets, destinationPath) {
   if (!hasBridge()) {
     return {

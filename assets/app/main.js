@@ -1,7 +1,7 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
 import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -18,6 +18,8 @@ const DRAG_CONTEXT = {
   manualCrop: null,
 }
 let resultMarqueeFrame = 0
+let activeTooltipTarget = null
+let tooltipElement = null
 
 document.body.append(fileInput, folderInput, watermarkFileInput)
 subscribe(render)
@@ -168,10 +170,22 @@ function openSavePresetDialog(toolId) {
   })
 }
 
+function openRenamePresetDialog(toolId, preset) {
+  setPresetDialog({
+    visible: true,
+    mode: 'rename',
+    toolId,
+    name: preset?.name || '',
+    selectedPresetId: preset?.id || '',
+    setAsDefault: false,
+  })
+}
+
 async function confirmSavePresetDialog() {
   const dialog = getState().presetDialog
   if (!dialog?.toolId) return
-  const name = String(dialog.name || '').trim()
+  const liveName = document.querySelector('[data-action="change-preset-name"]')?.value
+  const name = String(liveName ?? dialog.name ?? '').trim()
   if (!name) {
     notify({ type: 'info', message: '请先输入预设名称。' })
     return
@@ -191,8 +205,46 @@ async function confirmSavePresetDialog() {
     })
     updateSettings(settings)
   }
-  closePresetDialog()
+  setPresetDialog({
+    visible: true,
+    mode: 'apply',
+    toolId: dialog.toolId,
+    name: '',
+    selectedPresetId: dialog.selectedPresetId,
+    setAsDefault: false,
+  })
   notify({ type: 'success', message: `已保存预设：${name}` })
+}
+
+async function confirmRenamePresetDialog() {
+  const dialog = getState().presetDialog
+  if (!dialog?.toolId || !dialog.selectedPresetId) return
+  const liveName = document.querySelector('[data-action="change-preset-name"]')?.value
+  const name = String(liveName ?? dialog.name ?? '').trim()
+  if (!name) {
+    notify({ type: 'info', message: '请先输入预设名称。' })
+    return
+  }
+  const presets = normalizeLoadedPresets(await renamePreset(dialog.toolId, dialog.selectedPresetId, name))
+  setToolPresets(dialog.toolId, presets)
+  if (dialog.setAsDefault) {
+    const settings = await saveSettings({
+      defaultPresetByTool: {
+        ...getDefaultPresetMap(),
+        [dialog.toolId]: dialog.selectedPresetId,
+      },
+    })
+    updateSettings(settings)
+  }
+  setPresetDialog({
+    visible: true,
+    mode: 'apply',
+    toolId: dialog.toolId,
+    name: '',
+    selectedPresetId: dialog.selectedPresetId,
+    setAsDefault: false,
+  })
+  notify({ type: 'success', message: `已重命名预设：${name}` })
 }
 
 async function confirmApplyPresetDialog() {
@@ -216,6 +268,25 @@ async function confirmApplyPresetDialog() {
   }
   closePresetDialog()
   notify({ type: 'success', message: `已应用预设：${preset.name}` })
+}
+
+async function removeSelectedPreset() {
+  const dialog = getState().presetDialog
+  if (!dialog?.toolId || !dialog.selectedPresetId) return
+  const presets = getState().presetsByTool?.[dialog.toolId] || []
+  const preset = presets.find((item) => item.id === dialog.selectedPresetId)
+  if (!preset) return
+  if (!window.confirm(`确认删除预设“${preset.name}”吗？`)) return
+  const next = normalizeLoadedPresets(await deletePreset(dialog.toolId, dialog.selectedPresetId))
+  setToolPresets(dialog.toolId, next)
+  const defaultPresetByTool = { ...getDefaultPresetMap() }
+  if (defaultPresetByTool[dialog.toolId] === dialog.selectedPresetId) {
+    delete defaultPresetByTool[dialog.toolId]
+    const settings = await saveSettings({ defaultPresetByTool })
+    updateSettings(settings)
+  }
+  updatePresetDialog({ selectedPresetId: next[0]?.id || '' })
+  notify({ type: 'success', message: `已删除预设：${preset.name}` })
 }
 
 function isPreviewSaveTool(toolId) {
@@ -3011,7 +3082,61 @@ function render(state) {
   app.innerHTML = renderAppShell(state) + renderNotifications(state.notifications)
   injectResultToolbar()
   restoreUiSnapshot(snapshot)
+  syncCustomTooltips()
   queueResultMarqueeSync()
+}
+
+function ensureTooltipElement() {
+  if (tooltipElement?.isConnected) return tooltipElement
+  tooltipElement = document.createElement('div')
+  tooltipElement.className = 'app-tooltip'
+  tooltipElement.hidden = true
+  document.body.append(tooltipElement)
+  return tooltipElement
+}
+
+function syncCustomTooltips() {
+  document.querySelectorAll('[title]').forEach((node) => {
+    const text = String(node.getAttribute('title') || '').trim()
+    if (!text) return
+    node.dataset.tooltip = text
+    if (!node.getAttribute('aria-label') && node.matches('button, [role="button"]')) {
+      node.setAttribute('aria-label', text)
+    }
+    node.removeAttribute('title')
+  })
+}
+
+function positionTooltip(target) {
+  if (!target || !tooltipElement || tooltipElement.hidden) return
+  const rect = target.getBoundingClientRect()
+  const tooltipRect = tooltipElement.getBoundingClientRect()
+  const top = Math.max(8, rect.top - tooltipRect.height - 10)
+  const left = Math.min(
+    window.innerWidth - tooltipRect.width - 8,
+    Math.max(8, rect.left + (rect.width - tooltipRect.width) / 2),
+  )
+  tooltipElement.style.top = `${top}px`
+  tooltipElement.style.left = `${left}px`
+}
+
+function showTooltip(target) {
+  const text = String(target?.dataset?.tooltip || '').trim()
+  if (!text) return
+  if (target?.closest?.('.nav-item') && !document.querySelector('.app-shell')?.classList.contains('app-shell--sidebar-collapsed')) {
+    return
+  }
+  activeTooltipTarget = target
+  const tooltip = ensureTooltipElement()
+  tooltip.textContent = text
+  tooltip.hidden = false
+  positionTooltip(target)
+}
+
+function hideTooltip(target = activeTooltipTarget) {
+  if (target && activeTooltipTarget && target !== activeTooltipTarget) return
+  activeTooltipTarget = null
+  if (tooltipElement) tooltipElement.hidden = true
 }
 
 function attachLaunchSubscription() {
@@ -3048,7 +3173,7 @@ function captureUiSnapshot() {
       role: node.dataset.scrollRole,
       scrollTop: node.scrollTop,
     })),
-    activeField: activeElement?.matches?.('[data-action][data-tool-id][data-key], [data-role="search-input"]')
+    activeField: activeElement?.matches?.('[data-action][data-tool-id][data-key], [data-role="search-input"], [data-action="change-preset-name"]')
       ? getElementDescriptor(activeElement)
       : null,
     selection: activeElement && 'selectionStart' in activeElement
@@ -3092,6 +3217,10 @@ function getElementDescriptor(element) {
 function findElementByDescriptor(descriptor) {
   if (descriptor.role === 'search-input') {
     return document.querySelector('[data-role="search-input"]')
+  }
+
+  if (descriptor.action === 'change-preset-name') {
+    return document.querySelector('[data-action="change-preset-name"]')
   }
 
   const selector = `[data-action="${descriptor.action}"][data-tool-id="${descriptor.toolId}"][data-key="${descriptor.key}"]`
@@ -3151,6 +3280,29 @@ function attachGlobalEvents() {
     if (target.dataset.action === 'manual-crop-drag' || target.dataset.action === 'manual-crop-resize') {
       beginManualCropDrag(event, target)
     }
+  })
+
+  document.addEventListener('mouseover', (event) => {
+    const target = event.target.closest('[data-tooltip]')
+    if (!target) return
+    showTooltip(target)
+  })
+
+  document.addEventListener('mouseout', (event) => {
+    const target = event.target.closest('[data-tooltip]')
+    if (!target) return
+    if (event.relatedTarget?.closest?.('[data-tooltip]') === target) return
+    hideTooltip(target)
+  })
+
+  document.addEventListener('focusin', (event) => {
+    const target = event.target.closest('[data-tooltip]')
+    if (target) showTooltip(target)
+  })
+
+  document.addEventListener('focusout', (event) => {
+    const target = event.target.closest('[data-tooltip]')
+    if (target) hideTooltip(target)
   })
 
   document.addEventListener('click', async (event) => {
@@ -3335,7 +3487,10 @@ function attachGlobalEvents() {
     }
 
     if (action === 'close-preset-dialog') {
-      if (event.target.closest('.app-modal__dialog') && !event.target.closest('.app-modal__close')) return
+      const clickedInsideDialog = !!event.target.closest('.app-modal__dialog')
+      const clickedCloseIcon = !!event.target.closest('.app-modal__close')
+      const clickedCancelButton = !!target.closest('.app-modal__footer [data-action="close-preset-dialog"]')
+      if (clickedInsideDialog && !clickedCloseIcon && !clickedCancelButton) return
       closePresetDialog()
       return
     }
@@ -3350,8 +3505,26 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'confirm-rename-preset') {
+      await confirmRenamePresetDialog()
+      return
+    }
+
     if (action === 'confirm-apply-preset') {
       await confirmApplyPresetDialog()
+      return
+    }
+
+    if (action === 'rename-selected-preset') {
+      const presets = getState().presetsByTool?.[target.dataset.toolId || getState().presetDialog?.toolId] || []
+      const presetId = getState().presetDialog?.selectedPresetId
+      const preset = presets.find((item) => item.id === presetId)
+      if (preset) openRenamePresetDialog(getState().presetDialog.toolId, preset)
+      return
+    }
+
+    if (action === 'delete-selected-preset') {
+      await removeSelectedPreset()
       return
     }
 
@@ -3479,7 +3652,8 @@ function attachGlobalEvents() {
     }
 
     if (action === 'change-preset-name') {
-      updatePresetDialog({ name: target.value })
+      const dialog = getState().presetDialog
+      if (dialog) dialog.name = target.value
       return
     }
 
@@ -3581,6 +3755,12 @@ function attachGlobalEvents() {
   document.addEventListener('pointercancel', () => {
     endRotateDrag()
     endManualCropDrag()
+  })
+
+  window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)
+  window.addEventListener('resize', () => {
+    positionTooltip(activeTooltipTarget)
+    if (activeTooltipTarget) queueResultMarqueeSync()
   })
 
   document.addEventListener('dragover', (event) => {

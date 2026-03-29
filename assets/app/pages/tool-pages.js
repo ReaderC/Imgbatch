@@ -83,7 +83,7 @@ function renderPresetFooter(toolId, state) {
   return `
     <div class="panel-footer-actions">
       <button class="secondary-button" data-action="open-preset-dialog" data-tool-id="${toolId}">使用预设${presets.length ? ` (${presets.length})` : ''}</button>
-      <button class="ghost-button" data-action="save-preset" data-tool-id="${toolId}">保存预设</button>
+      <button class="secondary-button" data-action="save-preset" data-tool-id="${toolId}">保存预设</button>
     </div>
   `
 }
@@ -515,7 +515,7 @@ function getMeasureInputValue(value, fallback = '') {
 
 function getMeasureHint(value, fallbackUnit = 'px') {
   const unit = String(value ?? '').trim().endsWith('%') ? '%' : fallbackUnit
-  return `当前单位 ${unit}，输入 % 切换`
+  return `填写纯数字默认按 px 处理，输入 % 使用百分比，当前单位 ${unit}`
 }
 
 function formatMeasureValue(value, fallbackUnit = 'px') {

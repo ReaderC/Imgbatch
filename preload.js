@@ -2292,7 +2292,46 @@ const toolsApi = {
 
   async loadPresets(toolId) {
     const hostApi = getHostApi()
-    return hostApi.dbStorage?.getItem?.(`imgbatch:preset:${toolId}`) || []
+    const key = `imgbatch:preset:${toolId}`
+    const current = hostApi.dbStorage?.getItem?.(key) || []
+    const normalized = current.map((preset, index) => {
+      const fallbackConfig = preset?.config && typeof preset.config === 'object'
+        ? preset.config
+        : Object.fromEntries(
+            Object.entries(preset || {}).filter(([entryKey]) => !['id', 'name', 'createdAt'].includes(entryKey)),
+          )
+      return {
+        id: sanitizeText(preset?.id, `preset-${Date.now()}-${index + 1}`),
+        name: sanitizeText(preset?.name, `预设${index + 1}`),
+        config: fallbackConfig && typeof fallbackConfig === 'object' ? fallbackConfig : {},
+        createdAt: sanitizeText(preset?.createdAt, new Date().toISOString()),
+      }
+    })
+    const changed = JSON.stringify(current) !== JSON.stringify(normalized)
+    if (changed) hostApi.dbStorage?.setItem?.(key, normalized)
+    return normalized
+  },
+
+  async renamePreset(toolId, presetId, name) {
+    const hostApi = getHostApi()
+    const key = `imgbatch:preset:${toolId}`
+    const current = hostApi.dbStorage?.getItem?.(key) || []
+    const next = current.map((preset) => (
+      String(preset?.id) === String(presetId)
+        ? { ...preset, name: sanitizeText(name, preset?.name || '未命名预设') }
+        : preset
+    ))
+    hostApi.dbStorage?.setItem?.(key, next)
+    return next
+  },
+
+  async deletePreset(toolId, presetId) {
+    const hostApi = getHostApi()
+    const key = `imgbatch:preset:${toolId}`
+    const current = hostApi.dbStorage?.getItem?.(key) || []
+    const next = current.filter((preset) => String(preset?.id) !== String(presetId))
+    hostApi.dbStorage?.setItem?.(key, next)
+    return next
   },
 
   prepareRunPayload(toolId, config, assets, destinationPath) {
