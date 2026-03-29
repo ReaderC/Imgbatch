@@ -492,25 +492,8 @@ function getResultFileName(asset, outputPath) {
   return fileName || asset.name || ''
 }
 
-function getSizeDeltaText(before = 0, after = 0) {
-  const delta = Number(after || 0) - Number(before || 0)
-  if (!delta) return '0 B'
-  const prefix = delta > 0 ? '+' : '-'
-  return `${prefix}${formatBytes(Math.abs(delta))}`
-}
-
-function getDimensionDeltaText(before = 0, after = 0) {
-  const delta = Number(after || 0) - Number(before || 0)
-  if (!delta) return '0'
-  return `${delta > 0 ? '+' : ''}${delta}`
-}
-
 function formatDimensions(width = 0, height = 0) {
   return `${width || '—'} × ${height || '—'}`
-}
-
-function formatResultStat(value, delta) {
-  return delta ? `${value} (${delta})` : value
 }
 
 function hasVisibleResultComparison() {
@@ -814,10 +797,6 @@ function formatBytes(bytes = 0) {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
-function canSaveAllCurrentResults() {
-  return buildStagedItems(getState().assets).some((item) => item.runFolderName && item.toolId === getState().activeTool)
-}
-
 function isSettingsAction(action) {
   return action === 'open-settings' || action === 'save-default-path'
 }
@@ -936,10 +915,6 @@ function getPreviewableToolLabel(tool) {
 
 function getPreviewOpenError(tool) {
   return `${getPreviewableToolLabel(tool)} 预览结果无法打开。`
-}
-
-function createPreviewError(error, tool) {
-  return error?.message || getPreviewOpenError(tool)
 }
 
 function shouldDirectPreviewTool(toolId) {
@@ -1343,29 +1318,12 @@ function getConfiguredToolSummary(tool) {
   return describeToolConfig(tool.id, getState().configs[tool.id])
 }
 
-function canRunTool(tool) {
-  return !!tool && !isUtilityTool(tool.id)
-}
-
 function getToolAssets(tool) {
   return getAssetsForTool(tool.id, getState().assets)
 }
 
 function getToolRunner(tool) {
   return getProcessRunner(tool.id)
-}
-
-function applyResultAndNotify(result, successFallback, errorFallback) {
-  if (result?.processed?.length || result?.failed?.length) {
-    applyRunResult(result)
-    handleResultProcessCompletion()
-  }
-  if (result?.ok || result?.partial) {
-    notify({ type: result.partial ? 'info' : 'success', message: result.message || successFallback })
-    return true
-  }
-  notify({ type: 'info', message: result?.message || errorFallback })
-  return false
 }
 
 function getDefaultSavePathLabel() {
@@ -1380,24 +1338,8 @@ function previewAssetResult(asset) {
   notify({ type: 'info', message: getPreviewMessage(asset) })
 }
 
-function isPreviewReady(asset) {
-  return asset?.previewStatus === 'staged'
-}
-
-function isPreviewExpired(asset) {
-  return asset?.previewStatus === 'stale'
-}
-
-function isPreviewSaved(asset) {
-  return asset?.previewStatus === 'saved'
-}
-
 function getSettingsHint() {
   return `默认保存路径：${getDefaultSavePathLabel()}`
-}
-
-function notifySettingsHint() {
-  notify({ type: 'info', message: getSettingsHint() })
 }
 
 function ensurePreviewableTool(tool) {
@@ -1713,10 +1655,6 @@ function getPreviewStaleAssets() {
   return getState().assets.filter((asset) => asset.previewStatus === 'stale')
 }
 
-function shouldWarnStaleBeforeBulkSave() {
-  return getPreviewStaleAssets().length > 0 && !canBulkSave()
-}
-
 function normalizeToolLabel(tool) {
   return tool?.label || '当前工具'
 }
@@ -1761,10 +1699,6 @@ function getBulkSaveTargetItems() {
   return getBulkSaveItems()
 }
 
-function shouldUseUtilityTool(tool) {
-  return isUtilityTool(tool?.id)
-}
-
 function maybeProcessUtilityTool(tool) {
   return processUtilityTool(tool?.id)
 }
@@ -1801,20 +1735,8 @@ function shouldNotifyToolExecutionIntro(tool) {
   return shouldProcessPreviewSave(tool)
 }
 
-function maybeNotifyToolExecutionIntro(tool, assets) {
-  if (shouldNotifyToolExecutionIntro(tool)) notifyToolExecutionIntro(tool, assets)
-}
-
 function getToolFallbackResult(tool, assets) {
   return getRunFallbackMessage(tool, assets)
-}
-
-function applyImportedAssets(assets) {
-  appendAssets(assets)
-}
-
-function createRunPlaceholderMessage(tool, assets) {
-  return getToolFallbackResult(tool, assets)
 }
 
 function shouldSaveStagedItem(item) {
@@ -1917,10 +1839,6 @@ function getToolRunArgs(tool, assets) {
   return [tool.id, getCurrentToolConfig(tool.id), assets, getDestinationPathForExecution()]
 }
 
-function runToolExecution(tool, assets) {
-  return getToolRunnerForExecution(tool)(...getToolRunArgs(tool, assets))
-}
-
 function maybeHandleSingleSaveState(asset) {
   return handleSavableAssetState(asset)
 }
@@ -1943,10 +1861,6 @@ function ensureSettingsPrompt() {
 
 function getPreviewSummaryMessage(asset) {
   return getPreviewStatusMessage(asset)
-}
-
-function notifyPreviewSummary(asset) {
-  notify({ type: 'info', message: getPreviewSummaryMessage(asset) })
 }
 
 function shouldUsePreviewNotification(asset) {
@@ -1976,10 +1890,6 @@ function maybeNotifySavePath() {
 
 function shouldEmitSavePathHint(tool) {
   return shouldPreviewSaveTool(tool)
-}
-
-function maybeEmitSavePathHint(tool) {
-  if (shouldEmitSavePathHint(tool)) maybeNotifySavePath()
 }
 
 function getActionableSaveItems() {
@@ -2260,20 +2170,8 @@ function getActionResult(action, target, event) {
     || maybeHandleConfigActions(action, target)
 }
 
-function shouldHandleAction(action, target, event) {
-  return getActionResult(action, target, event)
-}
-
 function getSettingsModeHint() {
   return getSettingsPreviewText()
-}
-
-function maybeShowSettingsModeHint() {
-  notify({ type: 'info', message: getSettingsModeHint() })
-}
-
-function getRunnerForTool(tool) {
-  return getToolRunnerForExecution(tool)
 }
 
 function applyExecutionResult(result) {
@@ -2283,28 +2181,12 @@ function applyExecutionResult(result) {
   maybeNotifySaveReadyState()
 }
 
-function createFallbackExecutionMessage(tool, assets) {
-  return getProcessFallbackMessage(tool, assets.length)
-}
-
 function applyPersistedSettings(settings) {
   updateCurrentSettings(settings)
 }
 
 function shouldUsePersistedSettings(settings) {
   return !!settings
-}
-
-function maybeApplyPersistedSettings(settings) {
-  if (shouldUsePersistedSettings(settings)) applyPersistedSettings(settings)
-}
-
-function notifyBootstrapSettingsFailure() {
-  // ignore
-}
-
-function getProcessExecutionMessage(tool, assets) {
-  return createProcessMessage(tool, assets)
 }
 
 function normalizeSettingsBootstrap(settings) {
@@ -2321,10 +2203,6 @@ function maybeNotifyCurrentSavePathHint() {
 
 function shouldShowCurrentSavePathHint(tool) {
   return shouldPreviewSaveTool(tool)
-}
-
-function getPreviewNotificationMessage(asset) {
-  return getPreviewSummaryMessage(asset)
 }
 
 function notifyPreviewNotification(asset) {
@@ -2356,26 +2234,8 @@ function resolveSettingsPayloadFromPrompt() {
   return createSettingsPayload(result)
 }
 
-function maybeSaveSettingsFromPrompt() {
-  const payload = resolveSettingsPayloadFromPrompt()
-  if (!payload) return null
-  return saveSettings(payload)
-}
-
-function getExecutionRunner(tool) {
-  return getToolRunnerForExecution(tool)
-}
-
-function createExecutionArgs(tool, assets) {
-  return [tool.id, getCurrentToolConfig(tool.id), assets, getDestinationPathForExecution()]
-}
-
 function normalizeBootstrapSettings(settings) {
   return normalizeSettingsBootstrap(settings)
-}
-
-function getSettingsBootstrapResult(settings) {
-  return normalizeBootstrapSettings(settings)
 }
 
 function getPreviewSavePathMessage() {
