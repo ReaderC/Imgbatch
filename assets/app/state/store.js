@@ -21,7 +21,6 @@ const state = {
   presetsByTool: {},
   previewModal: null,
   resultView: null,
-  colorPicker: null,
   sidebarCollapsed: false,
   assets: [],
   notifications: [],
@@ -38,7 +37,7 @@ const state = {
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start' },
     'merge-gif': { width: 1080, height: 1080, interval: 0.5, background: '#ffffff', loop: true },
-    'manual-crop': { ratio: '16:9 电影', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, dragMode: '', dragHandle: '', draftArea: null, hudCollapsed: true },
+    'manual-crop': { ratio: '16:9 电影', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, hudCollapsed: true },
   },
 }
 
@@ -91,11 +90,6 @@ export function setPreviewModal(previewModal) {
 
 export function setResultView(resultView) {
   state.resultView = resultView
-  emit()
-}
-
-export function setColorPicker(colorPicker) {
-  state.colorPicker = colorPicker
   emit()
 }
 

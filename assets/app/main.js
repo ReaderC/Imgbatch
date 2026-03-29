@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setColorPicker, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
 import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -85,18 +85,6 @@ async function ensureToolPresetsLoaded(toolId, force = false) {
   const presets = normalizeLoadedPresets(await loadPresets(toolId))
   setToolPresets(toolId, presets)
   return presets
-}
-
-function openPresetDialog(toolId, mode = 'apply') {
-  const presets = getState().presetsByTool?.[toolId] || []
-  setPresetDialog({
-    visible: true,
-    mode,
-    toolId,
-    name: '',
-    selectedPresetId: mode === 'apply' ? (presets[0]?.id || '') : '',
-    setAsDefault: false,
-  })
 }
 
 function closePresetDialog() {
@@ -590,27 +578,11 @@ function normalizeColorInputValue(value = '') {
   return /^#([0-9A-F]{6})$/.test(text) ? text : ''
 }
 
-function updateColorPickerPreview(value) {
-  const normalized = normalizeColorInputValue(value)
-  if (!normalized) return
-  const current = getState().colorPicker
-  if (current?.visible) {
-    setColorPicker({ ...current, value: normalized })
-  }
-}
-
 function syncColorTextInput(target) {
   const wrapper = target.closest('.color-field')
   const mirror = wrapper?.querySelector('.color-field__value')
   const value = target.value.toUpperCase()
   if (mirror) mirror.value = value
-  updateColorPickerPreview(value)
-}
-
-function syncColorMagnifierInput(target) {
-  const normalized = normalizeColorInputValue(target.value)
-  if (!normalized) return
-  updateColorPickerPreview(normalized)
 }
 
 function syncResultMarquees() {
@@ -635,18 +607,6 @@ function openColorPickerZoom(target) {
   if (!nativeInput) return
   nativeInput.showPicker?.()
   if (!nativeInput.showPicker) nativeInput.click()
-}
-
-function closeColorPickerZoom() {
-  setColorPicker(null)
-}
-
-function isColorPickerOpen() {
-  return !!getState().colorPicker?.visible
-}
-
-function closeColorPickerIfOpen() {
-  if (isColorPickerOpen()) closeColorPickerZoom()
 }
 
 function handleColorMagnifierAction(target) {
@@ -702,7 +662,6 @@ function openCurrentResultsPanel() {
 
 function clearAllResultOverlays() {
   closePreviewModal()
-  closeColorPickerIfOpen()
 }
 
 function clearResultUiAfterToolChange() {
@@ -3718,10 +3677,6 @@ function attachGlobalEvents() {
       return
     }
 
-    if (target.matches('.color-field__value')) {
-      syncColorMagnifierInput(target)
-    }
-
     if (action === 'change-preset-name') {
       const dialog = getState().presetDialog
       if (dialog) dialog.name = target.value
@@ -3792,7 +3747,6 @@ function attachGlobalEvents() {
       const normalized = normalizeColorInputValue(target.value)
       if (normalized) {
         updateColorPreview(target.dataset.toolId, target.dataset.key, normalized)
-        syncColorMagnifierInput(target)
       }
       return
     }
