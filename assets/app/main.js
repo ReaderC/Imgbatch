@@ -2410,20 +2410,8 @@ function maybeHandlePreviewSaveTool(tool, assets) {
   return false
 }
 
-function getDefaultSavePathState() {
-  return getSettingsDefaultSavePath()
-}
-
 function shouldUseDefaultSavePathState() {
   return !!getSettingsDefaultSavePath()
-}
-
-function getSettingsStatusText() {
-  return shouldUseDefaultSavePathState() ? getDefaultSavePathState() : '未设置'
-}
-
-function maybeNotifySettingsStatus() {
-  notify({ type: 'info', message: `默认保存路径：${getSettingsStatusText()}` })
 }
 
 function getPendingSaveItemsCount() {
@@ -2432,12 +2420,6 @@ function getPendingSaveItemsCount() {
 
 function shouldShowPendingSaveItemsCount() {
   return getPendingSaveItemsCount() > 0
-}
-
-function maybeNotifyPendingSaveItemsCount() {
-  if (shouldShowPendingSaveItemsCount()) {
-    notify({ type: 'info', message: `当前有 ${getPendingSaveItemsCount()} 项结果可保存。` })
-  }
 }
 
 function notifySavedOutputPath(result) {
@@ -2551,7 +2533,9 @@ function maybeNotifyPreviewPath(asset) {
 }
 
 function maybeNotifySaveReadyState() {
-  maybeNotifyPendingSaveItemsCount()
+  if (shouldShowPendingSaveItemsCount()) {
+    notify({ type: 'info', message: `当前有 ${getPendingSaveItemsCount()} 项结果可保存。` })
+  }
 }
 
 function canUpdateSettings() {
@@ -2897,16 +2881,6 @@ function routeClickAction(action, target, event) {
     || maybeHandleConfigActions(action, target)
 }
 
-function hasPreviewSaveOutputs() {
-  return hasPreviewableResults()
-}
-
-function maybeNotifyPreviewSaveOutputs() {
-  if (hasPreviewSaveOutputs()) {
-    notify({ type: 'info', message: `当前有 ${getPreviewSaveAssets().length} 项预览结果可保存。` })
-  }
-}
-
 function getProcessTool() {
   return getSelectedTool()
 }
@@ -2987,17 +2961,6 @@ function maybeNotifyToolProcessingSummary(tool, assets) {
     notify({ type: 'info', message: getToolProcessingSummary(tool, assets) })
   }
 }
-
-function getPreviewSaveCount() {
-  return getPreviewSaveAssets().length
-}
-
-function maybeNotifyPreviewSaveCount() {
-  if (getPreviewSaveCount()) {
-    notify({ type: 'info', message: `可保存结果：${getPreviewSaveCount()} 项` })
-  }
-}
-
 
 function render(state) {
   const snapshot = captureUiSnapshot()
