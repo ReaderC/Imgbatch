@@ -822,14 +822,6 @@ function isSettingsAction(action) {
   return action === 'open-settings' || action === 'save-default-path'
 }
 
-function handleSettingsAction(action) {
-  if (action === 'open-settings' || action === 'save-default-path') {
-    void persistDefaultSavePath()
-    return true
-  }
-  return false
-}
-
 function getProcessRunner(toolId) {
   return isPreviewSaveTool(toolId)
     ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save')
@@ -1547,13 +1539,6 @@ function maybeHandleSaveActions(action, target) {
   return false
 }
 
-function maybeHandleSettingsActions(action) {
-  if (!isSettingsAction(action)) return false
-  maybeNotifySettingsHint(action)
-  openSettingsDialog()
-  return true
-}
-
 function maybeHandlePreviewAction(action, target) {
   if (!shouldPreviewAssetAction(action)) return false
   const tool = getSelectedTool()
@@ -1670,13 +1655,6 @@ function toggleConfigSelect(target) {
   closeAllConfigSelects(shell)
   shell.classList.toggle('is-open', willOpen)
   target.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
-}
-
-function maybeHandleManualCropActions(action) {
-  if (shouldNavigateManualCropAction(action) || shouldCommitManualCropAction(action)) {
-    return false
-  }
-  return false
 }
 
 function getSettingsState() {
@@ -2648,10 +2626,6 @@ function getClickHandlerResult(action, target, event) {
   return maybeHandleSettingsMode(action) || shouldHandleAction(action, target, event)
 }
 
-function shouldHandleClick(action, target, event) {
-  return getClickHandlerResult(action, target, event)
-}
-
 function getToolProcessingAssets(tool) {
   return getToolAssets(tool)
 }
@@ -2728,18 +2702,8 @@ function maybeShowCurrentSavePathHint(tool) {
   if (shouldShowCurrentSavePathHint(tool)) maybeNotifyCurrentSavePathHint()
 }
 
-function getActionState() {
-  return getCurrentState()
-}
-
 function isSaveProcessingAction(action) {
   return shouldUseSingleSaveAction(action) || shouldUseBulkSaveAction(action)
-}
-
-function maybePreventWhileProcessing(action) {
-  if (!isSaveProcessingAction(action)) return false
-  if (!getProcessingState()) return false
-  return true
 }
 
 function getPreviewNotificationMessage(asset) {
@@ -2796,19 +2760,6 @@ function shouldHandleSettingsClick(action) {
 function maybeHandleSettingsClick(action) {
   if (!shouldHandleSettingsClick(action)) return false
   return maybePersistDefaultSavePath()
-}
-
-function routeClickAction(action, target, event) {
-  return maybeHandleSettingsClick(action)
-    || maybeHandleClickAssetSave(action, target)
-    || maybeHandleClickSaveAll(action)
-    || maybeHandleBasicAssetActions(action, target)
-    || maybeHandleClickPreview(action, target)
-    || maybeHandleClickProcess(action)
-    || maybeHandleOpenInputActions(action)
-    || maybeHandlePresetAction(action, target)
-    || maybeHandleToolActions(action, target, event)
-    || maybeHandleConfigActions(action, target)
 }
 
 function getProcessTool() {
