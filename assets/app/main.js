@@ -757,7 +757,7 @@ function closePreviewModal() {
 function setPreviewCompareRatio(ratio) {
   const preview = getState().previewModal
   if (!preview?.url) return
-  const nextRatio = Math.max(0.05, Math.min(0.95, ratio))
+  const nextRatio = Math.max(0, Math.min(1, ratio))
   if (Math.abs((Number(preview.compareRatio) || 0.5) - nextRatio) < 0.0025) return
   setPreviewModal({ ...preview, compareRatio: nextRatio })
 }

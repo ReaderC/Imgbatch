@@ -336,7 +336,7 @@ function renderInteractivePreviewModal(preview) {
   const beforeUrl = preview.beforeUrl || preview.url
   const afterUrl = preview.afterUrl || preview.url
   const compareRatio = Number.isFinite(Number(preview.compareRatio))
-    ? Math.max(0.05, Math.min(0.95, Number(preview.compareRatio)))
+    ? Math.max(0, Math.min(1, Number(preview.compareRatio)))
     : 0.5
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
   return `
