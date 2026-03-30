@@ -2045,7 +2045,7 @@ function moveManualCropArea(context, event, asset) {
 }
 
 function resizeManualCropArea(context, event, asset) {
-  const ratio = getManualCropRatio(context.ratioValue)
+  const ratio = getEffectiveManualCropRatio(context.area, context.ratioValue)
   const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
   const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
   const start = context.area
@@ -2085,6 +2085,12 @@ function resizeManualCropArea(context, event, asset) {
   }
 
   return clampManualCropArea({ x, y, width, height }, asset)
+}
+
+function getEffectiveManualCropRatio(area, ratioValue) {
+  const presetRatio = getManualCropRatio(ratioValue)
+  const currentRatio = Math.max(1 / 1000, (Number(area?.width) || 1) / Math.max(1, Number(area?.height) || 1))
+  return Math.abs(currentRatio - presetRatio) <= 0.02 ? presetRatio : currentRatio
 }
 
 function clampManualCropArea(area, asset) {
