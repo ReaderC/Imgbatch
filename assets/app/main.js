@@ -946,66 +946,6 @@ function findNextManualCropIndex(config, assets, startIndex) {
   return Math.min(startIndex, assets.length - 1)
 }
 
-function shouldUseBulkSaveAction(action) {
-  return action === 'save-all-results'
-}
-
-function shouldUseSingleSaveAction(action) {
-  return action === 'save-asset-result'
-}
-
-function shouldPreviewAssetAction(action) {
-  return action === 'preview-asset'
-}
-
-function shouldProcessCurrentAction(action) {
-  return action === 'process-current'
-}
-
-function shouldHandlePresetAction(action) {
-  return action === 'save-preset'
-}
-
-function shouldOpenFileInputAction(action) {
-  return action === 'open-file-input' || action === 'pick-demo'
-}
-
-function shouldOpenFolderInputAction(action) {
-  return action === 'open-folder-input'
-}
-
-function shouldRemoveAssetAction(action) {
-  return action === 'remove-asset'
-}
-
-function shouldMoveAssetAction(action) {
-  return action === 'move-asset'
-}
-
-function shouldActivateToolAction(action) {
-  return action === 'activate-tool'
-}
-
-function shouldDragRotateAction(action) {
-  return action === 'drag-rotate'
-}
-
-function shouldToggleConfigAction(action) {
-  return action === 'toggle-config'
-}
-
-function shouldSetConfigAction(action) {
-  return action === 'set-config'
-}
-
-function shouldApplyResizePresetAction(action) {
-  return action === 'apply-resize-preset'
-}
-
-function shouldSetManualCropRatioAction(action) {
-  return action === 'set-manual-crop-ratio'
-}
-
 function closeConfigSelect(target) {
   const shell = target?.closest?.('.select-shell')
   if (!shell) return
