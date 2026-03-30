@@ -1322,29 +1322,30 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   }
 
   const isDataUrl = imagePath.startsWith('data:image/')
-  const input = isDataUrl
-    ? Buffer.from(imagePath.slice(imagePath.indexOf(',') + 1), 'base64')
-    : imagePath
+  const imageSourceKey = isDataUrl ? imagePath : path.resolve(imagePath)
 
   if (!isDataUrl && !fs.existsSync(imagePath)) {
     throw new Error('图片水印文件不存在')
   }
 
-  const imageInput = isDataUrl
-    ? input
-    : WATERMARK_IMAGE_CACHE.get(imagePath) || (() => {
-      const buffer = fs.readFileSync(imagePath)
-      WATERMARK_IMAGE_CACHE.set(imagePath, buffer)
-      return buffer
-    })()
+  const imageInput = WATERMARK_IMAGE_CACHE.get(imageSourceKey) || (() => {
+    const buffer = isDataUrl
+      ? Buffer.from(imagePath.slice(imagePath.indexOf(',') + 1), 'base64')
+      : fs.readFileSync(imagePath)
+    WATERMARK_IMAGE_CACHE.set(imageSourceKey, buffer)
+    return buffer
+  })()
 
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
-  const overlayCacheKey = !isDataUrl
-    ? `${imagePath}|${Math.round(toNumber(config.rotation, 0))}|${Math.round(clampNumber(config.opacity, 0, 100, 60))}|${watermarkWidth}`
-    : ''
-  const cachedOverlay = overlayCacheKey ? WATERMARK_OVERLAY_CACHE.get(overlayCacheKey) : null
+  const overlayCacheKey = [
+    imageSourceKey,
+    Math.round(toNumber(config.rotation, 0)),
+    Math.round(clampNumber(config.opacity, 0, 100, 60)),
+    watermarkWidth,
+  ].join('|')
+  const cachedOverlay = WATERMARK_OVERLAY_CACHE.get(overlayCacheKey)
   if (cachedOverlay) return cachedOverlay
 
   const { data, info } = await sharpLib(imageInput)
@@ -1359,9 +1360,7 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
     height: info.height || 1,
     cacheKey: overlayCacheKey,
   }
-  if (overlayCacheKey) {
-    WATERMARK_OVERLAY_CACHE.set(overlayCacheKey, overlay)
-  }
+  WATERMARK_OVERLAY_CACHE.set(overlayCacheKey, overlay)
   return overlay
 }
 
