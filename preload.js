@@ -1963,45 +1963,24 @@ async function writeMergeGifAsset(sharpLib, payload) {
   }
 }
 
-async function executeSingleAssetToolLegacy(payload, sharpLib) {
-  const processed = []
-  const failed = []
-
-  for (const asset of payload.assets) {
-    if (!isProcessableAsset(asset)) {
-      failed.push({ assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` })
-      continue
-    }
-
-    try {
-      let result = null
-      if (payload.toolId === 'compression') result = await writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'format') result = await writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'resize') result = await writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'watermark') result = await writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'rotate') result = await writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'flip') result = await writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'corners') result = await writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'padding') result = await writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'crop') result = await writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
-      if (payload.toolId === 'manual-crop') {
-        const manualArea = payload.config.cropAreas?.[asset.id]
-        const manualConfig = {
-          ratio: payload.config.ratioValue || payload.config.ratio,
-          area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
-        }
-        result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
-      }
-
-      processed.push(payload.mode === 'direct'
-        ? directResultToProcessed(asset, result)
-        : stageResultToProcessed(asset, result, payload))
-    } catch (error) {
-      failed.push({ assetId: asset.id, name: asset.name, error: error?.message || '处理失败' })
-    }
+async function executeAssetTool(sharpLib, payload, asset) {
+  if (payload.toolId === 'compression') return writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'format') return writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'resize') return writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'watermark') return writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'rotate') return writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'flip') return writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'corners') return writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'padding') return writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
+  if (payload.toolId === 'crop') return writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
+  if (payload.toolId === 'manual-crop') {
+    const manualArea = payload.config.cropAreas?.[asset.id]
+    return writeCropAsset(sharpLib, asset, {
+      ratio: payload.config.ratioValue || payload.config.ratio,
+      area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
+    }, payload.destinationPath, 'manual-crop')
   }
-
-  return { processed, failed }
+  throw new Error(`未支持的工具：${payload.toolId}`)
 }
 
 function isMergeTool(toolId) {
@@ -2033,24 +2012,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
     }
 
     try {
-      let result = null
-      if (payload.toolId === 'compression') result = await writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'format') result = await writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'resize') result = await writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'watermark') result = await writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'rotate') result = await writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'flip') result = await writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'corners') result = await writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'padding') result = await writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
-      if (payload.toolId === 'crop') result = await writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
-      if (payload.toolId === 'manual-crop') {
-        const manualArea = payload.config.cropAreas?.[asset.id]
-        const manualConfig = {
-          ratio: payload.config.ratioValue || payload.config.ratio,
-          area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
-        }
-        result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
-      }
+      const result = await executeAssetTool(sharpLib, payload, asset)
 
       const processed = await (payload.mode === 'direct'
         ? directResultToProcessed(asset, result, sharpLib)
