@@ -61,7 +61,7 @@ function summarizeConfig(toolId, config = {}) {
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px`
+  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px${config.preventUpscale ? ' / 小图不放大' : ''}`
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'
@@ -731,6 +731,7 @@ function normalizeRunConfig(toolId, config = {}) {
       spacing: Math.max(0, toInteger(config.spacing, 24)),
       background: sanitizeText(config.background, '#ffffff'),
       align: pickOption(String(config.align || ''), ['start', 'center'], 'start'),
+      preventUpscale: Boolean(config.preventUpscale),
     }
   }
 
@@ -1726,6 +1727,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const background = hexToRgbaObject(payload.config.background, 1)
   const isVertical = payload.config.direction === 'vertical'
   const isCentered = payload.config.align === 'center'
+  const preventUpscale = Boolean(payload.config.preventUpscale)
   const fitWidth = isVertical ? payload.config.pageWidth : undefined
   const fitHeight = isVertical ? undefined : payload.config.pageWidth
   let contentWidth = 0
@@ -1733,7 +1735,13 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
   for (const asset of payload.assets) {
     const { data, info } = await sharpLib(asset.sourcePath)
-      .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background })
+      .resize({
+        width: fitWidth,
+        height: fitHeight,
+        fit: 'contain',
+        background,
+        withoutEnlargement: preventUpscale,
+      })
       .png()
       .toBuffer({ resolveWithObject: true })
     const width = info.width || 1

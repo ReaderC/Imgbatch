@@ -323,6 +323,7 @@ function renderMergeImageConfig(config) {
       ${renderInputField({ label: '页面宽度', toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1 })}
       ${renderInputField({ label: '图片间距', toolId: 'merge-image', key: 'spacing', type: 'number', value: config.spacing, min: 0 })}
     `)}
+    ${renderToggleRow('小图不放大', '小于目标宽度的图片保持原尺寸，居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
     ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
   `)
