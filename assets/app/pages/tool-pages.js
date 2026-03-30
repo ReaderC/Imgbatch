@@ -152,9 +152,12 @@ function renderCompressionConfig(config) {
 }
 
 function renderFormatConfig(config) {
+  const mode = config.mode === 'quality' ? 'quality' : 'convert'
   const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
   const qualitySupported = FORMAT_QUALITY_SUPPORTED.has(targetFormat)
-  const qualityHint = !qualitySupported
+  const qualityHint = mode !== 'quality'
+    ? '仅转换格式时会尽量保持质量，不额外降质。'
+    : !qualitySupported
     ? `${targetFormat} 输出不支持质量调节，此项不会生效。`
     : targetFormat === 'PNG'
       ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
@@ -163,9 +166,13 @@ function renderFormatConfig(config) {
     ? `${targetFormat} 不支持透明通道，输出时会自动铺白底。`
     : ''
   return renderSettingsSection(`
+    ${renderSegmented('format', 'mode', mode, [
+      ['convert', '仅转换格式'],
+      ['quality', '调节质量'],
+    ])}
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
-      ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
+      ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: mode !== 'quality' || !qualitySupported, hint: qualityHint })}
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', config.keepTransparency)}

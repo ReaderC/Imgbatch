@@ -49,7 +49,7 @@ const TOOL_LABELS = {
 
 function summarizeConfig(toolId, config = {}) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
-  if (toolId === 'format') return `输出 ${config.targetFormat}`
+  if (toolId === 'format') return `输出 ${config.targetFormat}${config.mode === 'quality' ? ` / 质量 ${config.quality}%` : ' / 仅转换'}`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
   if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, config.unit || 'px')}`
@@ -623,6 +623,7 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'format') {
     return {
+      mode: pickOption(config.mode, ['convert', 'quality'], 'convert'),
       targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO'], 'JPEG'),
       quality: clampNumber(config.quality, 1, 100, 90),
       keepTransparency: Boolean(config.keepTransparency),
@@ -1218,8 +1219,9 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let transformed = applyColorProfile(createTransformer(sharpLib, asset), config.colorProfile)
   transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
+  const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
 
-  return writeTransformedAsset(transformed, format, Math.round(config.quality), outputPath, {
+  return writeTransformedAsset(transformed, format, quality, outputPath, {
     width: asset.width,
     height: asset.height,
   })

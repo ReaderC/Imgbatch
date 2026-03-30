@@ -147,7 +147,7 @@ function getToolPreviewStatus(asset, toolId) {
 function getToolSummary(toolId, state, asset) {
   const config = state.configs[toolId]
   if (toolId === 'compression') return getCompressionEstimateSummary(config, asset)
-  if (toolId === 'format') return `输出格式 ${config.targetFormat}`
+  if (toolId === 'format') return `输出格式 ${config.targetFormat}${config.mode === 'quality' ? ` · 质量 ${config.quality}%` : ' · 仅转换'}`
   if (toolId === 'resize') return `目标尺寸 ${normalizeResizeValue(config.width)} × ${normalizeResizeValue(config.height)}`
   if (toolId === 'watermark') return `${config.type === 'text' ? '文字' : '图片'}水印 · ${config.position} · ${config.opacity}%`
   if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, 'px')} · ${config.keepTransparency ? '透明背景' : config.background}`
