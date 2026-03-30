@@ -1588,12 +1588,6 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
-function mapFlipOutputFormat(asset, config) {
-  const requested = String(config.outputFormat || '').toLowerCase()
-  if (!requested || requested === 'keep original') return mapOutputFormat('flip', asset, config)
-  return mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
-}
-
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
@@ -1633,7 +1627,10 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
-  const format = mapFlipOutputFormat(asset, config)
+  const requestedOutputFormat = String(config.outputFormat || '').toLowerCase()
+  const format = !requestedOutputFormat || requestedOutputFormat === 'keep original'
+    ? mapOutputFormat('flip', asset, config)
+    : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const sourceFormat = normalizeImageFormatName(asset.ext)
 

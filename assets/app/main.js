@@ -826,13 +826,6 @@ function notifyPreviewUnavailable(tool, asset) {
   notify({ type: 'info', message: getPreviewPlaceholderMessage(tool, asset) })
 }
 
-function openExistingPreview(toolId, asset) {
-  if (shouldReusePreviewResult(toolId, asset) && openPreviewModal(asset)) {
-    return true
-  }
-  return false
-}
-
 function getPreviewAssetLabel(asset) {
   return truncate(asset?.name || '当前图片', 20)
 }
@@ -860,7 +853,7 @@ async function previewWithRunner(tool, asset) {
 }
 
 async function previewAssetWithTool(tool, asset) {
-  if (openExistingPreview(tool.id, asset)) return
+  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset)) return
   if (!shouldOpenRealPreview(tool.id)) {
     if (isMergePreviewTool(tool.id)) {
       notifyPreviewUnavailable(tool, asset)
