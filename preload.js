@@ -1588,8 +1588,9 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.ext)
   const watermarkOpacity = Number(config.opacity) || 0
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
+  const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
 
-  if (watermarkOpacity <= 0 || isEmptyTextWatermark) {
+  if (watermarkOpacity <= 0 || isEmptyTextWatermark || isZeroSizeTextWatermark) {
     if (sourceFormat === format) {
       return copyAssetToOutput(asset, outputPath)
     }
