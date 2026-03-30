@@ -744,13 +744,16 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     notify({ type: 'info', message: getPreviewMessage(asset) })
     return false
   }
+  const outputWidth = Number(asset.stagedWidth || asset.width) || 0
+  const outputHeight = Number(asset.stagedHeight || asset.height) || 0
+  const isPortraitPreview = outputHeight > outputWidth && outputWidth > 0
   setPreviewModal({
     name: asset.name,
     url: asset.previewUrl,
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
-    compareMode: getPreviewCompareMode(toolId),
+    compareMode: isPortraitPreview ? 'split' : getPreviewCompareMode(toolId),
     compareRatio: 0.5,
     compareLabelsHidden: false,
   })

@@ -3763,6 +3763,12 @@ body {
   cursor: grab;
 }
 
+.queue-item__controls .icon-button:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .empty-state {
   padding: 28px;
   display: flex;
