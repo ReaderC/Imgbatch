@@ -566,10 +566,6 @@ function createResultEnvelope(payload, processed, failed) {
   }
 }
 
-function buildSavedResult(payload, processed, failed) {
-  return createResultEnvelope({ ...payload, mode: 'save' }, processed, failed)
-}
-
 function buildSettingsPayload(settings = {}) {
   const defaultPresetByTool = settings?.defaultPresetByTool && typeof settings.defaultPresetByTool === 'object'
     ? Object.fromEntries(Object.entries(settings.defaultPresetByTool).map(([toolId, presetId]) => [sanitizeText(toolId), sanitizeText(presetId)]).filter((entry) => entry[0] && entry[1]))
@@ -1603,7 +1599,7 @@ function revealResultDirectoryIfNeeded(result) {
 }
 
 function buildSavedResultWithReveal(payload, processed, failed) {
-  return revealResultDirectoryIfNeeded(buildSavedResult(payload, processed, failed))
+  return revealResultDirectoryIfNeeded(createResultEnvelope({ ...payload, mode: 'save' }, processed, failed))
 }
 
 function buildFallbackFailureWithReveal(payload, message) {
