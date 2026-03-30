@@ -342,18 +342,15 @@ async function saveAssetResult(assetId) {
     return
   }
 
-  setState({ isProcessing: true })
   try {
-    const result = await saveStagedResult(state.activeTool, stagedItem, getCurrentDestinationPath())
+    const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
       handleResultSaveCompletion()
     }
-    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '保存失败。' })
+    notifyActionResult(result, '保存失败。')
   } catch (error) {
     notify({ type: 'error', message: error?.message || '保存失败。' })
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
@@ -365,18 +362,15 @@ async function saveAllCurrentResults() {
     return
   }
 
-  setState({ isProcessing: true })
   try {
-    const result = await saveAllStagedResults(state.activeTool, stagedItems, getCurrentDestinationPath())
+    const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
       handleResultSaveCompletion()
     }
-    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '批量保存失败。' })
+    notifyActionResult(result, '批量保存失败。')
   } catch (error) {
     notify({ type: 'error', message: error?.message || '批量保存失败。' })
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
@@ -418,6 +412,22 @@ async function openResultPath(targetPath) {
   if (!ok) {
     notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
   }
+}
+
+async function runBusyAction(task) {
+  setState({ isProcessing: true })
+  try {
+    return await task()
+  } finally {
+    setState({ isProcessing: false })
+  }
+}
+
+function notifyActionResult(result, fallbackMessage) {
+  notify({
+    type: result?.ok ? 'success' : result?.partial ? 'info' : 'error',
+    message: result?.message || fallbackMessage,
+  })
 }
 
 function getReplacePayload(asset, resultPath) {
@@ -678,17 +688,14 @@ async function replaceAssetOriginal(assetId) {
   }
   if (!window.confirm(`确认用处理结果覆盖原图？\n\n${asset.name}`)) return
 
-  setState({ isProcessing: true })
   try {
-    const result = await replaceOriginals([getReplacePayload(asset, resultPath)])
+    const result = await runBusyAction(() => replaceOriginals([getReplacePayload(asset, resultPath)]))
     if (result?.processed?.length) {
       handleResultReplaceCompletion(result.processed)
     }
-    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
+    notifyActionResult(result, '替换原图失败。')
   } catch (error) {
     notify({ type: 'error', message: error?.message || '替换原图失败。' })
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
@@ -713,17 +720,14 @@ async function replaceCurrentOriginals() {
   }
   if (!window.confirm(`确认用处理结果覆盖 ${assets.length} 张原图？此操作不可撤销。`)) return
 
-  setState({ isProcessing: true })
   try {
-    const result = await replaceOriginals(assets.map((asset) => getReplacePayload(asset, getSavedOutputPath(asset) || getPreviewOutputPath(asset))))
+    const result = await runBusyAction(() => replaceOriginals(assets.map((asset) => getReplacePayload(asset, getSavedOutputPath(asset) || getPreviewOutputPath(asset)))))
     if (result?.processed?.length) {
       handleResultReplaceCompletion(result.processed)
     }
-    notify({ type: result?.ok ? 'success' : result?.partial ? 'info' : 'error', message: result?.message || '替换原图失败。' })
+    notifyActionResult(result, '替换原图失败。')
   } catch (error) {
     notify({ type: 'error', message: error?.message || '替换原图失败。' })
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
@@ -1839,13 +1843,10 @@ async function previewAsset(assetId) {
   }
   if (state.isProcessing) return
 
-  setState({ isProcessing: true })
   try {
-    await previewWithRunner(tool, asset)
+    await runBusyAction(() => previewWithRunner(tool, asset))
   } catch (error) {
     notifyToolPreviewFailure(error, tool)
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
@@ -1865,11 +1866,10 @@ async function processCurrentTool() {
 
   if (state.isProcessing) return
 
-  setState({ isProcessing: true })
   try {
     const assets = getAssetsForTool(tool.id, state.assets)
     const runner = getProcessRunner(tool.id)
-    const result = await runner(tool.id, state.configs[tool.id], assets, getCurrentDestinationPath())
+    const result = await runBusyAction(() => runner(tool.id, state.configs[tool.id], assets, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
     }
@@ -1882,8 +1882,6 @@ async function processCurrentTool() {
     notify({ type: 'info', message: result?.message || getProcessFallbackMessage(tool, assets.length) })
   } catch (error) {
     notify({ type: 'error', message: error?.message || '批处理触发失败。' })
-  } finally {
-    setState({ isProcessing: false })
   }
 }
 
