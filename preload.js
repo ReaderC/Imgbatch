@@ -1417,9 +1417,10 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
 
   if (config.tiled) {
     const tiledCacheKey = overlay?.cacheKey ? `${overlay.cacheKey}|tile|${clampNumber(config.density, 20, 250, 100)}` : ''
+    const cachedTiledOverlay = tiledCacheKey ? WATERMARK_TILED_CACHE.get(tiledCacheKey) : null
     overlay = {
-      input: tiledCacheKey && WATERMARK_TILED_CACHE.get(tiledCacheKey)
-        ? WATERMARK_TILED_CACHE.get(tiledCacheKey)
+      input: cachedTiledOverlay
+        ? cachedTiledOverlay
         : await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay),
       width: 0,
       height: 0,
@@ -1999,12 +2000,15 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.drawableHeight = Math.max(1, prepared.pageSize[1] - margin * 2)
       prepared.scaledWidth = Math.max(1, Math.round(prepared.drawableWidth))
       prepared.pageSliceHeight = Math.max(1, Math.round(prepared.drawableHeight))
-      const scaled = await sharpLib(imageBytes)
-        .resize({ width: prepared.scaledWidth, fit: 'fill' })
-        .png()
-        .toBuffer({ resolveWithObject: true })
-      prepared.scaledBuffer = scaled.data
-      prepared.scaledHeight = Math.max(1, scaled.info.height || Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
+      prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
+      if (prepared.scaledHeight > prepared.drawableHeight) {
+        const scaled = await sharpLib(imageBytes)
+          .resize({ width: prepared.scaledWidth, fit: 'fill' })
+          .png()
+          .toBuffer({ resolveWithObject: true })
+        prepared.scaledBuffer = scaled.data
+        prepared.scaledHeight = Math.max(1, scaled.info.height || prepared.scaledHeight)
+      }
     } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
       prepared.embeddedBytes = await sharpLib(imageBytes).jpeg().toBuffer()
       prepared.embeddedKind = 'jpg'
@@ -2074,26 +2078,28 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
     const scaledWidth = prepared.scaledWidth || Math.max(1, Math.round(drawableWidth))
     const pageSliceHeight = prepared.pageSliceHeight || Math.max(1, Math.round(drawableHeight))
+    const scaledHeight = prepared.scaledHeight || Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
+
+    if (scaledHeight <= drawableHeight) {
+      const pageImage = await ensureEmbedded()
+      const width = scaledWidth
+      const height = scaledHeight
+      const page = pdf.addPage(pageSize)
+      paintPdfPageBackground(page, pageSize)
+      page.drawImage(pageImage, {
+        x: margin,
+        y: (pageSize[1] - height) / 2,
+        width,
+        height,
+      })
+      continue
+    }
+
     const scaledBuffer = prepared.scaledBuffer
       || (await sharpLib(imageBytes)
         .resize({ width: scaledWidth, fit: 'fill' })
         .png()
         .toBuffer({ resolveWithObject: true })).data
-    const scaledHeight = prepared.scaledHeight || Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
-
-    if (scaledHeight <= drawableHeight) {
-      const paged = await pdf.embedPng(scaledBuffer)
-      const page = pdf.addPage(pageSize)
-      paintPdfPageBackground(page, pageSize)
-      page.drawImage(paged, {
-        x: margin,
-        y: (pageSize[1] - paged.height) / 2,
-        width: paged.width,
-        height: paged.height,
-      })
-      continue
-    }
-
     const scaledImage = sharpLib(scaledBuffer)
     let offsetY = 0
     while (offsetY < scaledHeight) {
