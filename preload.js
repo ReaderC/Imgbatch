@@ -365,6 +365,13 @@ async function writeTransformedAsset(transformer, format, quality, outputPath, f
   return createOutputMeta(outputPath, info, fallback)
 }
 
+function estimateCompressionQuality(originalSizeBytes, targetBytes) {
+  if (!originalSizeBytes || !targetBytes) return 75
+  const ratio = Math.max(0.02, Math.min(0.98, targetBytes / originalSizeBytes))
+  const estimated = Math.round(12 + (78 * Math.sqrt(ratio)))
+  return Math.max(10, Math.min(90, estimated))
+}
+
 function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
   const finalDirectory = path.join(baseDestinationPath, runFolderName)
   ensureDirectory(finalDirectory)
@@ -1102,18 +1109,19 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     return buffer
   }
 
-  const highQuality = qualitySteps[0]
-  const highBuffer = await encodeAtQuality(highQuality)
-  let chosenBuffer = highBuffer
-  if (highBuffer.length > targetBytes) {
+  const estimatedQuality = estimateCompressionQuality(originalSizeBytes, targetBytes)
+  const estimatedBuffer = await encodeAtQuality(estimatedQuality)
+  let chosenBuffer = estimatedBuffer
+
+  if (estimatedBuffer.length > targetBytes) {
     const lowQuality = qualitySteps[qualitySteps.length - 1]
-    const lowBuffer = await encodeAtQuality(lowQuality)
+    const lowBuffer = estimatedQuality === lowQuality ? estimatedBuffer : await encodeAtQuality(lowQuality)
     chosenBuffer = lowBuffer
 
     if (lowBuffer.length <= targetBytes) {
       let bestBuffer = lowBuffer
       let left = lowQuality + 1
-      let right = highQuality - 1
+      let right = estimatedQuality - 1
 
       while (left <= right) {
         const mid = Math.floor((left + right) / 2)
@@ -1128,6 +1136,23 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 
       chosenBuffer = bestBuffer
     }
+  } else if (estimatedQuality < qualitySteps[0]) {
+    let bestBuffer = estimatedBuffer
+    let left = estimatedQuality + 1
+    let right = qualitySteps[0]
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2)
+      const buffer = await encodeAtQuality(mid)
+      if (buffer.length <= targetBytes) {
+        bestBuffer = buffer
+        left = mid + 1
+      } else {
+        right = mid - 1
+      }
+    }
+
+    chosenBuffer = bestBuffer
   }
 
   fs.writeFileSync(outputPath, chosenBuffer)
