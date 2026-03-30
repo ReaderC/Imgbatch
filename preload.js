@@ -1959,18 +1959,22 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval * 100))
   const repeat = payload.config.loop ? 0 : -1
-
-  for (const asset of payload.assets) {
+  const profile = getPerformanceProfile(getAppSettings().performanceMode)
+  const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
+  const preparedFrames = await mapWithConcurrency(payload.assets, frameConcurrency, async (asset) => {
     const data = await sharpLib(asset.sourcePath)
       .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
       .ensureAlpha()
       .raw()
       .toBuffer()
-
     const palette = quantize(data, 256)
     const index = applyPalette(data, palette)
-    encoder.writeFrame(index, frameWidth, frameHeight, {
-      palette,
+    return { index, palette }
+  })
+
+  for (const frame of preparedFrames) {
+    encoder.writeFrame(frame.index, frameWidth, frameHeight, {
+      palette: frame.palette,
       delay,
       repeat,
     })
