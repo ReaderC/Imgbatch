@@ -1148,7 +1148,6 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     return warning ? { ...output, warning } : output
   }
 
-  const qualitySteps = [90, 80, 70, 60, 50, 40, 30, 20, 10]
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(90, Math.round(quality)))
@@ -1980,10 +1979,13 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
+  const background = hexToRgbaObject(payload.config.background, 1)
+  const delay = Math.max(1, Math.round(payload.config.interval * 100))
+  const repeat = payload.config.loop ? 0 : -1
 
   for (const asset of payload.assets) {
     const { data } = await sharpLib(asset.sourcePath)
-      .resize({ width: payload.config.width, height: payload.config.height, fit: 'contain', background: hexToRgbaObject(payload.config.background, 1) })
+      .resize({ width: payload.config.width, height: payload.config.height, fit: 'contain', background })
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })
@@ -1993,8 +1995,8 @@ async function writeMergeGifAsset(sharpLib, payload) {
     const index = applyPalette(rgba, palette)
     encoder.writeFrame(index, payload.config.width, payload.config.height, {
       palette,
-      delay: Math.max(1, Math.round(payload.config.interval * 100)),
-      repeat: payload.config.loop ? 0 : -1,
+      delay,
+      repeat,
     })
   }
 
