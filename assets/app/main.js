@@ -1883,11 +1883,15 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
 
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return
-  if (openExistingPreview(tool.id, asset)) {
+  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset)) {
     return
   }
-  if (!shouldOpenRealPreview(tool.id)) {
-    notifyPreviewUnavailable(tool, asset)
+  if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
+    if (isMergePreviewTool(tool.id)) {
+      notifyPreviewUnavailable(tool, asset)
+      return
+    }
+    notify({ type: 'info', message: `${tool.label} 鏆備笉鏀寔棰勮锛?{truncate(asset?.name || '褰撳墠鍥剧墖', 20)}` })
     return
   }
   const previewValidationMessage = getToolInputValidationMessage(tool.id, state.configs[tool.id] || {})
