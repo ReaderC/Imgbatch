@@ -24,6 +24,7 @@ const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
 const WATERMARK_IMAGE_CACHE = new Map()
+const WATERMARK_OVERLAY_CACHE = new Map()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -1338,17 +1339,27 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
+  const overlayCacheKey = !isDataUrl
+    ? `${imagePath}|${Math.round(toNumber(config.rotation, 0))}|${Math.round(clampNumber(config.opacity, 0, 100, 60))}|${watermarkWidth}`
+    : ''
+  const cachedOverlay = overlayCacheKey ? WATERMARK_OVERLAY_CACHE.get(overlayCacheKey) : null
+  if (cachedOverlay) return cachedOverlay
+
   const { data, info } = await sharpLib(imageInput)
     .rotate(config.rotation, { background: TRANSPARENT_BG })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
     .png()
     .toBuffer({ resolveWithObject: true })
-  return {
+  const overlay = {
     input: data,
     width: info.width || 1,
     height: info.height || 1,
   }
+  if (overlayCacheKey) {
+    WATERMARK_OVERLAY_CACHE.set(overlayCacheKey, overlay)
+  }
+  return overlay
 }
 
 async function buildWatermarkComposite(sharpLib, asset, config) {
