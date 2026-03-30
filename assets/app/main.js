@@ -530,37 +530,6 @@ function clearAssetsResultState(assetIds) {
   })
 }
 
-function buildResultViewItem(asset) {
-  const resultSizeBytes = asset.stagedSizeBytes || asset.sizeBytes || 0
-  const resultWidth = asset.stagedWidth || asset.width || 0
-  const resultHeight = asset.stagedHeight || asset.height || 0
-  const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
-  return {
-    assetId: asset.id,
-    name: asset.name,
-    outputPath,
-    source: {
-      name: asset.name || '',
-      sizeBytes: asset.sizeBytes || 0,
-      width: asset.width || 0,
-      height: asset.height || 0,
-    },
-    result: {
-      name: getResultFileName(asset, outputPath),
-      sizeBytes: resultSizeBytes,
-      width: resultWidth,
-      height: resultHeight,
-    },
-    summary: getPreviewMessage(asset),
-  }
-}
-
-function getResultFileName(asset, outputPath) {
-  const normalized = String(outputPath || '').replaceAll('\\', '/')
-  const fileName = normalized.split('/').pop()
-  return fileName || asset.name || ''
-}
-
 function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
@@ -569,7 +538,32 @@ function refreshResultView() {
   const state = getState()
   const items = state.assets
     .filter((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
-    .map(buildResultViewItem)
+    .map((asset) => {
+      const resultSizeBytes = asset.stagedSizeBytes || asset.sizeBytes || 0
+      const resultWidth = asset.stagedWidth || asset.width || 0
+      const resultHeight = asset.stagedHeight || asset.height || 0
+      const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
+      const normalizedOutputPath = String(outputPath || '').replaceAll('\\', '/')
+      const resultName = normalizedOutputPath.split('/').pop() || asset.name || ''
+      return {
+        assetId: asset.id,
+        name: asset.name,
+        outputPath,
+        source: {
+          name: asset.name || '',
+          sizeBytes: asset.sizeBytes || 0,
+          width: asset.width || 0,
+          height: asset.height || 0,
+        },
+        result: {
+          name: resultName,
+          sizeBytes: resultSizeBytes,
+          width: resultWidth,
+          height: resultHeight,
+        },
+        summary: getPreviewMessage(asset),
+      }
+    })
     .filter((item) => item.outputPath)
 
   if (!items.length) {
