@@ -1602,15 +1602,17 @@ function mapFlipOutputFormat(asset, config) {
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
+  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
+  const solidBackground = getRotateBackground(config.background)
   let transformed = null
 
   if (config.autoCrop) {
     transformed = createTransformer(sharpLib, asset)
       .ensureAlpha()
-      .rotate(config.angle, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .rotate(config.angle, { background: transparentBackground })
       .trim()
   } else {
-    transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: getRotateBackground(config.background) })
+    transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: solidBackground })
   }
 
   if (config.keepAspectRatio && asset.width && asset.height) {
@@ -1618,12 +1620,12 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
       width: asset.width,
       height: asset.height,
       fit: 'contain',
-      background: config.autoCrop ? { r: 0, g: 0, b: 0, alpha: 0 } : getRotateBackground(config.background),
+      background: config.autoCrop ? transparentBackground : solidBackground,
     })
   }
 
   if (config.autoCrop && !isAlphaCapableFormat(format)) {
-    transformed = transformed.flatten({ background: getRotateBackground(config.background) })
+    transformed = transformed.flatten({ background: solidBackground })
   }
 
   return writeTransformedAsset(transformed, format, 90, outputPath)
@@ -1632,13 +1634,14 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const format = mapFlipOutputFormat(asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
+  const opaqueWhite = hexToRgbaObject('#ffffff', 1)
   let transformed = createTransformer(sharpLib, asset)
 
   if (config.horizontal) transformed = transformed.flop()
   if (config.vertical) transformed = transformed.flip()
   if (config.autoCropTransparent) transformed = transformed.ensureAlpha().trim()
   if (config.autoCropTransparent && !isAlphaCapableFormat(format)) {
-    transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
+    transformed = transformed.flatten({ background: opaqueWhite })
   }
   transformed = applyMetadataPolicy(transformed, config.preserveMetadata)
 
@@ -1685,12 +1688,13 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('padding', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
+  const background = hexToRgbaObject(config.color, config.opacity / 100)
   const transformed = createTransformer(sharpLib, asset).extend({
     top: config.top,
     right: config.right,
     bottom: config.bottom,
     left: config.left,
-    background: hexToRgbaObject(config.color, config.opacity / 100),
+    background,
   })
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
