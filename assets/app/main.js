@@ -842,10 +842,14 @@ function beginPreviewCompareDrag(event, target) {
   event.preventDefault()
 }
 
-function beginPreviewComparePan(event, target) {
-  if (event.button !== 2) return
+function beginPreviewComparePan(event) {
   const preview = getState().previewModal
   if (!preview?.url) return
+  if (preview.compareMode === 'split') {
+    if (event.button !== 0 && event.button !== 2) return
+  } else if (event.button !== 2) {
+    return
+  }
   const zoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
   if (zoom <= 1.01) return
   DRAG_CONTEXT.previewPan = {
@@ -1252,8 +1256,13 @@ function attachGlobalEvents() {
 
   document.addEventListener('pointerdown', (event) => {
     const previewBody = event.target.closest('.preview-modal__body--compare, .preview-modal__body--split')
+    const preview = getState().previewModal
+    if (previewBody && preview?.compareMode === 'split' && (event.button === 0 || event.button === 2)) {
+      beginPreviewComparePan(event)
+      return
+    }
     if (previewBody && event.button === 2) {
-      beginPreviewComparePan(event, previewBody)
+      beginPreviewComparePan(event)
       return
     }
     const target = event.target.closest('[data-action]')
@@ -1302,9 +1311,8 @@ function attachGlobalEvents() {
       const clickedSplitLabel = !!event.target.closest('.preview-modal__split-label')
       const clickedCloseButton = !!event.target.closest('.preview-modal__close')
       const clickedCompareLabels = !!event.target.closest('.preview-modal__compare-head')
-      const clickedHelpButton = !!event.target.closest('[data-action="toggle-preview-help"]')
       const clickedHelpPanel = !!event.target.closest('.preview-modal__help')
-      if (!clickedCompareBody && !clickedSplitBody && !clickedSplitLabel && !clickedCloseButton && !clickedCompareLabels && !clickedHelpButton && !clickedHelpPanel) {
+      if (!clickedCompareBody && !clickedSplitBody && !clickedSplitLabel && !clickedCloseButton && !clickedCompareLabels && !clickedHelpPanel) {
         closePreviewModal()
         return
       }
