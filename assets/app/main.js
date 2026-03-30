@@ -65,10 +65,6 @@ function createSettingsDialogState() {
   }
 }
 
-function openSettingsDialog() {
-  setSettingsDialog(createSettingsDialogState())
-}
-
 function closeSettingsDialog() {
   setSettingsDialog(null)
 }
@@ -1351,7 +1347,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-settings' || action === 'save-default-path') {
-      openSettingsDialog()
+      setSettingsDialog(createSettingsDialogState())
       return
     }
 
