@@ -1894,6 +1894,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       asset,
       imageBytes,
       fixedPageSize,
+      sourceFormat: String(asset.ext || '').toLowerCase(),
       sourceWidth,
       sourceHeight,
       margin,
@@ -1904,6 +1905,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       scaledHeight: 0,
       pageSliceHeight: 0,
       scaledBuffer: null,
+      embeddedBytes: null,
+      embeddedKind: '',
     }
 
     if (payload.config.autoPaginate && payload.config.pageSize !== 'Original') {
@@ -1924,6 +1927,9 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         .toBuffer({ resolveWithObject: true })
       prepared.scaledBuffer = scaled.data
       prepared.scaledHeight = Math.max(1, scaled.info.height || Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
+    } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
+      prepared.embeddedBytes = await sharpLib(imageBytes).jpeg().toBuffer()
+      prepared.embeddedKind = 'jpg'
     }
 
     return prepared
@@ -1936,10 +1942,11 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let sourceHeight = prepared.sourceHeight
     const ensureEmbedded = async () => {
       if (embedded) return embedded
-      const format = String(asset.ext || '').toLowerCase()
-      if (format === 'png' || format === 'webp' || format === 'avif' || format === 'gif') {
+      if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
+        embedded = await pdf.embedJpg(prepared.embeddedBytes)
+      } else if (prepared.sourceFormat === 'png' || prepared.sourceFormat === 'webp' || prepared.sourceFormat === 'avif' || prepared.sourceFormat === 'gif') {
         embedded = await pdf.embedPng(imageBytes)
-      } else if (format === 'jpg' || format === 'jpeg') {
+      } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
         embedded = await pdf.embedJpg(imageBytes)
       } else {
         embedded = await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
