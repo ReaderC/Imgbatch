@@ -1461,6 +1461,18 @@ function overwriteFile(sourcePath, targetPath) {
   fs.renameSync(tempPath, targetPath)
 }
 
+function removeEmptyDirectoryIfPossible(targetPath) {
+  const directoryPath = path.dirname(targetPath)
+  if (!directoryPath || !fs.existsSync(directoryPath)) return
+  try {
+    if (!fs.statSync(directoryPath).isDirectory()) return
+    if ((fs.readdirSync(directoryPath) || []).length > 0) return
+    fs.rmdirSync(directoryPath)
+  } catch {
+    // Ignore cleanup failures so replace succeeds even if folder removal does not.
+  }
+}
+
 function replaceOriginalWithSaved(item = {}) {
   const sourcePath = resolveExistingResultPath(item)
   const targetPath = normalizeFsPath(item.sourcePath)
@@ -1473,6 +1485,7 @@ function replaceOriginalWithSaved(item = {}) {
   overwriteFile(sourcePath, targetPath)
   if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
     fs.unlinkSync(sourcePath)
+    removeEmptyDirectoryIfPossible(sourcePath)
   }
   return {
     assetId: item.assetId,
