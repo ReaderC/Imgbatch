@@ -1865,6 +1865,15 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const pdf = await pdfLib.PDFDocument.create()
   const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
   const backgroundColor = pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255)
+  const paintPdfPageBackground = (page, pageSize) => {
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageSize[0],
+      height: pageSize[1],
+      color: backgroundColor,
+    })
+  }
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
@@ -1893,13 +1902,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       const originalImage = await ensureEmbedded()
       const pageSize = [originalImage.width + margin * 2, originalImage.height + margin * 2]
       const page = pdf.addPage(pageSize)
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageSize[0],
-        height: pageSize[1],
-        color: backgroundColor,
-      })
+      paintPdfPageBackground(page, pageSize)
       page.drawImage(originalImage, {
         x: margin,
         y: margin,
@@ -1916,13 +1919,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     if (!payload.config.autoPaginate) {
       const pageImage = await ensureEmbedded()
       const page = pdf.addPage(pageSize)
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageSize[0],
-        height: pageSize[1],
-        color: backgroundColor,
-      })
+      paintPdfPageBackground(page, pageSize)
       const scale = Math.min(drawableWidth / pageImage.width, drawableHeight / pageImage.height)
       const width = pageImage.width * scale
       const height = pageImage.height * scale
@@ -1949,13 +1946,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     if (scaledHeight <= drawableHeight) {
       const paged = await pdf.embedPng(scaledBuffer)
       const page = pdf.addPage(pageSize)
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageSize[0],
-        height: pageSize[1],
-        color: backgroundColor,
-      })
+      paintPdfPageBackground(page, pageSize)
       page.drawImage(paged, {
         x: margin,
         y: (pageSize[1] - paged.height) / 2,
@@ -1974,13 +1965,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         .toBuffer()
       const pageImage = await pdf.embedPng(sliceBuffer)
       const page = pdf.addPage(pageSize)
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageSize[0],
-        height: pageSize[1],
-        color: backgroundColor,
-      })
+      paintPdfPageBackground(page, pageSize)
       page.drawImage(pageImage, {
         x: margin,
         y: pageSize[1] - margin - pageImage.height,
