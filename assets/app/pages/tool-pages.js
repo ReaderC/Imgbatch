@@ -1,6 +1,7 @@
 ﻿import { TOOL_MAP } from '../config/tools.js'
 
 const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO']
+const FLIP_OUTPUT_OPTIONS = [['Keep Original', '保持原格式'], ...FORMAT_OPTIONS]
 const COLOR_PROFILE_OPTIONS = [
   ['srgb', 'sRGB'],
   ['p3', 'Display P3'],
@@ -214,7 +215,6 @@ function renderCornersConfig(config) {
     `)}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
-    ${renderInfoRow('当前半径', '统一应用到全部图片', formatMeasureValue(config.radius, 'px'))}
   `)
 }
 
@@ -286,11 +286,11 @@ function renderRotateConfig(config) {
 
 function renderFlipConfig(config) {
   return renderSettingsSection(`
+    ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
     ${renderToggleRow('自动裁掉透明边', '', 'flip', 'autoCropTransparent', config.autoCropTransparent)}
-    ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: [['Keep Original', '保持原格式'], ['PNG', 'PNG'], ['JPEG', 'JPEG'], ['WebP', 'WebP']] })}
   `)
 }
 
@@ -524,13 +524,6 @@ function getMeasureUnit(value, fallbackUnit = 'px') {
   const stringValue = String(value ?? '').trim()
   if (stringValue.endsWith('%')) return '%'
   return fallbackUnit
-}
-
-function formatMeasureValue(value, fallbackUnit = 'px') {
-  const stringValue = String(value ?? '').trim()
-  if (!stringValue) return `0${fallbackUnit}`
-  if (stringValue.endsWith('px') || stringValue.endsWith('%')) return stringValue
-  return `${stringValue}${fallbackUnit}`
 }
 
 function getRangeProgress(value, min, max) {

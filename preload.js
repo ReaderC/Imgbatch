@@ -1572,11 +1572,7 @@ function getRotateBackground(value) {
 function mapFlipOutputFormat(asset, config) {
   const requested = String(config.outputFormat || '').toLowerCase()
   if (!requested || requested === 'keep original') return mapOutputFormat('flip', asset, config)
-  if (requested === 'jpg') return 'jpeg'
-  if (requested === 'webp') return 'webp'
-  if (requested === 'png') return 'png'
-  if (requested === 'jpeg') return 'jpeg'
-  return mapOutputFormat('flip', asset, config)
+  return mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
@@ -1732,12 +1728,11 @@ async function writeMergeImageAsset(sharpLib, payload) {
   for (const asset of payload.assets) {
     const fitWidth = payload.config.direction === 'vertical' ? payload.config.pageWidth : undefined
     const fitHeight = payload.config.direction === 'horizontal' ? payload.config.pageWidth : undefined
-    const buffer = await sharpLib(asset.sourcePath)
+    const { data, info } = await sharpLib(asset.sourcePath)
       .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background: hexToRgbaObject(payload.config.background, 1) })
       .png()
-      .toBuffer()
-    const meta = await sharpLib(buffer).metadata()
-    prepared.push({ buffer, width: meta.width || 1, height: meta.height || 1, asset })
+      .toBuffer({ resolveWithObject: true })
+    prepared.push({ buffer: data, width: info.width || 1, height: info.height || 1, asset })
   }
 
   if (!prepared.length) throw new Error('没有可拼接的图片')
@@ -1794,7 +1789,7 @@ async function writeMergePdfAsset(payload) {
     const format = String(asset.ext || '').toLowerCase()
     const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
       ? await pdf.embedPng(imageBytes)
-      : await pdf.embedJpg(await require('sharp')(asset.sourcePath).jpeg().toBuffer())
+      : await pdf.embedJpg(await getSharp()(imageBytes).jpeg().toBuffer())
 
     const pageSize = payload.config.pageSize === '与图片一致'
       ? [embedded.width, embedded.height]
@@ -1838,7 +1833,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     const format = String(asset.ext || '').toLowerCase()
     const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
       ? await pdf.embedPng(imageBytes)
-      : await pdf.embedJpg(await sharpLib(asset.sourcePath).jpeg().toBuffer())
+      : await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
     const fixedPageSize = payload.config.pageSize === 'Original'
       ? null
       : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
