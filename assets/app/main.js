@@ -1889,7 +1889,7 @@ async function processCurrentTool() {
       notify({ type: result.partial ? 'info' : 'success', message: getProcessSuccessMessage(result, tool) })
       const compressionWarning = getCompressionOversizeWarning(result, tool)
       if (compressionWarning) {
-        notify({ type: 'info', message: compressionWarning })
+        notify({ type: 'info', message: compressionWarning, durationMs: 6500 })
       }
       return
     }
@@ -1926,18 +1926,18 @@ function renderNotifications(items) {
   `
 }
 
-function scheduleNotificationDismiss(id) {
+function scheduleNotificationDismiss(id, durationMs = 2000) {
   window.setTimeout(() => {
     const state = getState()
     if (state.notifications.some((item) => item.id === id)) {
       dismissNotification(id)
     }
-  }, 2000)
+  }, Math.max(1200, Number(durationMs) || 2000))
 }
 
 function notify(notification) {
   const item = pushNotification(notification)
-  scheduleNotificationDismiss(item.id)
+  scheduleNotificationDismiss(item.id, notification?.durationMs)
   return item
 }
 

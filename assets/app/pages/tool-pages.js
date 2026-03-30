@@ -144,6 +144,7 @@ function renderCompressionConfig(config) {
         value: config.targetSizeKb,
         min: 1,
         hint: '极端情况下按体积无法严格命中目标值，系统会尽量压小，并在偏离明显时给出提示。',
+        hintClass: 'setting-row__hint--compression',
       })}
     `)}
   `)
