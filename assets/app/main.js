@@ -2078,13 +2078,27 @@ function resizeManualCropArea(context, event, asset) {
     const widthByDrag = handle.includes('l') ? right - (left + dx) : start.width + dx
     const heightByDrag = handle.includes('t') ? bottom - (top + dy) : start.height + dy
     const widthFromHeight = Math.max(40, heightByDrag * ratio)
-    width = Math.max(40, Math.min(Math.abs(widthByDrag), Math.abs(widthFromHeight)))
+    const desiredWidth = Math.max(40, Math.min(Math.abs(widthByDrag), Math.abs(widthFromHeight)))
+    const maxWidth = getManualCropResizeMaxWidth(handle, { left, top, right, bottom }, asset, ratio)
+    width = Math.max(40, Math.min(desiredWidth, maxWidth))
     height = Math.max(40, width / ratio)
     x = handle.includes('l') ? right - width : left
     y = handle.includes('t') ? bottom - height : top
   }
 
   return clampManualCropArea({ x, y, width, height }, asset)
+}
+
+function getManualCropResizeMaxWidth(handle, bounds, asset, ratio) {
+  const assetWidth = Math.max(1, asset.width || 1)
+  const assetHeight = Math.max(1, asset.height || 1)
+  const maxWidthByHorizontal = handle.includes('l')
+    ? bounds.right
+    : assetWidth - bounds.left
+  const maxHeightByVertical = handle.includes('t')
+    ? bounds.bottom
+    : assetHeight - bounds.top
+  return Math.max(40, Math.min(maxWidthByHorizontal, maxHeightByVertical * ratio))
 }
 
 function getEffectiveManualCropRatio(area, ratioValue) {
