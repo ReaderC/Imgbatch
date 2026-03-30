@@ -1461,8 +1461,7 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
 function resolvePathForReveal(targetPath) {
   if (!targetPath) return ''
   try {
-    const stat = fs.existsSync(targetPath) ? fs.statSync(targetPath) : null
-    if (stat?.isDirectory()) return targetPath
+    if (fs.statSync(targetPath).isDirectory()) return targetPath
     return path.dirname(targetPath)
   } catch {
     return ''
@@ -1583,10 +1582,6 @@ async function replaceOriginals(items = []) {
         ? `替换原图部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
         : failed[0]?.error || '替换原图失败。',
   }
-}
-
-function resolveInputPaths(items = []) {
-  return toolsApi.normalizeInput(items)
 }
 
 function revealResultDirectoryIfNeeded(result) {
@@ -2388,7 +2383,7 @@ const toolsApi = {
   },
 
   resolveInputPaths(items = []) {
-    return resolveInputPaths(items)
+    return this.normalizeInput(items)
   },
 
   getEnvironment() {
