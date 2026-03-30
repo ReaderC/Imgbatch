@@ -1775,7 +1775,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
     return composite
   })
 
-  await sharpLib({
+  const info = await sharpLib({
     create: {
       width: totalWidth,
       height: totalHeight,
@@ -1784,7 +1784,10 @@ async function writeMergeImageAsset(sharpLib, payload) {
     },
   }).composite(composites).png().toFile(outputPath)
 
-  return outputPath
+  return {
+    outputPath,
+    outputSizeBytes: Number(info?.size) || 0,
+  }
 }
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
@@ -1906,7 +1909,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
   const bytes = await pdf.save()
   fs.writeFileSync(outputPath, bytes)
-  return outputPath
+  return {
+    outputPath,
+    outputSizeBytes: bytes.length,
+  }
 }
 
 async function embedPdfImage(pdf, sharpLib, imageBytes, ext) {
@@ -1949,8 +1955,12 @@ async function writeMergeGifAsset(sharpLib, payload) {
   }
 
   encoder.finish()
-  fs.writeFileSync(outputPath, Buffer.from(encoder.bytes()))
-  return outputPath
+  const bytes = Buffer.from(encoder.bytes())
+  fs.writeFileSync(outputPath, bytes)
+  return {
+    outputPath,
+    outputSizeBytes: bytes.length,
+  }
 }
 
 async function executeSingleAssetToolLegacy(payload, sharpLib) {
@@ -2187,14 +2197,15 @@ function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   }
 }
 
-async function createMergeOutput(outputPath, payload) {
-  const stat = fs.statSync(outputPath)
+async function createMergeOutput(result, payload) {
+  const outputPath = typeof result === 'string' ? result : result.outputPath
+  const outputName = path.basename(outputPath)
   return normalizeDirectResult({
     assetId: payload.assets[0]?.id || payload.toolId,
-    name: path.basename(outputPath),
+    name: outputName,
     outputPath,
-    outputName: path.basename(outputPath),
-    outputSizeBytes: stat.size,
+    outputName,
+    outputSizeBytes: Number(result?.outputSizeBytes) || 0,
     width: 0,
     height: 0,
   })
@@ -2204,11 +2215,11 @@ async function executeMergeTool(payload, sharpLib) {
   const processed = []
   const failed = []
   try {
-    let outputPath = ''
-    if (payload.toolId === 'merge-image') outputPath = await writeMergeImageAsset(sharpLib, payload)
-    if (payload.toolId === 'merge-pdf') outputPath = await writeMergePdfAssetReal(sharpLib, payload)
-    if (payload.toolId === 'merge-gif') outputPath = await writeMergeGifAsset(sharpLib, payload)
-    processed.push(await createMergeOutput(outputPath, payload))
+    let result = null
+    if (payload.toolId === 'merge-image') result = await writeMergeImageAsset(sharpLib, payload)
+    if (payload.toolId === 'merge-pdf') result = await writeMergePdfAssetReal(sharpLib, payload)
+    if (payload.toolId === 'merge-gif') result = await writeMergeGifAsset(sharpLib, payload)
+    processed.push(await createMergeOutput(result, payload))
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }
