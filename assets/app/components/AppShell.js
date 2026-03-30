@@ -371,25 +371,34 @@ function renderPreviewModal(preview) {
   }
   const beforeUrl = preview.beforeUrl || preview.url
   const afterUrl = preview.afterUrl || preview.url
+  const beforeWidth = Number(preview.sourceWidth) || 1
+  const beforeHeight = Number(preview.sourceHeight) || 1
+  const afterWidth = Number(preview.compareWidth) || 1
+  const afterHeight = Number(preview.compareHeight) || 1
+  const beforeAspect = Math.max(0.1, beforeWidth / beforeHeight)
+  const afterAspect = Math.max(0.1, afterWidth / afterHeight)
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
         <div class="preview-modal__actions">
+          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
+            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
+          </button>
           <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect};">
               <img src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" />
               <button class="preview-modal__split-label preview-modal__split-label--left ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u539f\u56fe</button>
             </div>
           </section>
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${afterAspect};">
               <img src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" />
               <button class="preview-modal__split-label preview-modal__split-label--right ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u5904\u7406\u540e</button>
             </div>

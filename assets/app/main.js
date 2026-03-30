@@ -752,6 +752,8 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
     compareMode,
+    sourceWidth: Number(asset.width) || 0,
+    sourceHeight: Number(asset.height) || 0,
     compareWidth: Number(asset.stagedWidth || asset.width) || 0,
     compareHeight: Number(asset.stagedHeight || asset.height) || 0,
     compareRatio: 0.5,
