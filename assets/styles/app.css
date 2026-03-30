@@ -2512,18 +2512,6 @@ body {
   line-height: 1.55;
 }
 
-.preview-modal__title {
-  font-family: 'Manrope', sans-serif;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.preview-modal__subtitle {
-  margin-top: 6px;
-  color: var(--on-surface-variant);
-  font-size: 13px;
-}
-
 .preview-modal__body {
   min-height: 0;
   overflow: auto;
@@ -3128,13 +3116,6 @@ body {
   min-height: 0;
   align-items: center;
   justify-content: center;
-}
-
-.preview-modal__compare-head--split {
-  position: static;
-  justify-content: flex-start;
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 .preview-compare-card__label {
@@ -4316,11 +4297,6 @@ body {
   .preview-modal__compare--split {
     grid-template-columns: 1fr;
     gap: 10px;
-  }
-
-  .preview-modal__dialog--compare .preview-modal__title,
-  .preview-modal__dialog--compare .preview-modal__subtitle {
-    max-width: calc(100vw - 96px);
   }
 
   .result-page__card-header {
