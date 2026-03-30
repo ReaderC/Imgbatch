@@ -326,17 +326,7 @@ function renderPreviewModal(preview) {
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
-        <div class="preview-modal__actions">
-          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
-            <span class="material-symbols-outlined">help</span>
-          </button>
-          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
-            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
-          </button>
-          <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
+        ${renderPreviewActions({ mode: 'split', isExpanded })}
         ${helpOpen ? renderPreviewHelp('split') : ''}
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
@@ -379,14 +369,7 @@ function renderInteractivePreviewModal(preview) {
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
-        <div class="preview-modal__actions">
-          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
-            <span class="material-symbols-outlined">help</span>
-          </button>
-          <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
+        ${renderPreviewActions({ mode: 'slider', isExpanded })}
         ${helpOpen ? renderPreviewHelp('slider') : ''}
         <div class="preview-modal__compare-shell">
           <div class="preview-modal__compare">
@@ -412,6 +395,24 @@ function renderInteractivePreviewModal(preview) {
       </div>
     </div>
   `
+}
+
+function renderPreviewActions({ mode = 'slider', isExpanded = false } = {}) {
+  const fullscreenButton = mode === 'split'
+    ? `
+          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
+            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
+          </button>`
+    : ''
+  return `
+        <div class="preview-modal__actions">
+          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
+            <span class="material-symbols-outlined">help</span>
+          </button>${fullscreenButton}
+          <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>`
 }
 
 function renderPreviewHelp(mode = 'slider') {
