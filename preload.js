@@ -990,13 +990,6 @@ function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
 
-function resolveSharpIccProfile(value) {
-  const normalized = String(value || '').trim().toLowerCase()
-  if (normalized === 'p3' || normalized === 'display-p3' || normalized === 'display p3') return 'p3'
-  if (normalized === 'cmyk') return 'cmyk'
-  return 'srgb'
-}
-
 function getOutputName(asset, toolId, format) {
   const parsed = path.parse(asset.name || path.basename(asset.sourcePath))
   return `${parsed.name}-${toolId}.${mapOutputExtension(format)}`
@@ -1041,16 +1034,6 @@ function withOutputFormat(transformer, format, quality) {
   if (format === 'avif') return transformer.avif({ quality })
   if (format === 'gif') return transformer.gif({ effort: 7 })
   return transformer.png({ compressionLevel: 6 })
-}
-
-function applyColorProfile(transformer, colorProfile) {
-  if (typeof transformer.withIccProfile !== 'function') return transformer
-  return transformer.withIccProfile(resolveSharpIccProfile(colorProfile))
-}
-
-function applyMetadataPolicy(transformer, preserveMetadata) {
-  if (!preserveMetadata || typeof transformer.keepMetadata !== 'function') return transformer
-  return transformer.keepMetadata()
 }
 
 function applyTransparencyPolicy(transformer, format, keepTransparency, background = '#ffffff') {
@@ -1245,7 +1228,16 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const baseTransformer = sourceInput
     ? createTransformerFromInput(sharpLib, sourceInput, sourceFormat)
     : createTransformer(sharpLib, asset)
-  let transformed = applyColorProfile(baseTransformer, config.colorProfile)
+  let transformed = baseTransformer
+  if (typeof transformed.withIccProfile === 'function') {
+    const normalizedColorProfile = String(config.colorProfile || '').trim().toLowerCase()
+    const outputColorProfile = normalizedColorProfile === 'p3' || normalizedColorProfile === 'display-p3' || normalizedColorProfile === 'display p3'
+      ? 'p3'
+      : normalizedColorProfile === 'cmyk'
+        ? 'cmyk'
+        : 'srgb'
+    transformed = transformed.withIccProfile(outputColorProfile)
+  }
   transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
   const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
 
@@ -1602,10 +1594,6 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
-function getRotateBackground(value) {
-  return hexToRgbaObject(value, 1)
-}
-
 function mapFlipOutputFormat(asset, config) {
   const requested = String(config.outputFormat || '').toLowerCase()
   if (!requested || requested === 'keep original') return mapOutputFormat('flip', asset, config)
@@ -1622,7 +1610,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
     return copyAssetToOutput(asset, outputPath)
   }
 
-  const solidBackground = getRotateBackground(config.background)
+  const solidBackground = hexToRgbaObject(config.background, 1)
   let transformed = null
 
   if (config.autoCrop) {
@@ -1667,7 +1655,9 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   if (config.autoCropTransparent && !isAlphaCapableFormat(format)) {
     transformed = transformed.flatten({ background: OPAQUE_WHITE_BG })
   }
-  transformed = applyMetadataPolicy(transformed, config.preserveMetadata)
+  if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
+    transformed = transformed.keepMetadata()
+  }
 
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
