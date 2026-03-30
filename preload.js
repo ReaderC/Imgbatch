@@ -1354,21 +1354,26 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
+  const rotation = Math.round(toNumber(config.rotation, 0))
+  const opacity = Math.round(clampNumber(config.opacity, 0, 100, 60))
   const overlayCacheKey = [
     imageSourceKey,
-    Math.round(toNumber(config.rotation, 0)),
-    Math.round(clampNumber(config.opacity, 0, 100, 60)),
+    rotation,
+    opacity,
     watermarkWidth,
   ].join('|')
   const cachedOverlay = WATERMARK_OVERLAY_CACHE.get(overlayCacheKey)
   if (cachedOverlay) return cachedOverlay
 
-  const { data, info } = await sharpLib(imageInput)
-    .rotate(config.rotation, { background: TRANSPARENT_BG })
-    .resize({ width: watermarkWidth, withoutEnlargement: true })
-    .ensureAlpha(config.opacity / 100)
-    .png()
-    .toBuffer({ resolveWithObject: true })
+  let overlayTransformer = sharpLib(imageInput)
+  if (rotation !== 0) {
+    overlayTransformer = overlayTransformer.rotate(rotation, { background: TRANSPARENT_BG })
+  }
+  overlayTransformer = overlayTransformer.resize({ width: watermarkWidth, withoutEnlargement: true })
+  if (opacity < 100) {
+    overlayTransformer = overlayTransformer.ensureAlpha(opacity / 100)
+  }
+  const { data, info } = await overlayTransformer.png().toBuffer({ resolveWithObject: true })
   const overlay = {
     input: data,
     width: info.width || 1,
