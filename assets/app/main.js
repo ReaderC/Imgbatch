@@ -5,6 +5,7 @@ import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const MERGE_PREVIEW_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
 const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const SETTINGS_TOOL_ID = 'settings'
@@ -2113,7 +2114,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
   if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) {
     return
   }
-  if (!isPreviewableTool(tool.id) || ['merge-pdf', 'merge-image', 'merge-gif'].includes(tool.id)) {
+  if (!isPreviewableTool(tool.id) || MERGE_PREVIEW_TOOLS.has(tool.id)) {
     notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
@@ -2184,7 +2185,7 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
       if (compressionWarning) {
         notify({ type: 'info', message: compressionWarning, durationMs: 6500 })
       }
-      const autoOpenResultPath = result && tool && ['merge-pdf', 'merge-image', 'merge-gif'].includes(tool.id)
+      const autoOpenResultPath = result && tool && MERGE_PREVIEW_TOOLS.has(tool.id)
         ? String(result.processed?.[0]?.outputPath || '').trim()
         : ''
       if (autoOpenResultPath) {
