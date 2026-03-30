@@ -1939,11 +1939,11 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const repeat = payload.config.loop ? 0 : -1
 
   for (const asset of payload.assets) {
-    const { data } = await sharpLib(asset.sourcePath)
+    const data = await sharpLib(asset.sourcePath)
       .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
       .ensureAlpha()
       .raw()
-      .toBuffer({ resolveWithObject: true })
+      .toBuffer()
 
     const palette = quantize(data, 256)
     const index = applyPalette(data, palette)
@@ -2197,7 +2197,7 @@ function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   }
 }
 
-async function createMergeOutput(result, payload) {
+function createMergeOutput(result, payload) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
   const outputName = path.basename(outputPath)
   return normalizeDirectResult({
@@ -2219,7 +2219,7 @@ async function executeMergeTool(payload, sharpLib) {
     if (payload.toolId === 'merge-image') result = await writeMergeImageAsset(sharpLib, payload)
     if (payload.toolId === 'merge-pdf') result = await writeMergePdfAssetReal(sharpLib, payload)
     if (payload.toolId === 'merge-gif') result = await writeMergeGifAsset(sharpLib, payload)
-    processed.push(await createMergeOutput(result, payload))
+    processed.push(createMergeOutput(result, payload))
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }
