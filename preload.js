@@ -1013,10 +1013,14 @@ function createTransformer(sharpLib, asset) {
   return createTransformerFromInput(sharpLib, asset.sourcePath, asset.ext)
 }
 
-function applyResizeOperation(transformer, asset, config) {
+function resolveResizeTargetSize(asset, config) {
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
+  return { width, height }
+}
 
+function applyResizeOperation(transformer, asset, config) {
+  const { width, height } = resolveResizeTargetSize(asset, config)
   return transformer.resize({
     width,
     height,
@@ -1263,6 +1267,20 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
+  const { width, height } = resolveResizeTargetSize(asset, config)
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceWidth = Math.max(0, Number(asset.width) || 0)
+  const sourceHeight = Math.max(0, Number(asset.height) || 0)
+
+  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: sourceWidth,
+      height: sourceHeight,
+    }, asset)
+  }
+
   const resized = applyResizeOperation(createTransformer(sharpLib, asset), asset, config)
   return writeTransformedAsset(resized, format, 90, outputPath)
 }
