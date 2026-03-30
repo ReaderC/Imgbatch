@@ -2224,24 +2224,6 @@ function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   }
 }
 
-function createSavePayloadFromAssets(toolId, assets, destinationPath) {
-  return createSavePayload(toolId, buildStagedItemsFromAssets(assets), destinationPath)
-}
-
-function createPreparedPreviewPayload(toolId, config, assets, destinationPath) {
-  return createPreviewPayload(toolId, config, assets, destinationPath)
-}
-
-function createPreparedSavePayload(toolId, stagedItems, destinationPath) {
-  return createSavePayload(toolId, stagedItems, destinationPath)
-}
-
-function createProcessedOutput(asset, result, payload) {
-  return payload.mode === 'preview-save'
-    ? stageResultToProcessed(asset, result, payload)
-    : directResultToProcessed(asset, result)
-}
-
 async function createMergeOutput(outputPath, payload) {
   const stat = fs.statSync(outputPath)
   return normalizeDirectResult({
@@ -2253,30 +2235,6 @@ async function createMergeOutput(outputPath, payload) {
     width: 0,
     height: 0,
   })
-}
-
-function resolveLocalRunPayload(toolId, config, assets, destinationPath) {
-  return createPreparedRunPayload(toolId, config, assets, destinationPath)
-}
-
-function resolveLocalPreviewPayload(toolId, config, assets, destinationPath) {
-  return createPreparedPreviewPayload(toolId, config, assets, destinationPath)
-}
-
-function resolveLocalSavePayload(toolId, stagedItems, destinationPath) {
-  return createPreparedSavePayload(toolId, stagedItems, destinationPath)
-}
-
-function resolveLocalSaveItemsPayload(assets) {
-  return buildStagedItemsFromAssets(assets)
-}
-
-function resolveLocalSettingsPayload() {
-  return loadSettings()
-}
-
-function setLocalSettingsPayload(settings) {
-  return saveSettings(settings)
 }
 
 async function executeMergeTool(payload, sharpLib) {
@@ -2635,7 +2593,7 @@ const toolsApi = {
   },
 
   prepareRunPayload(toolId, config, assets, destinationPath) {
-    return resolveLocalRunPayload(toolId, config, assets, destinationPath)
+    return createPreparedRunPayload(toolId, config, assets, destinationPath)
   },
 
   async stageToolPreview(toolId, config, assets, destinationPath, mode) {
@@ -2651,19 +2609,19 @@ const toolsApi = {
   },
 
   loadSettings() {
-    return resolveLocalSettingsPayload()
+    return loadSettings()
   },
 
   saveSettings(settings) {
-    return setLocalSettingsPayload(settings)
+    return saveSettings(settings)
   },
 
   buildStagedItems(assets = []) {
-    return resolveLocalSaveItemsPayload(assets)
+    return buildStagedItemsFromAssets(assets)
   },
 
   async runTool(toolId, config, assets, destinationPath) {
-    const payload = resolveLocalRunPayload(toolId, config, assets, destinationPath)
+    const payload = createPreparedRunPayload(toolId, config, assets, destinationPath)
     const hostApi = getHostApi()
 
     if (supportsLocalProcessing(payload.toolId)) {
