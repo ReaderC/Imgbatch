@@ -663,19 +663,7 @@ function clearAllResultOverlays() {
   closePreviewModal()
 }
 
-function clearResultUiAfterToolChange() {
-  clearAllResultOverlays()
-  setResultView(null)
-  setState({ activeRun: null })
-}
-
-function resetResultUiState() {
-  clearAllResultOverlays()
-  setResultView(null)
-  setState({ activeRun: null })
-}
-
-function continueProcessing() {
+function resetActiveResultUi() {
   clearAllResultOverlays()
   setResultView(null)
   setState({ activeRun: null })
@@ -1298,7 +1286,7 @@ function attachGlobalEvents() {
 
     if (action === 'activate-tool') {
       event.preventDefault()
-      clearResultUiAfterToolChange()
+      resetActiveResultUi()
       setActiveTool(target.dataset.toolId)
       void applyDefaultPresetForTool(target.dataset.toolId, true)
       return
@@ -1373,7 +1361,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'clear-assets') {
-      resetResultUiState()
+      resetActiveResultUi()
       setState({ assets: [], previewModal: null, resultView: null })
       return
     }
@@ -1412,7 +1400,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'continue-processing') {
-      continueProcessing()
+      resetActiveResultUi()
       return
     }
 
