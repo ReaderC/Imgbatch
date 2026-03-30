@@ -1765,13 +1765,6 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
-function getPdfMarginValueResolved(margin, pageWidth) {
-  if (margin === 'none') return 0
-  if (margin === 'wide') return Math.round(pageWidth * 0.08)
-  if (margin === 'normal') return Math.round(pageWidth * 0.06)
-  return Math.round(pageWidth * 0.04)
-}
-
 async function writeMergeImageAsset(sharpLib, payload) {
   const format = 'png'
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
@@ -1888,7 +1881,14 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }
-    const margin = getPdfMarginValueResolved(payload.config.margin, fixedPageSize?.[0] || sourceWidth || 1)
+    const marginBaseWidth = fixedPageSize?.[0] || sourceWidth || 1
+    const margin = payload.config.margin === 'none'
+      ? 0
+      : payload.config.margin === 'wide'
+        ? Math.round(marginBaseWidth * 0.08)
+        : payload.config.margin === 'normal'
+          ? Math.round(marginBaseWidth * 0.06)
+          : Math.round(marginBaseWidth * 0.04)
 
     if (payload.config.pageSize === 'Original') {
       const originalImage = await ensureEmbedded()
