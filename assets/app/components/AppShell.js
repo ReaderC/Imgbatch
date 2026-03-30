@@ -410,6 +410,9 @@ function renderInteractivePreviewModal(preview) {
   const compareRatio = Number.isFinite(Number(preview.compareRatio))
     ? Math.max(0, Math.min(1, Number(preview.compareRatio)))
     : 0.5
+  const compareZoom = Number.isFinite(Number(preview.compareZoom))
+    ? Math.max(1, Math.min(5, Number(preview.compareZoom)))
+    : 1
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
@@ -431,9 +434,13 @@ function renderInteractivePreviewModal(preview) {
           </div>
           <div class="preview-modal__compare">
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
-              <div class="preview-modal__body preview-modal__body--compare">
-                <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" draggable="false" />
-                <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" draggable="false" style="clip-path: inset(0 calc(100% - ${comparePercent}) 0 0);" />
+              <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom};">
+                <div class="preview-compare-stage__layer preview-compare-stage__layer--after">
+                  <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" draggable="false" />
+                </div>
+                <div class="preview-compare-stage__layer preview-compare-stage__layer--before" style="clip-path: inset(0 calc(100% - ${comparePercent}) 0 0);">
+                  <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" draggable="false" />
+                </div>
                 <div class="preview-compare-stage__divider" style="left:${comparePercent}" data-action="drag-preview-compare">
                   <span class="preview-compare-stage__handle" aria-hidden="true"></span>
                 </div>

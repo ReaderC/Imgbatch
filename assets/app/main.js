@@ -744,17 +744,15 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     notify({ type: 'info', message: getPreviewMessage(asset) })
     return false
   }
-  const outputWidth = Number(asset.stagedWidth || asset.width) || 0
-  const outputHeight = Number(asset.stagedHeight || asset.height) || 0
-  const isPortraitPreview = outputHeight > outputWidth && outputWidth > 0
   setPreviewModal({
     name: asset.name,
     url: asset.previewUrl,
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
-    compareMode: isPortraitPreview ? 'split' : getPreviewCompareMode(toolId),
+    compareMode: getPreviewCompareMode(toolId),
     compareRatio: 0.5,
+    compareZoom: 1,
     compareLabelsHidden: false,
   })
   return true
@@ -783,6 +781,15 @@ function setPreviewCompareRatio(ratio) {
   const currentRatio = Number.isFinite(Number(preview.compareRatio)) ? Number(preview.compareRatio) : 0.5
   if (Math.abs(currentRatio - nextRatio) < 0.0025) return
   setPreviewModal({ ...preview, compareRatio: nextRatio })
+}
+
+function setPreviewCompareZoom(zoom) {
+  const preview = getState().previewModal
+  if (!preview?.url || preview.compareMode === 'split') return
+  const nextZoom = Math.max(1, Math.min(5, zoom))
+  const currentZoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
+  if (Math.abs(currentZoom - nextZoom) < 0.01) return
+  setPreviewModal({ ...preview, compareZoom: nextZoom })
 }
 
 function nudgePreviewCompareRatio(delta) {
@@ -1173,6 +1180,17 @@ function extractDroppedItems(event) {
 
 function attachGlobalEvents() {
   document.addEventListener('wheel', (event) => {
+    const previewCompareBody = event.target.closest('.preview-modal__body--compare')
+    if (previewCompareBody) {
+      const preview = getState().previewModal
+      if (preview?.url && preview.compareMode !== 'split') {
+        event.preventDefault()
+        const currentZoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
+        const delta = event.deltaY < 0 ? 0.12 : -0.12
+        setPreviewCompareZoom(currentZoom + delta)
+        return
+      }
+    }
     const scroller = event.target.closest('[data-horizontal-scroll]')
     if (!scroller) return
     if (scroller.scrollWidth <= scroller.clientWidth) return
