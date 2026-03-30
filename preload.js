@@ -1809,6 +1809,7 @@ async function writeMergePdfAsset(payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
   const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
+  const backgroundColor = pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255)
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
@@ -1826,7 +1827,7 @@ async function writeMergePdfAsset(payload) {
       y: 0,
       width: pageSize[0],
       height: pageSize[1],
-      color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+      color: backgroundColor,
     })
     const margin = getPdfMarginValueResolved(payload.config.margin, pageSize[0])
     const drawableWidth = pageSize[0] - margin * 2
@@ -1853,6 +1854,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
   const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
+  const backgroundColor = pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255)
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
@@ -1873,7 +1875,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         y: 0,
         width: pageSize[0],
         height: pageSize[1],
-        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+        color: backgroundColor,
       })
       page.drawImage(embedded, {
         x: margin,
@@ -1895,7 +1897,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         y: 0,
         width: pageSize[0],
         height: pageSize[1],
-        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+        color: backgroundColor,
       })
       const scale = Math.min(drawableWidth / embedded.width, drawableHeight / embedded.height)
       const width = embedded.width * scale
@@ -1926,7 +1928,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         y: 0,
         width: pageSize[0],
         height: pageSize[1],
-        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+        color: backgroundColor,
       })
       page.drawImage(paged, {
         x: margin,
@@ -1951,7 +1953,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         y: 0,
         width: pageSize[0],
         height: pageSize[1],
-        color: pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255),
+        color: backgroundColor,
       })
       page.drawImage(pageImage, {
         x: margin,

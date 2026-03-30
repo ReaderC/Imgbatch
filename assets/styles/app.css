@@ -1723,6 +1723,13 @@ body {
   white-space: nowrap;
 }
 
+@media (max-width: 1380px) {
+  .workspace:not(.workspace--result) .setting-row__hint--compression {
+    white-space: normal;
+    line-height: 1.35;
+  }
+}
+
 .workspace:not(.workspace--result) .setting-row__hint--measure {
   display: block;
   grid-column: 2;
