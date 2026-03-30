@@ -937,7 +937,7 @@ function isMergePreviewTool(toolId) {
 }
 
 function notifyPreviewUnavailable(tool, asset) {
-    notify({ type: 'info', message: `${tool.label} ???????${truncate(asset?.name || '????', 20)}` })
+  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
 }
 
 async function previewWithRunner(tool, asset) {
@@ -967,7 +967,7 @@ async function previewAssetWithTool(tool, asset) {
       notifyPreviewUnavailable(tool, asset)
       return
     }
-    notify({ type: 'info', message: `${tool.label} ???????${truncate(asset?.name || '????', 20)}` })
+    notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
   await previewWithRunner(tool, asset)
@@ -2137,7 +2137,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
       notifyPreviewUnavailable(tool, asset)
       return
     }
-    notify({ type: 'info', message: `${tool.label} ???????${truncate(asset?.name || '????', 20)}` })
+    notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
   const previewValidationMessage = getToolInputValidationMessage(tool.id, state.configs[tool.id] || {})
