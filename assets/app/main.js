@@ -916,10 +916,6 @@ function shouldReusePreviewResult(toolId, asset) {
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
 }
 
-function isMergePreviewTool(toolId) {
-  return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
-}
-
 async function previewWithRunner(tool, asset) {
   const state = getState()
   const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
@@ -2117,7 +2113,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
   if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) {
     return
   }
-  if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
+  if (!isPreviewableTool(tool.id) || ['merge-pdf', 'merge-image', 'merge-gif'].includes(tool.id)) {
     notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
