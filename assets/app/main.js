@@ -751,6 +751,8 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
     compareMode: getPreviewCompareMode(toolId),
+    compareWidth: Number(asset.stagedWidth || asset.width) || 0,
+    compareHeight: Number(asset.stagedHeight || asset.height) || 0,
     compareRatio: 0.5,
     compareZoom: 1,
     compareLabelsHidden: false,
@@ -1255,9 +1257,11 @@ function attachGlobalEvents() {
     const modalRoot = event.target.closest('.preview-modal')
     if (modalRoot) {
       const clickedCompareBody = !!event.target.closest('.preview-modal__body--compare')
+      const clickedSplitBody = !!event.target.closest('.preview-modal__body--split')
+      const clickedSplitLabel = !!event.target.closest('.preview-modal__split-label')
       const clickedCloseButton = !!event.target.closest('.preview-modal__close')
       const clickedCompareLabels = !!event.target.closest('.preview-modal__compare-head')
-      if (!clickedCompareBody && !clickedCloseButton && !clickedCompareLabels) {
+      if (!clickedCompareBody && !clickedSplitBody && !clickedSplitLabel && !clickedCloseButton && !clickedCompareLabels) {
         closePreviewModal()
         return
       }

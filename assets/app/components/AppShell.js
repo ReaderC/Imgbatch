@@ -413,6 +413,9 @@ function renderInteractivePreviewModal(preview) {
   const compareZoom = Number.isFinite(Number(preview.compareZoom))
     ? Math.max(1, Math.min(5, Number(preview.compareZoom)))
     : 1
+  const compareWidth = Number(preview.compareWidth) || 1
+  const compareHeight = Number(preview.compareHeight) || 1
+  const compareAspect = Math.max(0.1, compareWidth / compareHeight)
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
@@ -434,7 +437,7 @@ function renderInteractivePreviewModal(preview) {
           </div>
           <div class="preview-modal__compare">
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
-              <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom};">
+              <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom}; --preview-compare-aspect:${compareAspect};">
                 <div class="preview-compare-stage__layer preview-compare-stage__layer--after">
                   <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" draggable="false" />
                 </div>
