@@ -239,9 +239,9 @@ function renderCornersConfig(config) {
     ${renderFieldGrid(`
       ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), unitMode: getMeasureUnit(config.radius, 'px') })}
     `)}
+    ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     <div class="setting-row__hint">原图格式若不支持透明通道，开启后会自动转换为 PNG 输出。</div>
-    ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
   `)
 }
 
