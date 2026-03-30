@@ -1941,7 +1941,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       color: backgroundColor,
     })
   }
-  const preparedAssets = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
+  const prepareAsset = async (asset) => {
     const imageBytes = fs.readFileSync(asset.sourcePath)
     const fixedPageSize = payload.config.pageSize === 'Original'
       ? null
@@ -1999,7 +1999,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     return prepared
-  })
+  }
+  const preparedAssets = payload.assets.length === 1
+    ? [await prepareAsset(payload.assets[0])]
+    : await mapWithConcurrency(payload.assets, prepareConcurrency, prepareAsset)
 
   for (const prepared of preparedAssets) {
     const { asset, imageBytes, fixedPageSize } = prepared
