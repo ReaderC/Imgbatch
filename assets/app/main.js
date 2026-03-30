@@ -310,7 +310,7 @@ function confirmDeleteSelectedPreset() {
 function confirmReplaceAssetOriginal(assetId) {
   const asset = getState().assets.find((item) => item.id === assetId)
   if (!asset) return
-  const resultPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset)
+  const resultPath = getResultPathForReplacement(assetId)
   if (!resultPath) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
@@ -326,7 +326,7 @@ function confirmReplaceAssetOriginal(assetId) {
 }
 
 function confirmReplaceCurrentOriginals() {
-  const assets = getState().assets.filter((item) => (getSavedOutputPath(item) || getPreviewOutputPath(item)) && item.sourcePath)
+  const assets = getState().assets.filter((item) => getResultPathForReplacement(item.id) && item.sourcePath)
   if (!assets.length) {
     notify({ type: 'info', message: '当前没有可替换的处理结果。' })
     return
@@ -474,6 +474,20 @@ function getReplacePayload(asset, resultPath) {
     outputPath: normalizeAssetPath(asset?.outputPath),
     stagedOutputPath: normalizeAssetPath(asset?.stagedOutputPath),
   }
+}
+
+function getResultPathForReplacement(assetId) {
+  const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
+  const resultViewPath = normalizeAssetPath(resultItem?.outputPath)
+  if (resultViewPath) return resultViewPath
+
+  const asset = getState().assets.find((item) => item.id === assetId)
+  return normalizeAssetPath(
+    asset?.savedOutputPath
+    || asset?.stagedOutputPath
+    || asset?.outputPath
+    || '',
+  )
 }
 
 function normalizeAssetPath(value = '') {
@@ -716,7 +730,7 @@ function injectResultToolbar() {
 async function replaceAssetOriginal(assetId) {
   const asset = getState().assets.find((item) => item.id === assetId)
   if (!asset) return
-  const resultPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset)
+  const resultPath = getResultPathForReplacement(assetId)
   if (!resultPath) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
@@ -746,13 +760,15 @@ async function openCurrentResultsDirectory() {
 }
 
 async function replaceCurrentOriginals() {
-  const assets = getState().assets.filter((item) => (getSavedOutputPath(item) || getPreviewOutputPath(item)) && item.sourcePath)
+  const assets = getState().assets
+    .map((item) => ({ asset: item, resultPath: getResultPathForReplacement(item.id) }))
+    .filter((entry) => entry.resultPath && entry.asset.sourcePath)
   if (!assets.length) {
     notify({ type: 'info', message: '当前没有可替换的处理结果。' })
     return
   }
   try {
-    const result = await runBusyAction(() => replaceOriginals(assets.map((asset) => getReplacePayload(asset, getSavedOutputPath(asset) || getPreviewOutputPath(asset)))))
+    const result = await runBusyAction(() => replaceOriginals(assets.map(({ asset, resultPath }) => getReplacePayload(asset, resultPath))))
     if (result?.processed?.length) {
       handleResultReplaceCompletion(result.processed)
     }
