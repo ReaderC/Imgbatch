@@ -475,6 +475,13 @@ async function mapWithConcurrency(items, concurrency, iteratee) {
   const results = new Array(list.length)
   let cursor = 0
 
+  if (workerCount === 1) {
+    for (let index = 0; index < list.length; index += 1) {
+      results[index] = await iteratee(list[index], index)
+    }
+    return results
+  }
+
   async function worker() {
     while (cursor < list.length) {
       const index = cursor
