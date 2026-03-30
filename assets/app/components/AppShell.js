@@ -340,6 +340,7 @@ function renderInteractivePreviewModal(preview) {
     : 0.5
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
   const isExpanded = !!preview.expanded
+  const labelsHidden = !!preview.compareLabelsHidden
   return `
     <div class="preview-modal" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
@@ -352,7 +353,7 @@ function renderInteractivePreviewModal(preview) {
           </button>
         </div>
         <div class="preview-modal__compare-shell">
-          <div class="preview-modal__compare-head">
+          <div class="preview-modal__compare-head ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
             <span class="preview-compare-card__label">原图</span>
             <span class="preview-compare-card__label">处理后</span>
           </div>

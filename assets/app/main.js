@@ -746,6 +746,7 @@ function openPreviewModal(asset) {
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
     compareRatio: 0.5,
+    compareLabelsHidden: false,
   })
   return true
 }
@@ -760,18 +761,26 @@ function togglePreviewCompareFullscreen() {
   setPreviewModal({ ...preview, expanded: !preview.expanded })
 }
 
+function togglePreviewCompareLabels() {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  setPreviewModal({ ...preview, compareLabelsHidden: !preview.compareLabelsHidden })
+}
+
 function setPreviewCompareRatio(ratio) {
   const preview = getState().previewModal
   if (!preview?.url) return
   const nextRatio = Math.max(0, Math.min(1, ratio))
-  if (Math.abs((Number(preview.compareRatio) || 0.5) - nextRatio) < 0.0025) return
+  const currentRatio = Number.isFinite(Number(preview.compareRatio)) ? Number(preview.compareRatio) : 0.5
+  if (Math.abs(currentRatio - nextRatio) < 0.0025) return
   setPreviewModal({ ...preview, compareRatio: nextRatio })
 }
 
 function nudgePreviewCompareRatio(delta) {
   const preview = getState().previewModal
   if (!preview?.url) return
-  setPreviewCompareRatio((Number(preview.compareRatio) || 0.5) + delta)
+  const currentRatio = Number.isFinite(Number(preview.compareRatio)) ? Number(preview.compareRatio) : 0.5
+  setPreviewCompareRatio(currentRatio + delta)
 }
 
 function updatePreviewCompareRatioFromEvent(event) {
@@ -1220,7 +1229,8 @@ function attachGlobalEvents() {
     if (modalRoot) {
       const clickedCompareBody = !!event.target.closest('.preview-modal__body--compare')
       const clickedCloseButton = !!event.target.closest('.preview-modal__close')
-      if (!clickedCompareBody && !clickedCloseButton) {
+      const clickedCompareLabels = !!event.target.closest('.preview-modal__compare-head')
+      if (!clickedCompareBody && !clickedCloseButton && !clickedCompareLabels) {
         closePreviewModal()
         return
       }
@@ -1258,6 +1268,11 @@ function attachGlobalEvents() {
 
     if (action === 'toggle-preview-compare-fullscreen') {
       togglePreviewCompareFullscreen()
+      return
+    }
+
+    if (action === 'toggle-preview-compare-labels') {
+      togglePreviewCompareLabels()
       return
     }
 

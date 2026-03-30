@@ -3088,7 +3088,16 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.preview-modal__compare-head.is-hidden {
+  opacity: 1;
+}
+
+.preview-modal__compare-head.is-hidden .preview-compare-card__label {
+  opacity: 0;
 }
 
 .preview-modal__body--compare {
