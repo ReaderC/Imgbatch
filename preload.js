@@ -457,6 +457,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
     outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
     width: meta.width,
     height: meta.height,
+    warning: result?.warning || '',
   }, payload)
 }
 
@@ -473,6 +474,7 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
     outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
     width: meta.width,
     height: meta.height,
+    warning: result?.warning || '',
   })
 }
 
@@ -517,17 +519,19 @@ function getAssetProcessingConcurrency(payload) {
 function formatResultMessage(payload, processed, failed) {
   const ok = processed.length > 0 && failed.length === 0
   const partial = processed.length > 0 && failed.length > 0
+  const warningCount = processed.filter((item) => item?.warning).length
+  const warningSuffix = warningCount ? ` 其中 ${warningCount} 项未达到目标体积，已输出可达到的最小结果。` : ''
   if (payload.mode === 'preview-only') {
-    if (ok) return `已生成 ${payload.toolLabel} 单张预览，可继续调整参数。`
+    if (ok) return `已生成 ${payload.toolLabel} 单张预览，可继续调整参数。${warningSuffix}`
     if (partial) return `${payload.toolLabel} 预览部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
     return `${payload.toolLabel} 预览失败：${failed[0]?.error || '没有可处理的图片'}`
   }
   if (payload.mode === 'preview-save') {
-    if (ok) return `已生成 ${payload.toolLabel} 处理结果：${processed.length} 项，可继续保存。`
+    if (ok) return `已生成 ${payload.toolLabel} 处理结果：${processed.length} 项，可继续保存。${warningSuffix}`
     if (partial) return `${payload.toolLabel} 处理部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
     return `${payload.toolLabel} 处理失败：${failed[0]?.error || '没有可处理的图片'}`
   }
-  if (ok) return `已完成 ${payload.toolLabel}：${processed.length} 项，输出到 ${payload.destinationPath}`
+  if (ok) return `已完成 ${payload.toolLabel}：${processed.length} 项，输出到 ${payload.destinationPath}${warningSuffix}`
   if (partial) return `${payload.toolLabel} 部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
   return `${payload.toolLabel} 执行失败：${failed[0]?.error || '没有可处理的图片'}`
 }
@@ -1120,12 +1124,6 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     throw new Error('压缩结果未小于原图，已跳过该文件')
   }
 
-  const ensureTargetCompressionFits = (outputSizeBytes) => {
-    if (!targetBytes || outputSizeBytes <= targetBytes) return
-    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath)
-    throw new Error('压缩结果未达到目标体积，已跳过该文件')
-  }
-
   if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
     const output = await writeTransformedAsset(createTransformer(sharpLib, asset), format, Math.round(config.quality), outputPath, {
       width: asset.width,
@@ -1142,7 +1140,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
-    const normalizedQuality = Math.max(10, Math.min(90, Math.round(quality)))
+    const normalizedQuality = Math.max(1, Math.min(90, Math.round(quality)))
     if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
     const buffer = await withOutputFormat(createTransformer(sharpLib, asset), format, normalizedQuality).toBuffer()
     cache.set(normalizedQuality, buffer)
@@ -1154,7 +1152,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   let chosenBuffer = estimatedBuffer
 
   if (estimatedBuffer.length > targetBytes) {
-    const lowQuality = qualitySteps[qualitySteps.length - 1]
+    const lowQuality = 1
     const lowBuffer = estimatedQuality === lowQuality ? estimatedBuffer : await encodeAtQuality(lowQuality)
     chosenBuffer = lowBuffer
 
@@ -1195,7 +1193,9 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     chosenBuffer = bestBuffer
   }
 
-  ensureTargetCompressionFits(chosenBuffer.length)
+  const warning = chosenBuffer.length > targetBytes
+    ? `未达到目标体积 ${config.targetSizeKb} KB，已输出当前可达到的最小结果 ${Math.max(1, Math.round(chosenBuffer.length / 1024))} KB。`
+    : ''
   fs.writeFileSync(outputPath, chosenBuffer)
   ensureCompressedOutputIsSmaller(chosenBuffer.length)
   return {
@@ -1204,6 +1204,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     outputSizeBytes: chosenBuffer.length,
     width: asset.width || 0,
     height: asset.height || 0,
+    warning,
   }
 }
 

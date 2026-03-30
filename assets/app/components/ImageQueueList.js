@@ -61,6 +61,7 @@ function renderQueueItem(asset, tool, state, index, total) {
         ${renderCompactQueueTicker(asset, tool, state)}
         ${renderResultMeta(asset, tool)}
         ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
+        ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
         ${asset.error ? `<div class="queue-item__subline queue-item__subline--error"><span>错误：${escapeHtml(asset.error)}</span></div>` : ''}
       </div>
       <div class="queue-item__controls">

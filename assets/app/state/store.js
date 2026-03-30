@@ -209,6 +209,7 @@ function createAssetState(asset) {
     status: asset.status || 'idle',
     outputPath: asset.outputPath || '',
     error: asset.error || '',
+    warning: asset.warning || '',
     previewStatus: asset.previewStatus || 'idle',
     previewUrl: asset.previewUrl || '',
     stagedOutputPath: asset.stagedOutputPath || '',
@@ -240,6 +241,7 @@ function applyProcessedAsset(asset, processed, result) {
       ...asset,
       status: 'done',
       error: '',
+      warning: processed.warning || '',
       outputPath: '',
       previewStatus: processed.previewStatus || (isBatchResult ? 'staged' : 'previewed'),
       previewUrl: processed.previewUrl || '',
@@ -262,6 +264,7 @@ function applyProcessedAsset(asset, processed, result) {
       ...asset,
       status: 'done',
       error: '',
+      warning: processed.warning || '',
       outputPath: processed.outputPath || '',
       previewStatus: 'saved',
       savedOutputPath: nextSavedPath,
@@ -279,6 +282,7 @@ function applyProcessedAsset(asset, processed, result) {
     savedOutputPath: processed.outputPath || '',
     previewStatus: 'saved',
     error: '',
+    warning: processed.warning || '',
   }
 }
 
