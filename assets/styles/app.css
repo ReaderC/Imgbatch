@@ -2467,9 +2467,6 @@ body {
 }
 
 .preview-modal__close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
   width: 40px;
   height: 40px;
   border-radius: 999px;
@@ -2478,6 +2475,12 @@ body {
   justify-content: center;
   background: rgba(73, 86, 180, 0.08);
   cursor: pointer;
+}
+
+.preview-modal__dialog > .preview-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
 }
 
 .preview-modal__actions .preview-modal__close:last-child {
