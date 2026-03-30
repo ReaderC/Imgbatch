@@ -1657,14 +1657,15 @@ function buildRoundedRectSvg(width, height, radius, fill) {
 async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const outputFormat = config.keepTransparency ? 'png' : mapOutputFormat('corners', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'corners', outputFormat))
-  const metadata = asset.width && asset.height ? null : await createTransformer(sharpLib, asset).metadata()
+  const baseTransformer = createTransformer(sharpLib, asset)
+  const metadata = asset.width && asset.height ? null : await baseTransformer.clone().metadata()
   const width = asset.width || metadata?.width || 1
   const height = asset.height || metadata?.height || 1
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
-  let transformed = createTransformer(sharpLib, asset).ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
+  let transformed = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
 
   if (!config.keepTransparency) {
     const background = {

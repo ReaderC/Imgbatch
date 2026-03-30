@@ -3081,7 +3081,7 @@ body {
   display: flex;
   padding: 4px;
   background: var(--surface-container-high);
-  border-radius: 18px;
+  border-radius: 14px;
   gap: 6px;
 }
 
@@ -3089,7 +3089,7 @@ body {
   flex: 1;
   min-height: 42px;
   padding: 0 14px;
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--on-surface-variant);
   cursor: pointer;
 }
