@@ -1394,14 +1394,19 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
   const margin = Math.max(0, config.margin || 0)
-  const horizontal = config.position.includes('left')
+  const position = String(config.position || 'center')
+  const isLeft = position.includes('left')
+  const isRight = position.includes('right')
+  const isTop = position.startsWith('top')
+  const isBottom = position.startsWith('bottom')
+  const horizontal = isLeft
     ? margin
-    : config.position.includes('right')
+    : isRight
       ? Math.max(0, assetWidth - overlayWidth - margin)
       : Math.round((assetWidth - overlayWidth) / 2)
-  const vertical = config.position.startsWith('top')
+  const vertical = isTop
     ? margin
-    : config.position.startsWith('bottom')
+    : isBottom
       ? Math.max(0, assetHeight - overlayHeight - margin)
       : Math.round((assetHeight - overlayHeight) / 2)
 

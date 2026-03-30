@@ -468,6 +468,11 @@ function notifyActionResult(result, fallbackMessage) {
   })
 }
 
+function getAutoOpenResultPath(result, tool) {
+  if (!result || !tool || !['merge-pdf', 'merge-image', 'merge-gif'].includes(tool.id)) return ''
+  return String(result.processed?.[0]?.outputPath || '').trim()
+}
+
 function getResultPathForReplacement(assetId) {
   const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
   const resultViewPath = normalizeAssetPath(resultItem?.outputPath)
@@ -1995,6 +2000,10 @@ async function processCurrentTool() {
       const compressionWarning = getCompressionOversizeWarning(result, tool)
       if (compressionWarning) {
         notify({ type: 'info', message: compressionWarning, durationMs: 6500 })
+      }
+      const autoOpenResultPath = getAutoOpenResultPath(result, tool)
+      if (autoOpenResultPath) {
+        await openResultPath(autoOpenResultPath)
       }
       return
     }
