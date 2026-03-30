@@ -438,15 +438,11 @@ async function openSavedOutput(assetId) {
     notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
     return
   }
-  await revealTargetPath(targetPath)
+  await openResultPath(targetPath)
 }
 
 async function openResultPath(targetPath) {
   if (!targetPath) return
-  await revealTargetPath(targetPath)
-}
-
-async function revealTargetPath(targetPath) {
   const ok = await revealPath(targetPath)
   if (!ok) {
     notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
