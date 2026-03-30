@@ -302,7 +302,7 @@ function renderResultStrip(label, size, dimensions) {
   `
 }
 
-function renderPreviewModal(preview) {
+function renderPreviewModalLegacyUnused(preview) {
   if (!preview?.url) return ''
   if (preview.compareMode !== 'split') {
     return renderInteractivePreviewModal(preview)
@@ -339,8 +339,6 @@ function renderPreviewModal(preview) {
       </div>
     </div>
   `
-  const beforeUrl = preview.beforeUrl || preview.url
-  const afterUrl = preview.afterUrl || preview.url
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare">
