@@ -1762,6 +1762,24 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const format = mapOutputFormat('crop', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
   const box = normalizeCropBox(asset, config)
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceWidth = Math.max(0, Number(asset.width) || 0)
+  const sourceHeight = Math.max(0, Number(asset.height) || 0)
+
+  if (sourceWidth > 0 && sourceHeight > 0
+    && sourceFormat === format
+    && box.left === 0
+    && box.top === 0
+    && box.width === sourceWidth
+    && box.height === sourceHeight) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: sourceWidth,
+      height: sourceHeight,
+    }, asset)
+  }
+
   const transformed = createTransformer(sharpLib, asset).extract(box)
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
