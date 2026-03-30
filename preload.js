@@ -445,11 +445,15 @@ function normalizeDirectResult(item = {}) {
   }
 }
 
+function getResultMetaSource(result, outputPath) {
+  return typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
+    ? createOutputMeta(outputPath, result, result)
+    : null
+}
+
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
-  const meta = typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
-    ? createOutputMeta(stagedPath, result, result)
-    : await readOutputMeta(stagedPath, sharpLib)
+  const meta = getResultMetaSource(result, stagedPath) || await readOutputMeta(stagedPath, sharpLib)
   return normalizePreviewResult({
     assetId: asset.id,
     name: asset.name,
@@ -465,9 +469,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
 
 async function directResultToProcessed(asset, result, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
-  const meta = typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
-    ? createOutputMeta(outputPath, result, result)
-    : await readOutputMeta(outputPath, sharpLib)
+  const meta = getResultMetaSource(result, outputPath) || await readOutputMeta(outputPath, sharpLib)
   return normalizeDirectResult({
     assetId: asset.id,
     name: asset.name,

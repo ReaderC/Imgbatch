@@ -4795,7 +4795,7 @@ body {
 
 .topbar {
   min-height: 56px !important;
-  padding: 0 16px 0 20px !important;
+  padding: 0 16px 0 12px !important;
   background: #F0F4F8 !important;
   border-bottom: 0 !important;
   backdrop-filter: none !important;
@@ -4815,7 +4815,7 @@ body {
 }
 
 .topbar__heading {
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
 .panel-footer-actions {
