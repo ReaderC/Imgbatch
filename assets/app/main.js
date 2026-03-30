@@ -943,18 +943,6 @@ function getPreviewAssetAfterRun(assetId, toolId, asset, result) {
   return createPreviewFallbackAsset(asset, getPreviewResultProcessed(result, assetId), toolId)
 }
 
-function getPreviewMode(toolId) {
-  return isPreviewSaveTool(toolId) ? 'preview-only' : 'preview-only'
-}
-
-function getSingleAssetPreviewRunner(toolId) {
-  return getPreviewRunner(toolId)
-}
-
-function isSingleAssetPreviewTool(toolId) {
-  return canGenerateSingleAssetPreview(toolId)
-}
-
 function notifyPreviewReady(tool) {
   notify({ type: 'success', message: buildPreviewNotification(tool) })
 }
@@ -963,32 +951,15 @@ function notifyPreviewUnavailable(tool, asset) {
   notify({ type: 'info', message: getPreviewPlaceholderMessage(tool, asset) })
 }
 
-function canOpenToolPreview(toolId, asset) {
-  return shouldReusePreviewResult(toolId, asset)
-}
-
-function getPreviewCandidate(toolId, asset) {
-  return canOpenToolPreview(toolId, asset) ? asset : null
-}
-
 function openExistingPreview(toolId, asset) {
-  const candidate = getPreviewCandidate(toolId, asset)
-  if (candidate && openPreviewModal(candidate)) {
+  if (shouldReusePreviewResult(toolId, asset) && openPreviewModal(asset)) {
     return true
   }
   return false
 }
 
-function shouldUsePreviewProcessing(toolId) {
-  return shouldOpenRealPreview(toolId)
-}
-
-function shouldShowPreviewNotification(toolId) {
-  return isDirectPreviewTool(toolId)
-}
-
 function maybeNotifyDirectPreviewReady(tool) {
-  if (shouldShowPreviewNotification(tool.id)) {
+  if (isDirectPreviewTool(tool.id)) {
     notifyPreviewReady(tool)
   }
 }
@@ -1006,11 +977,7 @@ function notifyUnsupportedPreview(tool, asset) {
 }
 
 function shouldUseUnsupportedPreview(toolId) {
-  return !shouldUsePreviewProcessing(toolId) && !isMergePreviewTool(toolId)
-}
-
-function previewToolSupportsProcessing(toolId) {
-  return shouldUsePreviewProcessing(toolId)
+  return !shouldOpenRealPreview(toolId) && !isMergePreviewTool(toolId)
 }
 
 async function executePreviewRunner(toolId, config, assets, destinationPath) {
@@ -1035,7 +1002,7 @@ async function previewWithRunner(tool, asset) {
 
 async function previewAssetWithTool(tool, asset) {
   if (openExistingPreview(tool.id, asset)) return
-  if (!previewToolSupportsProcessing(tool.id)) {
+  if (!shouldOpenRealPreview(tool.id)) {
     if (isMergePreviewTool(tool.id)) {
       notifyPreviewUnavailable(tool, asset)
       return
@@ -2479,7 +2446,7 @@ async function previewAsset(assetId) {
   if (openExistingPreview(tool.id, asset)) {
     return
   }
-  if (!shouldUsePreviewProcessing(tool.id)) {
+  if (!shouldOpenRealPreview(tool.id)) {
     notifyPreviewUnavailable(tool, asset)
     return
   }

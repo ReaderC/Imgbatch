@@ -4459,14 +4459,6 @@ body {
   justify-self: auto;
 }
 
-@media (max-width: 1100px) {
-  .workspace--result .result-strip__value.is-marquee .result-strip__marquee,
-  .workspace--result .result-strip__meta.is-marquee .result-strip__marquee {
-    padding-right: 24px;
-    animation: resultMarquee 9s linear infinite alternate;
-  }
-}
-
 /* Final manual-crop portrait-fit override */
 .manual-canvas__stage {
   overflow: auto;
