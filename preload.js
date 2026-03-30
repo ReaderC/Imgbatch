@@ -1847,7 +1847,7 @@ async function writeMergePdfAsset(payload) {
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
   const pdfLib = getPdfLib()
-  if (!pdfLib) throw new Error('缂哄皯 pdf-lib 渚濊禆')
+  if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
   const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)

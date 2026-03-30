@@ -5,11 +5,6 @@ export function renderTopBar(state) {
   const progress = state.processingProgress
   const sidebarLabel = state.sidebarCollapsed ? '展开导航' : '收起导航'
   const sidebarIcon = state.sidebarCollapsed ? 'right_panel_open' : 'left_panel_close'
-  const modeLabel = tool.mode === 'sort'
-    ? '排序队列'
-    : tool.mode === 'manual'
-      ? '手动裁剪'
-      : '效果预览'
 
   return `
     <header class="topbar">
@@ -19,7 +14,6 @@ export function renderTopBar(state) {
         </button>
         <div class="topbar__title-block">
           <div class="topbar__title">${tool.label}</div>
-          <div class="sidebar__brand-subtitle">批量处理 · ${modeLabel}</div>
         </div>
       </div>
       <div class="topbar__actions">
