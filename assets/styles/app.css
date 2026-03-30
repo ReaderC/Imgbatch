@@ -1472,7 +1472,8 @@ body {
 .workspace-stage__inner .input-shell,
 .workspace-stage__inner .select-shell,
 .workspace-stage__inner .range-shell,
-.workspace-stage__inner .color-field {
+.workspace-stage__inner .color-field,
+.workspace-stage__inner .watermark-picker-row {
   grid-column: 2;
 }
 
@@ -1483,6 +1484,16 @@ body {
   height: 34px;
   border-radius: 10px;
   font-size: 12px;
+}
+
+.workspace-stage__inner .watermark-picker-row {
+  min-height: 34px;
+}
+
+.workspace-stage__inner .watermark-picker-button {
+  min-height: 34px;
+  height: 34px;
+  padding-inline: 14px;
 }
 
 .workspace-stage__inner .range-input {
@@ -2888,14 +2899,38 @@ body {
 
 .watermark-file-label {
   font-size: 12px;
-  max-width: 240px;
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.watermark-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  grid-column: 2;
+}
+
 .watermark-picker-button {
   border-radius: 12px !important;
+  min-height: 40px;
+  padding-inline: 16px;
+  background: rgba(73, 86, 180, 0.1) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(73, 86, 180, 0.12);
+  box-shadow: none;
+}
+
+.watermark-picker-button:hover {
+  background: rgba(73, 86, 180, 0.16) !important;
+}
+
+.watermark-picker-button:active {
+  background: rgba(73, 86, 180, 0.2) !important;
 }
 
 .color-field {

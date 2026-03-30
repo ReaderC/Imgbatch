@@ -228,13 +228,15 @@ function renderWatermarkConfig(config) {
     ${config.type === 'text'
       ? renderInputField({ label: '水印文本', toolId: 'watermark', key: 'text', value: config.text })
       : `
-        <div class="toggle-card toggle-card--compact">
-          <div>
-            <div class="toggle-card__label">图片水印</div>
-            <div class="muted watermark-file-label">${escapeAttribute(config.imagePath || '未选择文件')}</div>
-          </div>
-          <button class="secondary-button secondary-button--compact watermark-picker-button" data-action="pick-watermark-image">选择文件</button>
-        </div>`}
+        <label class="setting-row setting-row--stack">
+          <span class="setting-row__header">
+            <span class="setting-row__label">图片水印</span>
+          </span>
+          <span class="watermark-picker-row">
+            <span class="muted watermark-file-label">${escapeAttribute(config.imagePath || '未选择文件')}</span>
+            <button class="secondary-button secondary-button--compact watermark-picker-button" data-action="pick-watermark-image" type="button">选择文件</button>
+          </span>
+        </label>`}
     ${renderFieldGrid(`
       ${renderInputField({ label: '字体大小', toolId: 'watermark', key: 'fontSize', type: 'number', value: config.fontSize, min: 8, max: 240, disabled: config.type !== 'text' })}
       ${renderColorField({ label: '颜色', toolId: 'watermark', key: 'color', value: config.color, disabled: config.type !== 'text' })}
