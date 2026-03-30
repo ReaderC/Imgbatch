@@ -800,15 +800,14 @@ function formatBytes(bytes = 0) {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
-function getProcessRunner(toolId) {
+function getToolRunner(toolId, previewMode = '') {
+  if (previewMode === 'preview-only') {
+    return isPreviewableTool(toolId)
+      ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only')
+      : runTool
+  }
   return isPreviewSaveTool(toolId)
     ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save')
-    : runTool
-}
-
-function getPreviewRunner(toolId) {
-  return isPreviewableTool(toolId)
-    ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only')
     : runTool
 }
 
@@ -901,7 +900,7 @@ function notifyUnsupportedPreview(tool, asset) {
 }
 
 async function executePreviewRunner(toolId, config, assets, destinationPath) {
-  return getPreviewRunner(toolId)(toolId, config, assets, destinationPath)
+  return getToolRunner(toolId, 'preview-only')(toolId, config, assets, destinationPath)
 }
 
 async function previewWithRunner(tool, asset) {
@@ -2019,7 +2018,7 @@ async function processCurrentTool() {
 
   try {
     const assets = getAssetsForTool(tool.id, state.assets)
-    const runner = getProcessRunner(tool.id)
+    const runner = getToolRunner(tool.id)
     const result = await runBusyAction(() => runner(tool.id, state.configs[tool.id], assets, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
