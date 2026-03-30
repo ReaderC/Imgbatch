@@ -1659,9 +1659,20 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const sourceFormat = normalizeImageFormatName(asset.ext)
+  const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
 
-  if (sourceFormat === format && !config.horizontal && !config.vertical && !config.autoCropTransparent) {
+  if (sourceFormat === format && hasNoFlipTransform) {
     return copyAssetToOutput(asset, outputPath)
+  }
+  if (hasNoFlipTransform) {
+    let transformed = createTransformer(sharpLib, asset)
+    if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
+      transformed = transformed.keepMetadata()
+    }
+    return writeTransformedAsset(transformed, format, 90, outputPath, {
+      width: asset.width,
+      height: asset.height,
+    })
   }
 
   let transformed = createTransformer(sharpLib, asset)
