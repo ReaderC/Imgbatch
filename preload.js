@@ -26,6 +26,7 @@ const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manu
 const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
+const WATERMARK_TILED_CACHE = new Map()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -1356,6 +1357,7 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
     input: data,
     width: info.width || 1,
     height: info.height || 1,
+    cacheKey: overlayCacheKey,
   }
   if (overlayCacheKey) {
     WATERMARK_OVERLAY_CACHE.set(overlayCacheKey, overlay)
@@ -1388,16 +1390,23 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
         input: trimmed.data,
         width: trimmed.info.width || 1,
         height: trimmed.info.height || 1,
+        cacheKey: textOverlayKey,
       }
       WATERMARK_TEXT_CACHE.set(textOverlayKey, overlay)
     }
   }
 
   if (config.tiled) {
+    const tiledCacheKey = overlay?.cacheKey ? `${overlay.cacheKey}|tile|${clampNumber(config.density, 20, 250, 100)}` : ''
     overlay = {
-      input: await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay),
+      input: tiledCacheKey && WATERMARK_TILED_CACHE.get(tiledCacheKey)
+        ? WATERMARK_TILED_CACHE.get(tiledCacheKey)
+        : await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay),
       width: 0,
       height: 0,
+    }
+    if (tiledCacheKey && !WATERMARK_TILED_CACHE.has(tiledCacheKey)) {
+      WATERMARK_TILED_CACHE.set(tiledCacheKey, overlay.input)
     }
     return {
       input: overlay.input,
