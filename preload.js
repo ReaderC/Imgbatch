@@ -1593,14 +1593,6 @@ function revealResultDirectoryIfNeeded(result) {
   return result
 }
 
-function buildSavedResultWithReveal(payload, processed, failed) {
-  return revealResultDirectoryIfNeeded(createResultEnvelope({ ...payload, mode: 'save' }, processed, failed))
-}
-
-function buildFallbackFailureWithReveal(payload, message) {
-  return revealResultDirectoryIfNeeded(createFallbackFailure(payload, message))
-}
-
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('watermark', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
@@ -2200,11 +2192,11 @@ function resolveExecutionMode(toolId) {
 
 async function executeSaveFlow(payload) {
   if (!payload.stagedItems?.length) {
-    return buildFallbackFailureWithReveal(payload, '没有可保存的预览结果。')
+    return revealResultDirectoryIfNeeded(createFallbackFailure(payload, '没有可保存的预览结果。'))
   }
 
   if (!payload.destinationPath) {
-    return buildFallbackFailureWithReveal(payload, '无法解析保存目录。')
+    return revealResultDirectoryIfNeeded(createFallbackFailure(payload, '无法解析保存目录。'))
   }
 
   ensureDirectory(payload.destinationPath)
@@ -2228,7 +2220,7 @@ async function executeSaveFlow(payload) {
     }
   }
 
-  return buildSavedResultWithReveal(payload, processed, failed)
+  return revealResultDirectoryIfNeeded(createResultEnvelope({ ...payload, mode: 'save' }, processed, failed))
 }
 
 async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
