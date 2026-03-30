@@ -2111,20 +2111,23 @@ async function executeSingleAssetTool(payload, sharpLib) {
   let completedCount = 0
   let failedCount = 0
   const totalCount = payload.assets.length
+  const emitAssetProgress = () => {
+    emitProcessingProgress({
+      phase: 'progress',
+      runId: payload.runId,
+      toolId: payload.toolId,
+      toolLabel: payload.toolLabel,
+      mode: payload.mode,
+      total: totalCount,
+      completed: completedCount + failedCount,
+      succeeded: completedCount,
+      failed: failedCount,
+    })
+  }
   const outcomes = await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), async (asset) => {
     if (!isProcessableAsset(asset)) {
       failedCount += 1
-      emitProcessingProgress({
-        phase: 'progress',
-        runId: payload.runId,
-        toolId: payload.toolId,
-        toolLabel: payload.toolLabel,
-        mode: payload.mode,
-        total: totalCount,
-        completed: completedCount + failedCount,
-        succeeded: completedCount,
-        failed: failedCount,
-      })
+      emitAssetProgress()
       return {
         processed: null,
         failed: { assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` },
@@ -2138,34 +2141,14 @@ async function executeSingleAssetTool(payload, sharpLib) {
         ? directResultToProcessed(asset, result, sharpLib)
         : stageResultToProcessed(asset, result, payload, sharpLib))
       completedCount += 1
-      emitProcessingProgress({
-        phase: 'progress',
-        runId: payload.runId,
-        toolId: payload.toolId,
-        toolLabel: payload.toolLabel,
-        mode: payload.mode,
-        total: totalCount,
-        completed: completedCount + failedCount,
-        succeeded: completedCount,
-        failed: failedCount,
-      })
+      emitAssetProgress()
       return {
         processed,
         failed: null,
       }
     } catch (error) {
       failedCount += 1
-      emitProcessingProgress({
-        phase: 'progress',
-        runId: payload.runId,
-        toolId: payload.toolId,
-        toolLabel: payload.toolLabel,
-        mode: payload.mode,
-        total: totalCount,
-        completed: completedCount + failedCount,
-        succeeded: completedCount,
-        failed: failedCount,
-      })
+      emitAssetProgress()
       return {
         processed: null,
         failed: { assetId: asset.id, name: asset.name, error: error?.message || '处理失败' },
@@ -2173,9 +2156,16 @@ async function executeSingleAssetTool(payload, sharpLib) {
     }
   })
 
+  const processed = []
+  const failed = []
+  for (const item of outcomes) {
+    if (item?.processed) processed.push(item.processed)
+    if (item?.failed) failed.push(item.failed)
+  }
+
   return {
-    processed: outcomes.map((item) => item?.processed).filter(Boolean),
-    failed: outcomes.map((item) => item?.failed).filter(Boolean),
+    processed,
+    failed,
   }
 }
 
