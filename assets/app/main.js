@@ -630,18 +630,10 @@ function handleColorMagnifierAction(target) {
 }
 
 
-function isResultViewOpen() {
-  return !!getState().resultView?.items?.length
-}
-
 function shouldShowResultActions() {
   const activeRun = getState().activeRun
   const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
-  return !!hasBatchRun || isResultViewOpen()
-}
-
-function shouldKeepResultToolbar() {
-  return shouldShowResultActions()
+  return !!hasBatchRun || !!getState().resultView?.items?.length
 }
 
 function ensureResultViewVisible() {
@@ -678,17 +670,13 @@ function continueProcessing() {
   setState({ activeRun: null })
 }
 
-function getResultToolbarLabel() {
-  return hasVisibleResultComparison() ? '打开目录' : '显示结果'
-}
-
 function buildResultActions() {
-  if (!shouldKeepResultToolbar()) return ''
+  if (!shouldShowResultActions()) return ''
   return `
     <div class="result-toolbar">
       <button class="secondary-button" data-action="continue-processing">继续处理</button>
       <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
-      <button class="primary-button" data-action="open-current-results">${getResultToolbarLabel()}</button>
+      <button class="primary-button" data-action="open-current-results">${hasVisibleResultComparison() ? '打开目录' : '显示结果'}</button>
     </div>
   `
 }
@@ -698,7 +686,7 @@ function injectResultToolbar() {
   if (!shell) return
   const existing = shell.querySelector('.result-toolbar')
   if (existing) existing.remove()
-  if (!shouldKeepResultToolbar()) return
+  if (!shouldShowResultActions()) return
   shell.insertAdjacentHTML('beforeend', buildResultActions())
 }
 
