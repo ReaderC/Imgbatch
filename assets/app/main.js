@@ -1027,14 +1027,6 @@ function toggleConfigSelect(target) {
   target.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
-function hasStagedOutput(asset) {
-  return !!asset?.stagedOutputPath
-}
-
-function canSaveAsset(asset) {
-  return hasStagedOutput(asset) && asset.previewStatus === 'staged'
-}
-
 function getPreviewOutputPath(asset) {
   return asset.stagedOutputPath || ''
 }
