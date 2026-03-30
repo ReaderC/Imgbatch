@@ -1093,12 +1093,41 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   if (originalSizeBytes && targetBytes >= originalSizeBytes) {
     throw new Error('目标大小未小于原图，已跳过该文件')
   }
-  let chosenBuffer = null
+  const cache = new Map()
+  const encodeAtQuality = async (quality) => {
+    const normalizedQuality = Math.max(10, Math.min(90, Math.round(quality)))
+    if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
+    const buffer = await withOutputFormat(createTransformer(sharpLib, asset), format, normalizedQuality).toBuffer()
+    cache.set(normalizedQuality, buffer)
+    return buffer
+  }
 
-  for (const quality of qualitySteps) {
-    const buffer = await withOutputFormat(createTransformer(sharpLib, asset), format, quality).toBuffer()
-    chosenBuffer = buffer
-    if (buffer.length <= targetBytes) break
+  const highQuality = qualitySteps[0]
+  const highBuffer = await encodeAtQuality(highQuality)
+  let chosenBuffer = highBuffer
+  if (highBuffer.length > targetBytes) {
+    const lowQuality = qualitySteps[qualitySteps.length - 1]
+    const lowBuffer = await encodeAtQuality(lowQuality)
+    chosenBuffer = lowBuffer
+
+    if (lowBuffer.length <= targetBytes) {
+      let bestBuffer = lowBuffer
+      let left = lowQuality + 1
+      let right = highQuality - 1
+
+      while (left <= right) {
+        const mid = Math.floor((left + right) / 2)
+        const buffer = await encodeAtQuality(mid)
+        if (buffer.length <= targetBytes) {
+          bestBuffer = buffer
+          left = mid + 1
+        } else {
+          right = mid - 1
+        }
+      }
+
+      chosenBuffer = bestBuffer
+    }
   }
 
   fs.writeFileSync(outputPath, chosenBuffer)
