@@ -18,7 +18,7 @@ const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
-const MAX_ASSET_CONCURRENCY = Math.max(1, Math.min(4, Math.floor(CPU_COUNT / 2) || 1))
+const MAX_ASSET_CONCURRENCY = Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1))
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -348,6 +348,21 @@ async function readOutputMeta(outputPath, sharpLib = null) {
   }
 }
 
+function createOutputMeta(outputPath, info = {}, fallback = {}) {
+  return {
+    outputPath,
+    outputName: path.basename(outputPath),
+    outputSizeBytes: Number(info.size) || Number(fallback.outputSizeBytes) || 0,
+    width: Number(info.width) || Number(fallback.width) || 0,
+    height: Number(info.height) || Number(fallback.height) || 0,
+  }
+}
+
+async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
+  const info = await withOutputFormat(transformer, format, quality).toFile(outputPath)
+  return createOutputMeta(outputPath, info, fallback)
+}
+
 function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
   const finalDirectory = path.join(baseDestinationPath, runFolderName)
   ensureDirectory(finalDirectory)
@@ -397,7 +412,9 @@ function normalizeDirectResult(item = {}) {
 
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
-  const meta = await readOutputMeta(stagedPath, sharpLib)
+  const meta = typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
+    ? createOutputMeta(stagedPath, result, result)
+    : await readOutputMeta(stagedPath, sharpLib)
   return normalizePreviewResult({
     assetId: asset.id,
     name: asset.name,
@@ -412,7 +429,9 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
 
 async function directResultToProcessed(asset, result, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
-  const meta = await readOutputMeta(outputPath, sharpLib)
+  const meta = typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
+    ? createOutputMeta(outputPath, result, result)
+    : await readOutputMeta(outputPath, sharpLib)
   return normalizeDirectResult({
     assetId: asset.id,
     name: asset.name,
@@ -1014,9 +1033,12 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
 
   if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
-    await withOutputFormat(createTransformer(sharpLib, asset), format, Math.round(config.quality)).toFile(outputPath)
-    ensureCompressedOutputIsSmaller(fs.statSync(outputPath).size)
-    return outputPath
+    const output = await writeTransformedAsset(createTransformer(sharpLib, asset), format, Math.round(config.quality), outputPath, {
+      width: asset.width,
+      height: asset.height,
+    })
+    ensureCompressedOutputIsSmaller(output.outputSizeBytes)
+    return output
   }
 
   const qualitySteps = [90, 80, 70, 60, 50, 40, 30, 20, 10]
@@ -1034,7 +1056,13 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 
   fs.writeFileSync(outputPath, chosenBuffer)
   ensureCompressedOutputIsSmaller(chosenBuffer.length)
-  return { outputPath, outputSizeBytes: chosenBuffer.length }
+  return {
+    outputPath,
+    outputName: path.basename(outputPath),
+    outputSizeBytes: chosenBuffer.length,
+    width: asset.width || 0,
+    height: asset.height || 0,
+  }
 }
 
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
@@ -1060,16 +1088,17 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     return { outputPath, outputSizeBytes: buffer.length }
   }
 
-  await withOutputFormat(transformed, format, Math.round(config.quality)).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, Math.round(config.quality), outputPath, {
+    width: asset.width,
+    height: asset.height,
+  })
 }
 
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
   const resized = applyResizeOperation(createTransformer(sharpLib, asset), asset, config)
-  await withOutputFormat(resized, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(resized, format, 90, outputPath)
 }
 
 function normalizeHexColor(value, alpha = 1) {
@@ -1396,8 +1425,7 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
   const transformed = createTransformer(sharpLib, asset).composite([composite])
-  await withOutputFormat(transformed, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
 function getRotateBackground(value) {
@@ -1441,8 +1469,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
     transformed = transformed.flatten({ background: getRotateBackground(config.background) })
   }
 
-  await withOutputFormat(transformed, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
@@ -1458,8 +1485,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   }
   transformed = applyMetadataPolicy(transformed, config.preserveMetadata)
 
-  await withOutputFormat(transformed, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
 function buildRoundedRectSvg(width, height, radius, fill) {
@@ -1495,8 +1521,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
     transformed = sharpLib(background).composite([{ input: imageBuffer }])
   }
 
-  await withOutputFormat(transformed, outputFormat, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, outputFormat, 90, outputPath)
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
@@ -1509,8 +1534,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
     left: config.left,
     background: hexToRgbaObject(config.color, config.opacity / 100),
   })
-  await withOutputFormat(transformed, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
 function normalizeCropBox(asset, config) {
@@ -1547,8 +1571,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
   const box = normalizeCropBox(asset, config)
   const transformed = createTransformer(sharpLib, asset).extract(box)
-  await withOutputFormat(transformed, format, 90).toFile(outputPath)
-  return outputPath
+  return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
 function getPdfMarginValue(margin, pageWidth) {
