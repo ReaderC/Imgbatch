@@ -2053,6 +2053,36 @@ body {
   cursor: pointer;
 }
 
+.primary-button.is-processing {
+  position: relative;
+  padding-left: 42px;
+}
+
+.primary-button.is-processing::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 16px 0 0 rgba(255, 255, 255, 0.48);
+  animation: processing-pulse 1s ease-in-out infinite;
+}
+
+@keyframes processing-pulse {
+  0%, 100% {
+    transform: scale(0.88);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
 .icon-button {
   width: 40px;
   height: 40px;

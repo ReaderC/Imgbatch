@@ -2,6 +2,7 @@ import { TOOL_MAP } from '../config/tools.js'
 
 export function renderTopBar(state) {
   const tool = TOOL_MAP[state.activeTool]
+  const progress = state.processingProgress
   const sidebarLabel = state.sidebarCollapsed ? '展开导航' : '收起导航'
   const sidebarIcon = state.sidebarCollapsed ? 'right_panel_open' : 'left_panel_close'
   const modeLabel = tool.mode === 'sort'
@@ -23,7 +24,11 @@ export function renderTopBar(state) {
       </div>
       <div class="topbar__actions">
         <div class="topbar__meta">
-          <button class="primary-button" data-action="process-current" ${state.isProcessing ? 'disabled' : ''}>${state.isProcessing ? '处理中...' : '开始处理'}</button>
+          <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${state.isProcessing ? 'disabled' : ''}>
+            ${state.isProcessing
+              ? `${progress?.completed || 0}/${progress?.total || 0} 处理中`
+              : '开始处理'}
+          </button>
         </div>
       </div>
     </header>

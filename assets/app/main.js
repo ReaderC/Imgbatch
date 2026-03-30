@@ -24,6 +24,7 @@ let tooltipElement = null
 document.body.append(fileInput, folderInput, watermarkFileInput)
 subscribe(render)
 render(getState())
+attachProcessingProgressEvents()
 attachGlobalEvents()
 window.addEventListener('resize', queueResultMarqueeSync)
 bootstrapSettings().finally(() => {
@@ -1055,6 +1056,33 @@ function hideTooltip(target = activeTooltipTarget) {
   if (target && activeTooltipTarget && target !== activeTooltipTarget) return
   activeTooltipTarget = null
   if (tooltipElement) tooltipElement.hidden = true
+}
+
+function attachProcessingProgressEvents() {
+  if (typeof window === 'undefined' || attachProcessingProgressEvents.bound) return
+  window.addEventListener('imgbatch-processing-progress', (event) => {
+    const detail = event?.detail || null
+    if (!detail) return
+    if (detail.phase === 'finish') {
+      setState({ processingProgress: null })
+      return
+    }
+    setState({
+      processingProgress: {
+        phase: detail.phase || 'progress',
+        runId: detail.runId || '',
+        toolId: detail.toolId || '',
+        toolLabel: detail.toolLabel || '',
+        mode: detail.mode || 'direct',
+        total: Number(detail.total) || 0,
+        completed: Number(detail.completed) || 0,
+        succeeded: Number(detail.succeeded) || 0,
+        failed: Number(detail.failed) || 0,
+        startedAt: Number(detail.startedAt) || Date.now(),
+      },
+    })
+  })
+  attachProcessingProgressEvents.bound = true
 }
 
 function attachLaunchSubscription() {

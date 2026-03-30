@@ -8,6 +8,7 @@ const state = {
   searchQuery: '',
   destinationPath: '',
   isProcessing: false,
+  processingProgress: null,
   activeRun: null,
   settings: {
     defaultSavePath: '',
@@ -295,6 +296,7 @@ function buildResultView(result, assets = []) {
     mode: result?.mode || 'direct',
     items,
     failed,
+    elapsedMs: Number(result?.elapsedMs) || 0,
     createdAt: Date.now(),
   }
 }

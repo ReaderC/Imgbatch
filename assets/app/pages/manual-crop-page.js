@@ -13,6 +13,7 @@ const MANUAL_CROP_RATIO_OPTIONS = [
 export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
   const current = state.assets[config.currentIndex] || state.assets[0]
+  const progress = state.processingProgress
   const hudCollapsed = config.hudCollapsed !== false
   const completedCount = config.completedIds.length
   const skippedCount = config.skippedIds.length
@@ -117,8 +118,10 @@ export function renderManualCropPage(state) {
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
             <button class="footer-button" data-action="manual-crop-skip" ${!current ? 'disabled' : ''}>跳过并下一张</button>
             <button class="footer-button primary" data-action="manual-crop-complete" ${!current ? 'disabled' : ''}>标记并下一张</button>
-            <button class="primary-button" data-action="process-current" ${!current || state.isProcessing ? 'disabled' : ''}>
-              ${state.isProcessing ? '裁剪中…' : completedCount ? `开始裁剪 ${completedCount} 张` : '先标记图片'}
+            <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${!current || state.isProcessing ? 'disabled' : ''}>
+              ${state.isProcessing
+                ? `${progress?.completed || 0}/${progress?.total || 0} 裁剪中`
+                : completedCount ? `开始裁剪 ${completedCount} 张` : '先标记图片'}
             </button>
           </div>
         </div>

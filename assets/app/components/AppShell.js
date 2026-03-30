@@ -224,9 +224,12 @@ function renderResultWorkspace(state) {
   if (!resultView?.items?.length) return ''
 
   const failedCount = resultView.failed?.length || 0
-  const subtitle = failedCount
+  const summary = failedCount
     ? `共 ${resultView.items.length} 项，失败 ${failedCount} 项`
     : `共 ${resultView.items.length} 项`
+  const subtitle = resultView.elapsedMs
+    ? `${summary} · 耗时 ${formatElapsed(resultView.elapsedMs)}`
+    : summary
 
   return `
     <section class="result-page">
@@ -271,6 +274,16 @@ function renderResultWorkspace(state) {
       </div>
     </section>
   `
+}
+
+function formatElapsed(value = 0) {
+  const elapsedMs = Math.max(0, Number(value) || 0)
+  if (elapsedMs < 1000) return `${elapsedMs} ms`
+  const seconds = elapsedMs / 1000
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} 秒`
+  const minutes = Math.floor(seconds / 60)
+  const remainSeconds = seconds % 60
+  return `${minutes} 分 ${remainSeconds.toFixed(remainSeconds >= 10 ? 0 : 1)} 秒`
 }
 
 function renderResultStrip(label, size, dimensions) {

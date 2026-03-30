@@ -517,6 +517,7 @@ function createResultEnvelope(payload, processed, failed) {
     ...payload,
     processed,
     failed,
+    elapsedMs: Number(payload?.elapsedMs) || 0,
     message: formatResultMessage(payload, processed, failed),
   }
 }
@@ -888,6 +889,15 @@ function getPerformanceProfile(mode) {
     sharpConcurrency: Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.75) || 1)),
     cacheMemory: Math.min(512, Math.max(128, CPU_COUNT * 16)),
     cacheItems: Math.max(64, CPU_COUNT * 8),
+  }
+}
+
+function emitProcessingProgress(detail = {}) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  try {
+    window.dispatchEvent(new CustomEvent('imgbatch-processing-progress', { detail }))
+  } catch {
+    // Ignore progress bridge errors so processing is not affected.
   }
 }
 
@@ -1600,9 +1610,9 @@ function buildRoundedRectSvg(width, height, radius, fill) {
 async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const outputFormat = config.keepTransparency ? 'png' : mapOutputFormat('corners', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'corners', outputFormat))
-  const metadata = await createTransformer(sharpLib, asset).metadata()
-  const width = metadata.width || asset.width || 1
-  const height = metadata.height || asset.height || 1
+  const metadata = asset.width && asset.height ? null : await createTransformer(sharpLib, asset).metadata()
+  const width = asset.width || metadata?.width || 1
+  const height = asset.height || metadata?.height || 1
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
@@ -1987,8 +1997,23 @@ function isMergeTool(toolId) {
 }
 
 async function executeSingleAssetTool(payload, sharpLib) {
+  let completedCount = 0
+  let failedCount = 0
+  const totalCount = payload.assets.length
   const outcomes = await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), async (asset) => {
     if (!isProcessableAsset(asset)) {
+      failedCount += 1
+      emitProcessingProgress({
+        phase: 'progress',
+        runId: payload.runId,
+        toolId: payload.toolId,
+        toolLabel: payload.toolLabel,
+        mode: payload.mode,
+        total: totalCount,
+        completed: completedCount + failedCount,
+        succeeded: completedCount,
+        failed: failedCount,
+      })
       return {
         processed: null,
         failed: { assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` },
@@ -2015,13 +2040,38 @@ async function executeSingleAssetTool(payload, sharpLib) {
         result = await writeCropAsset(sharpLib, asset, manualConfig, payload.destinationPath, 'manual-crop')
       }
 
+      const processed = await (payload.mode === 'direct'
+        ? directResultToProcessed(asset, result, sharpLib)
+        : stageResultToProcessed(asset, result, payload, sharpLib))
+      completedCount += 1
+      emitProcessingProgress({
+        phase: 'progress',
+        runId: payload.runId,
+        toolId: payload.toolId,
+        toolLabel: payload.toolLabel,
+        mode: payload.mode,
+        total: totalCount,
+        completed: completedCount + failedCount,
+        succeeded: completedCount,
+        failed: failedCount,
+      })
       return {
-        processed: await (payload.mode === 'direct'
-          ? directResultToProcessed(asset, result, sharpLib)
-          : stageResultToProcessed(asset, result, payload, sharpLib)),
+        processed,
         failed: null,
       }
     } catch (error) {
+      failedCount += 1
+      emitProcessingProgress({
+        phase: 'progress',
+        runId: payload.runId,
+        toolId: payload.toolId,
+        toolLabel: payload.toolLabel,
+        mode: payload.mode,
+        total: totalCount,
+        completed: completedCount + failedCount,
+        succeeded: completedCount,
+        failed: failedCount,
+      })
       return {
         processed: null,
         failed: { assetId: asset.id, name: asset.name, error: error?.message || '处理失败' },
@@ -2232,10 +2282,24 @@ async function executeLocalTool(payload) {
   }
 
   ensureDirectory(payload.destinationPath)
+  const startedAt = Date.now()
+  emitProcessingProgress({
+    phase: 'start',
+    runId: payload.runId,
+    toolId: payload.toolId,
+    toolLabel: payload.toolLabel,
+    mode: payload.mode,
+    total: Array.isArray(payload.assets) ? payload.assets.length : 0,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    startedAt,
+  })
 
   const { processed, failed } = ['merge-image', 'merge-pdf', 'merge-gif'].includes(payload.toolId)
     ? await executeMergeTool(payload, sharpLib)
     : await executeSingleAssetTool(payload, sharpLib)
+  const elapsedMs = Date.now() - startedAt
 
   const ok = processed.length > 0 && failed.length === 0
   const partial = processed.length > 0 && failed.length > 0
@@ -2249,10 +2313,25 @@ async function executeLocalTool(payload) {
     ok,
     partial,
     ...payload,
+    elapsedMs,
     processed,
     failed,
     message,
   }
+  emitProcessingProgress({
+    phase: 'finish',
+    runId: payload.runId,
+    toolId: payload.toolId,
+    toolLabel: payload.toolLabel,
+    mode: payload.mode,
+    total: Array.isArray(payload.assets) ? payload.assets.length : 0,
+    completed: processed.length + failed.length,
+    succeeded: processed.length,
+    failed: failed.length,
+    elapsedMs,
+    startedAt,
+  })
+  return result
 }
 
 const toolsApi = {
