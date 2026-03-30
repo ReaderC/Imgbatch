@@ -1616,6 +1616,17 @@ function buildFallbackFailureWithReveal(payload, message) {
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('watermark', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+
+  if (sourceFormat === format && Number(config.opacity) <= 0) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+    }, asset)
+  }
+
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
   const transformed = createTransformer(sharpLib, asset).composite([composite])
   return writeTransformedAsset(transformed, format, 90, outputPath)
