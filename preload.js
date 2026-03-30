@@ -1805,6 +1805,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
 async function writeMergePdfAsset(payload) {
   const pdfLib = getPdfLib()
   if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
+  const sharpLib = getSharp()
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
   const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
@@ -1814,7 +1815,7 @@ async function writeMergePdfAsset(payload) {
     const format = String(asset.ext || '').toLowerCase()
     const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
       ? await pdf.embedPng(imageBytes)
-      : await pdf.embedJpg(await getSharp()(imageBytes).jpeg().toBuffer())
+      : await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
 
     const pageSize = payload.config.pageSize === '与图片一致'
       ? [embedded.width, embedded.height]

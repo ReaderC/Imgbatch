@@ -1718,9 +1718,9 @@ body {
 
 .workspace:not(.workspace--result) .setting-row__hint--compression {
   display: block;
-  grid-column: 2;
-  margin-top: 6px;
-  max-width: 360px;
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .workspace:not(.workspace--result) .setting-row__hint--measure {
