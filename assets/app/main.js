@@ -789,10 +789,6 @@ function mapPreviewResultToAsset(asset, processed, toolId) {
   }
 }
 
-function isDirectPreviewTool(toolId) {
-  return isPreviewableTool(toolId) && !isPreviewSaveTool(toolId)
-}
-
 function isMergePreviewTool(toolId) {
   return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
 }
@@ -820,7 +816,7 @@ async function previewWithRunner(tool, asset) {
   if (!openPreviewModal(previewedAsset)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
   }
-  if (isDirectPreviewTool(tool.id)) {
+  if (isPreviewableTool(tool.id) && !isPreviewSaveTool(tool.id)) {
     notify({ type: 'success', message: `${tool.label} 预览已生成。` })
   }
 }
@@ -837,11 +833,6 @@ async function previewAssetWithTool(tool, asset) {
   }
   await previewWithRunner(tool, asset)
 }
-
-function notifyToolPreviewFailure(error, tool) {
-  notify({ type: 'error', message: error?.message || `${tool.label} 预览失败。` })
-}
-
 
 function getCompressionOversizeWarning(result, tool) {
   if (tool?.id !== 'compression') return ''
@@ -1880,7 +1871,7 @@ async function previewAsset(assetId) {
   try {
     await runBusyAction(() => previewWithRunner(tool, asset))
   } catch (error) {
-    notifyToolPreviewFailure(error, tool)
+    notify({ type: 'error', message: error?.message || `${tool.label} 预览失败。` })
   }
 }
 
