@@ -1736,24 +1736,32 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const isCentered = payload.config.align === 'center'
   const fitWidth = isVertical ? payload.config.pageWidth : undefined
   const fitHeight = isVertical ? undefined : payload.config.pageWidth
+  let contentWidth = 0
+  let contentHeight = 0
 
   for (const asset of payload.assets) {
     const { data, info } = await sharpLib(asset.sourcePath)
       .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background })
       .png()
       .toBuffer({ resolveWithObject: true })
-    prepared.push({ buffer: data, width: info.width || 1, height: info.height || 1 })
+    const width = info.width || 1
+    const height = info.height || 1
+    prepared.push({ buffer: data, width, height })
+    if (isVertical) {
+      contentWidth = Math.max(contentWidth, width)
+      contentHeight += height
+    } else {
+      contentWidth += width
+      contentHeight = Math.max(contentHeight, height)
+    }
   }
 
   if (!prepared.length) throw new Error('没有可拼接的图片')
 
   const spacing = payload.config.spacing
-  const totalWidth = isVertical
-    ? Math.max(...prepared.map((item) => item.width))
-    : prepared.reduce((sum, item) => sum + item.width, 0) + spacing * Math.max(0, prepared.length - 1)
-  const totalHeight = isVertical
-    ? prepared.reduce((sum, item) => sum + item.height, 0) + spacing * Math.max(0, prepared.length - 1)
-    : Math.max(...prepared.map((item) => item.height))
+  const spacingTotal = spacing * Math.max(0, prepared.length - 1)
+  const totalWidth = isVertical ? contentWidth : contentWidth + spacingTotal
+  const totalHeight = isVertical ? contentHeight + spacingTotal : contentHeight
 
   let cursorX = 0
   let cursorY = 0
@@ -2250,17 +2258,7 @@ async function executeMergeTool(payload, sharpLib) {
     if (payload.toolId === 'merge-image') outputPath = await writeMergeImageAsset(sharpLib, payload)
     if (payload.toolId === 'merge-pdf') outputPath = await writeMergePdfAssetReal(sharpLib, payload)
     if (payload.toolId === 'merge-gif') outputPath = await writeMergeGifAsset(sharpLib, payload)
-
-    const stat = fs.statSync(outputPath)
-    processed.push({
-      assetId: payload.assets[0]?.id || payload.toolId,
-      name: path.basename(outputPath),
-      outputPath,
-      outputName: path.basename(outputPath),
-      outputSizeBytes: stat.size,
-      width: 0,
-      height: 0,
-    })
+    processed.push(await createMergeOutput(outputPath, payload))
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }
