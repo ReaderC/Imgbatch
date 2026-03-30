@@ -2287,10 +2287,12 @@ async function executeMergeTool(payload, sharpLib) {
   const processed = []
   const failed = []
   try {
-    let result = null
-    if (payload.toolId === 'merge-image') result = await writeMergeImageAsset(sharpLib, payload)
-    if (payload.toolId === 'merge-pdf') result = await writeMergePdfAssetReal(sharpLib, payload)
-    if (payload.toolId === 'merge-gif') result = await writeMergeGifAsset(sharpLib, payload)
+    const mergeHandler = payload.toolId === 'merge-image'
+      ? writeMergeImageAsset
+      : payload.toolId === 'merge-pdf'
+        ? writeMergePdfAssetReal
+        : writeMergeGifAsset
+    const result = await mergeHandler(sharpLib, payload)
     processed.push(createMergeOutput(result, payload))
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
@@ -2345,15 +2347,6 @@ async function executeLocalTool(payload) {
       ? `${payload.toolLabel} 部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
       : `${payload.toolLabel} 执行失败：${failed[0]?.error || '没有可处理的图片'}`
 
-  return {
-    ok,
-    partial,
-    ...payload,
-    elapsedMs,
-    processed,
-    failed,
-    message,
-  }
   emitProcessingProgress({
     phase: 'finish',
     runId: payload.runId,
@@ -2367,7 +2360,16 @@ async function executeLocalTool(payload) {
     elapsedMs,
     startedAt,
   })
-  return result
+
+  return {
+    ok,
+    partial,
+    ...payload,
+    elapsedMs,
+    processed,
+    failed,
+    message,
+  }
 }
 
 const toolsApi = {
