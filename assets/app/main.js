@@ -1403,7 +1403,11 @@ function attachGlobalEvents() {
     }
 
     if (action === 'pick-watermark-image') {
-      watermarkFileInput.click()
+      if (typeof window.imgbatch?.showOpenDialog === 'function') {
+        await pickWatermarkImageFromHost()
+      } else {
+        watermarkFileInput.click()
+      }
       return
     }
 
@@ -1928,6 +1932,31 @@ async function pickInputsFromHost(kind) {
       : []
   if (paths.length) {
     await handleImport(paths)
+  }
+
+  await showMainWindow()
+  window.setTimeout(() => {
+    void showMainWindow()
+    window.focus?.()
+  }, 120)
+}
+
+async function pickWatermarkImageFromHost() {
+  const selected = await openInputDialog({
+    title: '选择图片水印',
+    properties: ['openFile'],
+    filters: [
+      { name: '图片文件', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif', 'avif', 'ico'] },
+    ],
+  })
+  const paths = Array.isArray(selected?.filePaths)
+    ? selected.filePaths
+    : Array.isArray(selected)
+      ? selected
+      : []
+  const imagePath = paths[0] || ''
+  if (imagePath) {
+    updateConfig('watermark', { imagePath })
   }
 
   await showMainWindow()

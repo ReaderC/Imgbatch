@@ -208,7 +208,7 @@ function renderWatermarkConfig(config) {
             <div class="toggle-card__label">图片水印</div>
             <div class="muted watermark-file-label">${escapeAttribute(config.imagePath || '未选择文件')}</div>
           </div>
-          <button class="secondary-button secondary-button--compact" data-action="pick-watermark-image">选择文件</button>
+          <button class="secondary-button secondary-button--compact watermark-picker-button" data-action="pick-watermark-image">选择文件</button>
         </div>`}
     ${renderFieldGrid(`
       ${renderInputField({ label: '字体大小', toolId: 'watermark', key: 'fontSize', type: 'number', value: config.fontSize, min: 8, max: 240, disabled: config.type !== 'text' })}

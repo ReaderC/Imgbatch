@@ -2894,6 +2894,10 @@ body {
   white-space: nowrap;
 }
 
+.watermark-picker-button {
+  border-radius: 12px !important;
+}
+
 .color-field {
   --color-preview: #FFFFFF;
   display: grid;
