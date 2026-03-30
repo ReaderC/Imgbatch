@@ -3056,7 +3056,7 @@ body {
 }
 
 .switch.is-on {
-  background: var(--primary-container);
+  background: var(--primary);
 }
 
 .switch.is-on::after {
@@ -4792,6 +4792,7 @@ body {
   gap: 10px;
 }
 
+.panel-footer-actions .queue-item__action,
 .panel-footer-actions .secondary-button,
 .panel-footer-actions .ghost-button {
   min-height: 34px;
