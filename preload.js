@@ -302,10 +302,6 @@ function getAppSettings() {
   return hostApi.dbStorage?.getItem?.(SETTINGS_STORAGE_KEY) || {}
 }
 
-function isPreviewSaveTool(toolId) {
-  return PREVIEW_SAVE_TOOLS.has(toolId)
-}
-
 function createPreviewSignature(toolId, config) {
   return JSON.stringify({ toolId, config })
 }
@@ -895,15 +891,11 @@ function isRunCancelled(runId) {
   return CANCELLED_RUNS.has(String(runId || '').trim())
 }
 
-function createRunCancelledError() {
-  const error = new Error('已停止当前任务。')
-  error.code = 'RUN_CANCELLED'
-  return error
-}
-
 function throwIfRunCancelled(runId) {
   if (isRunCancelled(runId)) {
-    throw createRunCancelledError()
+    const error = new Error('已停止当前任务。')
+    error.code = 'RUN_CANCELLED'
+    throw error
   }
 }
 
@@ -2434,7 +2426,7 @@ function saveSettings(settings) {
 function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   return {
     ...prepareRunPayload(toolId, config, assets, destinationPath),
-    mode: isMergeTool(toolId) ? 'direct' : isPreviewSaveTool(toolId) ? 'preview-save' : 'direct',
+    mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
   }
 }
 
