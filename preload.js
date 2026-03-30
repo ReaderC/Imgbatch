@@ -1224,13 +1224,16 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('format', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let sourceFormat = normalizeImageFormatName(asset.ext)
+  let sourceInput = null
 
   if (config.mode !== 'quality') {
     try {
-      const metadata = await sharpLib(asset.sourcePath).metadata()
+      sourceInput = fs.readFileSync(asset.sourcePath)
+      const metadata = await sharpLib(sourceInput).metadata()
       sourceFormat = normalizeImageFormatName(metadata?.format) || sourceFormat
     } catch {
       sourceFormat = normalizeImageFormatName(asset.ext)
+      sourceInput = null
     }
   }
 
@@ -1243,7 +1246,10 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     }, asset)
   }
 
-  let transformed = applyColorProfile(createTransformer(sharpLib, asset), config.colorProfile)
+  const baseTransformer = sourceInput
+    ? createTransformerFromInput(sharpLib, sourceInput, sourceFormat)
+    : createTransformer(sharpLib, asset)
+  let transformed = applyColorProfile(baseTransformer, config.colorProfile)
   transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
   const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
 
