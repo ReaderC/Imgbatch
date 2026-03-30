@@ -235,13 +235,20 @@ function markAssetPreviewStale(asset, toolId) {
 }
 
 function applyProcessedAsset(asset, processed, result) {
+  const targetKb = Number(result?.config?.targetSizeKb) || 0
+  const targetBytes = targetKb > 0 ? targetKb * 1024 : 0
+  const derivedWarning = processed.warning
+    || (result?.toolId === 'compression' && result?.config?.mode === 'target' && targetBytes > 0 && Number(processed?.outputSizeBytes) > targetBytes
+      ? `未达到目标体积 ${targetKb} KB，当前结果约 ${Math.max(1, Math.round(Number(processed?.outputSizeBytes || 0) / 1024))} KB。`
+      : '')
+
   if (result.mode === 'preview-save' || result.mode === 'preview-only') {
     const isBatchResult = result.mode === 'preview-save'
     return {
       ...asset,
       status: 'done',
       error: '',
-      warning: processed.warning || '',
+      warning: derivedWarning,
       outputPath: '',
       previewStatus: processed.previewStatus || (isBatchResult ? 'staged' : 'previewed'),
       previewUrl: processed.previewUrl || '',
@@ -264,7 +271,7 @@ function applyProcessedAsset(asset, processed, result) {
       ...asset,
       status: 'done',
       error: '',
-      warning: processed.warning || '',
+      warning: derivedWarning,
       outputPath: processed.outputPath || '',
       previewStatus: 'saved',
       savedOutputPath: nextSavedPath,
@@ -282,7 +289,7 @@ function applyProcessedAsset(asset, processed, result) {
     savedOutputPath: processed.outputPath || '',
     previewStatus: 'saved',
     error: '',
-    warning: processed.warning || '',
+    warning: derivedWarning,
   }
 }
 

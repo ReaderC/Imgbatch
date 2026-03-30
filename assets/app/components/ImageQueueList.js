@@ -88,6 +88,7 @@ function renderCompactQueueTicker(asset, tool, state) {
     getToolSummary(tool.id, state, asset),
     formatBytes(asset.sizeBytes),
     `${asset.width || '—'} × ${asset.height || '—'}`,
+    asset.warning || '',
   ].join(' · ')
   return `
     <div class="queue-item__compact-ticker" aria-label="${escapeHtml(text)}">

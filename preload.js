@@ -519,7 +519,13 @@ function getAssetProcessingConcurrency(payload) {
 function formatResultMessage(payload, processed, failed) {
   const ok = processed.length > 0 && failed.length === 0
   const partial = processed.length > 0 && failed.length > 0
-  const warningCount = processed.filter((item) => item?.warning).length
+  const targetKb = Number(payload?.config?.targetSizeKb) || 0
+  const targetBytes = targetKb > 0 ? targetKb * 1024 : 0
+  const warningCount = processed.filter((item) => {
+    if (item?.warning) return true
+    if (payload?.toolId !== 'compression' || payload?.config?.mode !== 'target') return false
+    return targetBytes > 0 && Number(item?.outputSizeBytes) > targetBytes
+  }).length
   const warningSuffix = warningCount ? ` 其中 ${warningCount} 项未达到目标体积，已输出可达到的最小结果。` : ''
   if (payload.mode === 'preview-only') {
     if (ok) return `已生成 ${payload.toolLabel} 单张预览，可继续调整参数。${warningSuffix}`
