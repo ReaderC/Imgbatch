@@ -178,6 +178,12 @@ function renderFormatConfig(config) {
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
+    <label class="setting-row setting-row--stack">
+      <span class="setting-row__header">
+        <span class="setting-row__label"></span>
+      </span>
+      <span class="setting-row__hint setting-row__hint--compression">目标格式若不支持透明通道，此选项会自动禁用。</span>
+    </label>
   `)
 }
 
