@@ -2705,6 +2705,20 @@ body {
   opacity: 0.52;
 }
 
+.toggle-card.is-disabled {
+  opacity: 0.52;
+}
+
+.toggle-card.is-disabled .switch {
+  opacity: 0.44;
+  cursor: not-allowed;
+  filter: saturate(0.3);
+}
+
+.toggle-card.is-disabled .switch::after {
+  opacity: 0.92;
+}
+
 .setting-row__header {
   display: flex;
   align-items: center;
@@ -3075,6 +3089,10 @@ body {
 
 .switch.is-on::after {
   left: 21px;
+}
+
+.switch:disabled {
+  pointer-events: none;
 }
 
 .segmented {

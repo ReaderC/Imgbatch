@@ -1217,6 +1217,17 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('format', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
+  const sourceFormat = String(asset.ext || '').toLowerCase() === 'jpg' ? 'jpeg' : String(asset.ext || '').toLowerCase()
+
+  if (config.mode !== 'quality' && sourceFormat === format) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+    }, asset)
+  }
+
   let transformed = applyColorProfile(createTransformer(sharpLib, asset), config.colorProfile)
   transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
   const quality = config.mode === 'quality' ? Math.round(config.quality) : 100

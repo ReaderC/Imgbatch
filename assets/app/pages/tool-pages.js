@@ -163,9 +163,7 @@ function renderFormatConfig(config) {
     : targetFormat === 'PNG'
       ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
       : '质量越低，输出体积通常越小。'
-  const transparencyHint = !transparencySupported
-    ? `${targetFormat} 不支持透明通道，输出时会自动铺白底。`
-    : ''
+  const transparencyHint = ''
   return renderSettingsSection(`
     ${renderSegmented('format', 'mode', mode, [
       ['convert', '仅转换格式'],
