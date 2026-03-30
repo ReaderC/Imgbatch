@@ -1311,52 +1311,12 @@ function updateCurrentSettings(settings) {
   updateSettings(settings)
 }
 
-function shouldNotifyToolExecutionIntro(tool) {
-  return !!tool && isPreviewableTool(tool.id)
-}
-
-function shouldSaveStagedItem(item) {
-  return !!item?.stagedPath
-}
-
-function filterSavableItems(items) {
-  return items.filter(shouldSaveStagedItem)
-}
-
 function getSavableBulkItems() {
-  return filterSavableItems(getBulkSaveItems())
-}
-
-function createSettingsSuccessMessage(settings) {
-  return settings.defaultSavePath ? '已保存默认保存路径。' : '已清空默认保存路径。'
-}
-
-function isSettingsPromptCancelled(value) {
-  return value == null
-}
-
-function normalizeSavePathInput(value) {
-  return value.trim()
-}
-
-function createSettingsPayload(value) {
-  return { defaultSavePath: normalizeSavePathInput(value) }
-}
-
-function getSettingsPromptDefaultValue() {
-  return getState().settings.defaultSavePath || getState().destinationPath || ''
-}
-
-function getPreviewOutputDimensions(asset) {
-  return `${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}`
+  return getBulkSaveItems().filter((item) => !!item?.stagedPath)
 }
 
 function getPreviewOutputSummary(asset) {
-  return `${formatBytes(asset.stagedSizeBytes)} · ${getPreviewOutputDimensions(asset)}`
-}
-
-function getSettingsPromptTitle() {
-  return '默认保存路径'
+  return `${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}`
 }
 
 function maybeShowPreviewSummary(asset) {
