@@ -1308,6 +1308,23 @@ function resolveExistingResultPath(item = {}) {
   return candidates[0] || ''
 }
 
+function overwriteFile(sourcePath, targetPath) {
+  const tempPath = `${targetPath}.imgbatch-replace-${Date.now()}`
+  ensureDirectory(path.dirname(targetPath))
+  if (fs.existsSync(targetPath)) {
+    try {
+      fs.chmodSync(targetPath, 0o666)
+    } catch {
+      // Keep overwrite flow going even if chmod is unsupported.
+    }
+  }
+  fs.copyFileSync(sourcePath, tempPath)
+  if (fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath)
+  }
+  fs.renameSync(tempPath, targetPath)
+}
+
 function replaceOriginalWithSaved(item = {}) {
   const sourcePath = resolveExistingResultPath(item)
   const targetPath = normalizeFsPath(item.sourcePath)
@@ -1317,8 +1334,7 @@ function replaceOriginalWithSaved(item = {}) {
   if (!targetPath) {
     throw new Error('原图不存在，无法替换')
   }
-  ensureDirectory(path.dirname(targetPath))
-  fs.copyFileSync(sourcePath, targetPath)
+  overwriteFile(sourcePath, targetPath)
   if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
     fs.unlinkSync(sourcePath)
   }
