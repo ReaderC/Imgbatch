@@ -61,7 +61,7 @@ function summarizeConfig(toolId, config = {}) {
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px${config.preventUpscale ? ' / 小图不放大' : ''}`
+  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px${config.preventUpscale ? ' / 小图原尺寸' : ''}`
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'
