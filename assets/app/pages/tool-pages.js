@@ -155,6 +155,7 @@ function renderFormatConfig(config) {
   const mode = config.mode === 'quality' ? 'quality' : 'convert'
   const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
   const qualitySupported = FORMAT_QUALITY_SUPPORTED.has(targetFormat)
+  const transparencySupported = !FORMAT_TRANSPARENCY_UNSUPPORTED.has(targetFormat)
   const qualityHint = mode !== 'quality'
     ? '仅转换格式时会尽量保持质量，不额外降质。'
     : !qualitySupported
@@ -162,7 +163,7 @@ function renderFormatConfig(config) {
     : targetFormat === 'PNG'
       ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
       : '质量越低，输出体积通常越小。'
-  const transparencyHint = FORMAT_TRANSPARENCY_UNSUPPORTED.has(targetFormat)
+  const transparencyHint = !transparencySupported
     ? `${targetFormat} 不支持透明通道，输出时会自动铺白底。`
     : ''
   return renderSettingsSection(`
@@ -175,7 +176,7 @@ function renderFormatConfig(config) {
       ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: mode !== 'quality' || !qualitySupported, hint: qualityHint })}
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
-    ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', config.keepTransparency)}
+    ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
   `)
 }
 
@@ -519,14 +520,14 @@ function renderRangeField({ label, toolId, key, min, max, value, suffix = '', di
   `
 }
 
-function renderToggleRow(label, hint, toolId, key, checked) {
+function renderToggleRow(label, hint, toolId, key, checked, disabled = false) {
   return `
-    <div class="toggle-card toggle-card--compact">
+    <div class="toggle-card toggle-card--compact ${disabled ? 'is-disabled' : ''}">
       <div>
         <div class="toggle-card__label">${label}</div>
         ${hint ? `<div class="muted" style="font-size:12px;">${hint}</div>` : ''}
       </div>
-      <button class="switch ${checked ? 'is-on' : ''}" data-action="toggle-config" data-tool-id="${toolId}" data-key="${key}"></button>
+      <button class="switch ${checked ? 'is-on' : ''}" data-action="toggle-config" data-tool-id="${toolId}" data-key="${key}" ${disabled ? 'disabled aria-disabled="true"' : ''}></button>
     </div>
   `
 }
