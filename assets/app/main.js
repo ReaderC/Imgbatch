@@ -841,13 +841,9 @@ function notifyUnsupportedPreview(tool, asset) {
   notify({ type: 'info', message: `${tool.label} 暂不支持预览：${getPreviewAssetLabel(asset)}` })
 }
 
-async function executePreviewRunner(toolId, config, assets, destinationPath) {
-  return getToolRunner(toolId, 'preview-only')(toolId, config, assets, destinationPath)
-}
-
 async function previewWithRunner(tool, asset) {
   const state = getState()
-  const result = await executePreviewRunner(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
+  const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
   if (result?.processed?.length || result?.failed?.length) {
     applyRunResult(result)
   }
@@ -876,12 +872,8 @@ async function previewAssetWithTool(tool, asset) {
   await previewWithRunner(tool, asset)
 }
 
-function createToolPreviewFailure(error, tool) {
-  return error?.message || `${tool.label} 预览失败。`
-}
-
 function notifyToolPreviewFailure(error, tool) {
-  notify({ type: 'error', message: createToolPreviewFailure(error, tool) })
+  notify({ type: 'error', message: error?.message || `${tool.label} 预览失败。` })
 }
 
 
