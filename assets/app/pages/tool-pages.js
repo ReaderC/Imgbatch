@@ -122,6 +122,7 @@ function renderPrimaryCard(toolId, config) {
 }
 
 function renderCompressionConfig(config) {
+  const isQualityMode = config.mode === 'quality'
   return renderSettingsSection(`
     ${renderSegmented('compression', 'mode', config.mode, [
       ['quality', '按质量'],
@@ -135,6 +136,7 @@ function renderCompressionConfig(config) {
       max: 100,
       value: config.quality,
       suffix: '%',
+      disabled: !isQualityMode,
     })}
     ${renderFieldGrid(`
       ${renderInputField({
@@ -144,6 +146,7 @@ function renderCompressionConfig(config) {
         type: 'number',
         value: config.targetSizeKb,
         min: 1,
+        disabled: isQualityMode,
         hint: '极端情况下按体积无法严格命中目标值，系统会尽量压小。',
         hintClass: 'setting-row__hint--compression',
       })}
