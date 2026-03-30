@@ -523,7 +523,7 @@ function renderToggleRow(label, hint, toolId, key, checked, disabled = false) {
     <div class="toggle-card toggle-card--compact ${disabled ? 'is-disabled' : ''}">
       <div>
         <div class="toggle-card__label">${label}</div>
-        ${hint ? `<div class="muted" style="font-size:12px;">${hint}</div>` : ''}
+        ${hint ? `<div class="setting-row__hint">${hint}</div>` : ''}
       </div>
       <button class="switch ${checked ? 'is-on' : ''}" data-action="toggle-config" data-tool-id="${toolId}" data-key="${key}" ${disabled ? 'disabled aria-disabled="true"' : ''}></button>
     </div>
