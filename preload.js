@@ -973,11 +973,6 @@ function mapOutputFormat(toolId, asset, config) {
   return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
 }
 
-function mapOutputExtension(format) {
-  if (format === 'jpeg') return 'jpg'
-  return format
-}
-
 function normalizeImageFormatName(format) {
   const normalized = String(format || '').trim().toLowerCase()
   if (normalized === 'jpg') return 'jpeg'
@@ -990,7 +985,8 @@ function isAlphaCapableFormat(format) {
 
 function getOutputName(asset, toolId, format) {
   const parsed = path.parse(asset.name || path.basename(asset.sourcePath))
-  return `${parsed.name}-${toolId}.${mapOutputExtension(format)}`
+  const outputExtension = format === 'jpeg' ? 'jpg' : format
+  return `${parsed.name}-${toolId}.${outputExtension}`
 }
 
 function createTransformerFromInput(sharpLib, input, ext = '') {
