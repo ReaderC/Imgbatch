@@ -983,6 +983,12 @@ function mapOutputExtension(format) {
   return format
 }
 
+function normalizeImageFormatName(format) {
+  const normalized = String(format || '').trim().toLowerCase()
+  if (normalized === 'jpg') return 'jpeg'
+  return normalized
+}
+
 function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
@@ -1217,7 +1223,16 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('format', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
-  const sourceFormat = String(asset.ext || '').toLowerCase() === 'jpg' ? 'jpeg' : String(asset.ext || '').toLowerCase()
+  let sourceFormat = normalizeImageFormatName(asset.ext)
+
+  if (config.mode !== 'quality') {
+    try {
+      const metadata = await sharpLib(asset.sourcePath).metadata()
+      sourceFormat = normalizeImageFormatName(metadata?.format) || sourceFormat
+    } catch {
+      sourceFormat = normalizeImageFormatName(asset.ext)
+    }
+  }
 
   if (config.mode !== 'quality' && sourceFormat === format) {
     fs.copyFileSync(asset.sourcePath, outputPath)
