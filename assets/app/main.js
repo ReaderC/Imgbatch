@@ -492,10 +492,6 @@ function getResultFileName(asset, outputPath) {
   return fileName || asset.name || ''
 }
 
-function formatDimensions(width = 0, height = 0) {
-  return `${width || '—'} × ${height || '—'}`
-}
-
 function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
@@ -537,10 +533,6 @@ function updateResultUiAfterProcess() {
 
 function handleResultSaveCompletion() {
   syncResultUiAfterSave()
-}
-
-function handleResultProcessCompletion() {
-  updateResultUiAfterProcess()
 }
 
 function handleResultReplaceCompletion(processed) {
@@ -740,14 +732,6 @@ async function replaceCurrentOriginals() {
 }
 
 
-async function persistDefaultSavePath() {
-  const defaultSavePath = window.prompt('默认保存路径', getState().settings.defaultSavePath || getState().destinationPath || '')
-  if (defaultSavePath == null) return
-  const settings = await saveSettings({ defaultSavePath: defaultSavePath.trim() })
-  updateSettings(settings)
-  notify({ type: 'success', message: settings.defaultSavePath ? '已保存默认保存路径。' : '已清空默认保存路径。' })
-}
-
 function getPreviewMessage(asset) {
   const toolId = getState().activeTool
   const previewStatus = asset.stagedToolId === toolId ? asset.previewStatus : 'idle'
@@ -795,10 +779,6 @@ function formatBytes(bytes = 0) {
     index += 1
   }
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
-}
-
-function isSettingsAction(action) {
-  return action === 'open-settings' || action === 'save-default-path'
 }
 
 function getProcessRunner(toolId) {
@@ -1052,16 +1032,6 @@ function shouldSetManualCropRatioAction(action) {
 
 function isUtilityTool(toolId) {
   return toolId === SETTINGS_TOOL_ID
-}
-
-function createSettingsToolResult() {
-  return { ok: true, partial: false, processed: [], failed: [], message: '设置已更新。' }
-}
-
-function processUtilityTool(toolId) {
-  if (!isUtilityTool(toolId)) return null
-  openSettingsDialog()
-  return createSettingsToolResult()
 }
 
 function getConfiguredToolSummary(tool) {
@@ -2435,12 +2405,6 @@ function getManualCropRatio(ratioValue) {
   return ratioX / ratioY
 }
 
-function normalizeSignedAngle(value) {
-  const normalized = ((value % 360) + 360) % 360
-  if (normalized > 180) return normalized - 360
-  return normalized
-}
-
 function parseValue(value) {
   if (value === 'true') return true
   if (value === 'false') return false
@@ -2448,13 +2412,6 @@ function parseValue(value) {
     return Number(value)
   }
   return value
-}
-
-function formatMeasureValue(value, fallbackUnit = 'px') {
-  const raw = String(value ?? '').trim()
-  if (!raw) return `0${fallbackUnit}`
-  if (raw.endsWith('px') || raw.endsWith('%')) return raw
-  return `${raw}${fallbackUnit}`
 }
 
 function describeToolConfig(toolId, config) {
