@@ -807,23 +807,8 @@ function shouldOpenRealPreview(toolId) {
   return isPreviewableTool(toolId) && !isMergePreviewTool(toolId)
 }
 
-function getPreviewPlaceholderMessage(tool, asset) {
-  return `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}`
-}
-
-function getPreviewOpenError(tool) {
-  return `${tool?.label || '当前工具'} 预览结果无法打开。`
-}
-
-function getPreviewAssetAfterRun(assetId, toolId, asset, result) {
-  const nextAsset = getState().assets.find((item) => item.id === assetId)
-  if (nextAsset?.previewUrl) return nextAsset
-  const processed = (result?.processed || []).find((item) => item.assetId === assetId)
-  return mapPreviewResultToAsset(asset, processed, toolId)
-}
-
 function notifyPreviewUnavailable(tool, asset) {
-  notify({ type: 'info', message: getPreviewPlaceholderMessage(tool, asset) })
+  notify({ type: 'info', message: `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}` })
 }
 
 function getPreviewAssetLabel(asset) {
@@ -843,9 +828,11 @@ async function previewWithRunner(tool, asset) {
   if (!(result?.ok || result?.partial)) {
     throw new Error(result?.message || '预览失败。')
   }
-  const previewedAsset = getPreviewAssetAfterRun(asset.id, tool.id, asset, result)
+  const nextAsset = getState().assets.find((item) => item.id === asset.id)
+  const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
+  const previewedAsset = nextAsset?.previewUrl ? nextAsset : mapPreviewResultToAsset(asset, processed, tool.id)
   if (!openPreviewModal(previewedAsset)) {
-    throw new Error(getPreviewOpenError(tool))
+    throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
   }
   if (isDirectPreviewTool(tool.id)) {
     notify({ type: 'success', message: `${tool.label} 预览已生成。` })
