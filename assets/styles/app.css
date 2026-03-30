@@ -3204,6 +3204,8 @@ body {
   height: 100%;
   object-fit: contain;
   border-radius: 0;
+  transform: scale(var(--preview-compare-zoom, 1));
+  transform-origin: center center;
 }
 
 .preview-modal__split-label {

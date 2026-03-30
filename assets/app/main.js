@@ -791,7 +791,7 @@ function setPreviewCompareRatio(ratio) {
 
 function setPreviewCompareZoom(zoom) {
   const preview = getState().previewModal
-  if (!preview?.url || preview.compareMode === 'split') return
+  if (!preview?.url) return
   const nextZoom = Math.max(1, Math.min(5, zoom))
   const currentZoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
   if (Math.abs(currentZoom - nextZoom) < 0.01) return
@@ -1187,9 +1187,10 @@ function extractDroppedItems(event) {
 function attachGlobalEvents() {
   document.addEventListener('wheel', (event) => {
     const previewCompareBody = event.target.closest('.preview-modal__body--compare')
-    if (previewCompareBody) {
+    const previewSplitBody = event.target.closest('.preview-modal__body--split')
+    if (previewCompareBody || previewSplitBody) {
       const preview = getState().previewModal
-      if (preview?.url && preview.compareMode !== 'split') {
+      if (preview?.url) {
         event.preventDefault()
         const currentZoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
         const delta = event.deltaY < 0 ? 0.12 : -0.12

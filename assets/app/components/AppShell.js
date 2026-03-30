@@ -377,6 +377,9 @@ function renderPreviewModal(preview) {
   const afterHeight = Number(preview.compareHeight) || 1
   const beforeAspect = Math.max(0.1, beforeWidth / beforeHeight)
   const afterAspect = Math.max(0.1, afterWidth / afterHeight)
+  const compareZoom = Number.isFinite(Number(preview.compareZoom))
+    ? Math.max(1, Math.min(5, Number(preview.compareZoom)))
+    : 1
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
   return `
@@ -392,13 +395,13 @@ function renderPreviewModal(preview) {
         </div>
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect};">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect}; --preview-compare-zoom:${compareZoom};">
               <img src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" />
               <button class="preview-modal__split-label preview-modal__split-label--left ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u539f\u56fe</button>
             </div>
           </section>
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${afterAspect};">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${afterAspect}; --preview-compare-zoom:${compareZoom};">
               <img src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" />
               <button class="preview-modal__split-label preview-modal__split-label--right ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u5904\u7406\u540e</button>
             </div>
