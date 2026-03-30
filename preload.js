@@ -1831,6 +1831,22 @@ async function writeMergeImageAsset(sharpLib, payload) {
     if (sourceFormat === format && keepsOriginalSize) {
       return copyAssetToOutput(asset, outputPath)
     }
+    const info = await sharpLib(asset.sourcePath)
+      .resize({
+        width: fitWidth,
+        height: fitHeight,
+        fit: 'contain',
+        background,
+        withoutEnlargement: preventUpscale,
+      })
+      .png()
+      .toFile(outputPath)
+    return {
+      outputPath,
+      outputSizeBytes: info.size || 0,
+      outputWidth: info.width || 0,
+      outputHeight: info.height || 0,
+    }
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
