@@ -17,6 +17,7 @@ watermarkFileInput.multiple = false
 const DRAG_CONTEXT = {
   rotateDial: null,
   manualCrop: null,
+  previewCompare: null,
   queueSort: null,
 }
 let resultMarqueeFrame = 0
@@ -744,12 +745,47 @@ function openPreviewModal(asset) {
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
+    compareRatio: 0.5,
   })
   return true
 }
 
 function closePreviewModal() {
   setPreviewModal(null)
+}
+
+function setPreviewCompareRatio(ratio) {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  const nextRatio = Math.max(0.05, Math.min(0.95, ratio))
+  if (Math.abs((Number(preview.compareRatio) || 0.5) - nextRatio) < 0.0025) return
+  setPreviewModal({ ...preview, compareRatio: nextRatio })
+}
+
+function updatePreviewCompareRatioFromEvent(event) {
+  const stage = document.querySelector('.preview-compare-stage[data-role="preview-compare-stage"]')
+  if (!stage) return
+  const rect = stage.getBoundingClientRect()
+  if (!rect.width) return
+  const ratio = (event.clientX - rect.left) / rect.width
+  setPreviewCompareRatio(ratio)
+}
+
+function beginPreviewCompareDrag(event, target) {
+  const stage = target.closest('.preview-compare-stage')
+  if (!stage) return
+  DRAG_CONTEXT.previewCompare = { pointerId: event.pointerId }
+  updatePreviewCompareRatioFromEvent(event)
+  event.preventDefault()
+}
+
+function handlePreviewCompareDrag(event) {
+  if (!DRAG_CONTEXT.previewCompare) return
+  updatePreviewCompareRatioFromEvent(event)
+}
+
+function endPreviewCompareDrag() {
+  DRAG_CONTEXT.previewCompare = null
 }
 
 function formatBytes(bytes = 0) {
@@ -1131,6 +1167,10 @@ function attachGlobalEvents() {
   document.addEventListener('pointerdown', (event) => {
     const target = event.target.closest('[data-action]')
     if (!target) return
+    if (target.dataset.action === 'drag-preview-compare') {
+      beginPreviewCompareDrag(event, target)
+      return
+    }
     if (target.dataset.action === 'drag-rotate') {
       beginRotateDrag(event, target)
       return
@@ -1676,6 +1716,10 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointermove', (event) => {
+    if (DRAG_CONTEXT.previewCompare) {
+      handlePreviewCompareDrag(event)
+      return
+    }
     if (DRAG_CONTEXT.rotateDial) {
       handleRotateDrag(event)
       return
@@ -1686,11 +1730,13 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointerup', () => {
+    endPreviewCompareDrag()
     endRotateDrag()
     endManualCropDrag()
   })
 
   document.addEventListener('pointercancel', () => {
+    endPreviewCompareDrag()
     endRotateDrag()
     endManualCropDrag()
   })

@@ -29,7 +29,7 @@ export function renderAppShell(state) {
         `}
       ${renderPresetModal(state)}
       ${renderConfirmModal(state.confirmDialog)}
-      ${renderPreviewModal(state.previewModal)}
+      ${renderInteractivePreviewModal(state.previewModal)}
     </div>
   `
 }
@@ -325,6 +325,48 @@ function renderPreviewModal(preview) {
             <div class="preview-compare-card__label">处理后</div>
             <div class="preview-modal__body"><img src="${afterUrl}" alt="${escapeHtml(preview.name || '结果')}" /></div>
           </section>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function renderInteractivePreviewModal(preview) {
+  if (!preview?.url) return ''
+  const beforeUrl = preview.beforeUrl || preview.url
+  const afterUrl = preview.afterUrl || preview.url
+  const compareRatio = Number.isFinite(Number(preview.compareRatio))
+    ? Math.max(0.05, Math.min(0.95, Number(preview.compareRatio)))
+    : 0.5
+  const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
+  return `
+    <div class="preview-modal" data-preview-overlay="true">
+      <div class="preview-modal__dialog preview-modal__dialog--compare">
+        <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <div class="preview-modal__meta">
+          <div class="preview-modal__title">${escapeHtml(preview.name || '预览')}</div>
+          <div class="preview-modal__subtitle">${escapeHtml(preview.summary || '')}</div>
+        </div>
+        <div class="preview-modal__compare-shell">
+          <div class="preview-modal__compare-head">
+            <span class="preview-compare-card__label">原图</span>
+            <span class="preview-compare-card__label">处理后</span>
+          </div>
+          <div class="preview-modal__compare">
+            <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
+              <div class="preview-modal__body preview-modal__body--compare">
+                <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '处理后')}" draggable="false" />
+                <div class="preview-compare-stage__before" style="width:${comparePercent}">
+                  <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '原图')}" draggable="false" />
+                </div>
+                <div class="preview-compare-stage__divider" style="left:${comparePercent}" data-action="drag-preview-compare">
+                  <span class="preview-compare-stage__handle" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
