@@ -3081,11 +3081,24 @@ body {
   min-height: 0;
 }
 
+.preview-modal__compare--split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .preview-compare-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+}
+
+.preview-modal__compare-head--split {
+  position: static;
+  justify-content: flex-start;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .preview-compare-card__label {
@@ -3140,6 +3153,20 @@ body {
   height: 100%;
   border-radius: 0;
   background: transparent;
+}
+
+.preview-modal__body--split {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.preview-modal__body--split img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .preview-compare-stage {
@@ -4190,6 +4217,11 @@ body {
     bottom: 14px;
     left: 14px;
     right: 14px;
+  }
+
+  .preview-modal__compare--split {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .preview-modal__dialog--compare .preview-modal__title,

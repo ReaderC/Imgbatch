@@ -5,6 +5,7 @@ import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
 const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const SETTINGS_TOOL_ID = 'settings'
 
@@ -734,7 +735,11 @@ function getPreviewMessage(asset) {
   return `这张图片还没预览：${truncate(asset.name, 20)} · ${describeToolConfig(toolId, getState().configs[toolId])}`
 }
 
-function openPreviewModal(asset) {
+function getPreviewCompareMode(toolId) {
+  return RESHAPED_PREVIEW_TOOLS.has(toolId) ? 'split' : 'slider'
+}
+
+function openPreviewModal(asset, toolId = getState().activeTool) {
   if (!asset?.previewUrl) {
     notify({ type: 'info', message: getPreviewMessage(asset) })
     return false
@@ -745,6 +750,7 @@ function openPreviewModal(asset) {
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
+    compareMode: getPreviewCompareMode(toolId),
     compareRatio: 0.5,
     compareLabelsHidden: false,
   })
@@ -778,7 +784,7 @@ function setPreviewCompareRatio(ratio) {
 
 function nudgePreviewCompareRatio(delta) {
   const preview = getState().previewModal
-  if (!preview?.url) return
+  if (!preview?.url || preview.compareMode === 'split') return
   const currentRatio = Number.isFinite(Number(preview.compareRatio)) ? Number(preview.compareRatio) : 0.5
   setPreviewCompareRatio(currentRatio + delta)
 }
@@ -876,7 +882,7 @@ async function previewWithRunner(tool, asset) {
   const nextAsset = getState().assets.find((item) => item.id === asset.id)
   const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
   const previewedAsset = nextAsset?.previewUrl ? nextAsset : mapPreviewResultToAsset(asset, processed, tool.id)
-  if (!openPreviewModal(previewedAsset)) {
+  if (!openPreviewModal(previewedAsset, tool.id)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
   }
   if (isPreviewableTool(tool.id) && !isPreviewSaveTool(tool.id)) {
@@ -885,7 +891,7 @@ async function previewWithRunner(tool, asset) {
 }
 
 async function previewAssetWithTool(tool, asset) {
-  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset)) return
+  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) return
   if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
     if (isMergePreviewTool(tool.id)) {
       notifyPreviewUnavailable(tool, asset)
@@ -1775,6 +1781,7 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('dblclick', (event) => {
+    if (getState().previewModal?.compareMode === 'split') return
     if (!event.target.closest('.preview-modal__body--compare')) return
     setPreviewCompareRatio(0.5)
   })
@@ -1794,6 +1801,7 @@ function attachGlobalEvents() {
       return
     }
     if (event.key === 'ArrowLeft') {
+      if (preview.compareMode === 'split') return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
@@ -1801,6 +1809,7 @@ function attachGlobalEvents() {
       return
     }
     if (event.key === 'ArrowRight') {
+      if (preview.compareMode === 'split') return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
@@ -2010,7 +2019,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
 
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return
-  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset)) {
+  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) {
     return
   }
   if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
