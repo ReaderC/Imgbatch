@@ -1813,10 +1813,7 @@ async function writeMergePdfAsset(payload) {
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
-    const format = String(asset.ext || '').toLowerCase()
-    const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
-      ? await pdf.embedPng(imageBytes)
-      : await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
+    const embedded = await embedPdfImage(pdf, sharpLib, imageBytes, asset.ext)
 
     const pageSize = payload.config.pageSize === '与图片一致'
       ? [embedded.width, embedded.height]
@@ -1858,10 +1855,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
   for (const asset of payload.assets) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
-    const format = String(asset.ext || '').toLowerCase()
-    const embedded = format === 'png' || format === 'webp' || format === 'avif' || format === 'gif'
-      ? await pdf.embedPng(imageBytes)
-      : await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
+    const embedded = await embedPdfImage(pdf, sharpLib, imageBytes, asset.ext)
     const fixedPageSize = payload.config.pageSize === 'Original'
       ? null
       : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
@@ -1968,6 +1962,14 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const bytes = await pdf.save()
   fs.writeFileSync(outputPath, bytes)
   return outputPath
+}
+
+async function embedPdfImage(pdf, sharpLib, imageBytes, ext) {
+  const format = String(ext || '').toLowerCase()
+  if (format === 'png' || format === 'webp' || format === 'avif' || format === 'gif') {
+    return pdf.embedPng(imageBytes)
+  }
+  return pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
 }
 
 async function writeMergeGifAsset(sharpLib, payload) {

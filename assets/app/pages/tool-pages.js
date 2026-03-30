@@ -57,7 +57,6 @@ export function renderToolHero(toolId) {
       <span class="material-symbols-outlined tool-hero__icon">${tool?.icon || 'tune'}</span>
       <div>
         <div class="hero-title">${tool?.label || '工具配置'}</div>
-        <div class="queue-subtitle">图片处理 · 效果预览</div>
       </div>
     </div>
   `
