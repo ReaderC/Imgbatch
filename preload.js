@@ -1171,8 +1171,10 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let sourceFormat = normalizeImageFormatName(asset.ext)
   let sourceInput = null
+  const shouldProbeSourceFormat = config.mode !== 'quality'
+    && (sourceFormat === format || !SHARP_INPUT_EXTENSIONS.has(String(asset.ext || '').toLowerCase()))
 
-  if (config.mode !== 'quality') {
+  if (shouldProbeSourceFormat) {
     try {
       sourceInput = fs.readFileSync(asset.sourcePath)
       const metadata = await sharpLib(sourceInput).metadata()
