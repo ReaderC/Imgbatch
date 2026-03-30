@@ -1258,27 +1258,6 @@ function hexToRgbaObject(value, alpha = 1) {
   }
 }
 
-function getWatermarkGravity(position) {
-  const mapping = {
-    'top-left': 'northwest',
-    'top-center': 'north',
-    'top-right': 'northeast',
-    'middle-left': 'west',
-    center: 'centre',
-    'middle-right': 'east',
-    'bottom-left': 'southwest',
-    'bottom-center': 'south',
-    'bottom-right': 'southeast',
-  }
-  return mapping[position] || 'centre'
-}
-
-function getWatermarkOffsets(position, margin) {
-  const horizontal = position.includes('left') ? margin : position.includes('right') ? -margin : 0
-  const vertical = position.startsWith('top') ? margin : position.startsWith('bottom') ? -margin : 0
-  return { left: horizontal, top: vertical }
-}
-
 function escapeSvgText(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -1333,13 +1312,14 @@ async function createTiledWatermarkBuffer(sharpLib, input, density, sizeHint = n
   const canvasHeight = height + gap
   const left = Math.max(0, Math.round((canvasWidth - width) / 2))
   const top = Math.max(0, Math.round((canvasHeight - height) / 2))
+  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
 
   return sharpLib({
     create: {
       width: canvasWidth,
       height: canvasHeight,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      background: transparentBackground,
     },
   })
     .composite([{ input, left, top }])
@@ -1365,8 +1345,9 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
+  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
   const { data, info } = await sharpLib(input)
-    .rotate(config.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .rotate(config.rotation, { background: transparentBackground })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
     .png()
