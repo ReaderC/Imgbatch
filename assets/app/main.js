@@ -799,10 +799,6 @@ function isDirectPreviewTool(toolId) {
   return isPreviewableTool(toolId) && !isPreviewSaveTool(toolId)
 }
 
-function getNonSavePreviewSuccessMessage(tool) {
-  return `${tool.label} 预览已生成。`
-}
-
 function isMergePreviewTool(toolId) {
   return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
 }
@@ -824,10 +820,6 @@ function getPreviewAssetAfterRun(assetId, toolId, asset, result) {
   if (nextAsset?.previewUrl) return nextAsset
   const processed = (result?.processed || []).find((item) => item.assetId === assetId)
   return mapPreviewResultToAsset(asset, processed, toolId)
-}
-
-function notifyPreviewReady(tool) {
-  notify({ type: 'success', message: getNonSavePreviewSuccessMessage(tool) })
 }
 
 function notifyPreviewUnavailable(tool, asset) {
@@ -867,7 +859,7 @@ async function previewWithRunner(tool, asset) {
     throw new Error(getPreviewOpenError(tool))
   }
   if (isDirectPreviewTool(tool.id)) {
-    notifyPreviewReady(tool)
+    notify({ type: 'success', message: `${tool.label} 预览已生成。` })
   }
 }
 
