@@ -644,18 +644,6 @@ function shouldKeepResultToolbar() {
   return shouldShowResultActions()
 }
 
-function clearResultOnlyView() {
-  setResultView(null)
-}
-
-function closeResultWorkspace() {
-  clearResultOnlyView()
-}
-
-function closeResultView() {
-  closeResultWorkspace()
-}
-
 function ensureResultViewVisible() {
   if (getState().resultView?.items?.length) return true
   refreshResultView()
@@ -674,18 +662,14 @@ function clearAllResultOverlays() {
 
 function clearResultUiAfterToolChange() {
   clearAllResultOverlays()
-  closeResultWorkspace()
+  setResultView(null)
   setState({ activeRun: null })
 }
 
 function resetResultUiState() {
   clearAllResultOverlays()
-  closeResultWorkspace()
+  setResultView(null)
   setState({ activeRun: null })
-}
-
-function openResultComparisonPath(targetPath) {
-  return openResultPath(targetPath)
 }
 
 function continueProcessing() {
@@ -1284,7 +1268,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'close-result-view') {
-      closeResultView()
+      setResultView(null)
       return
     }
 
@@ -1391,7 +1375,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-result-path') {
-      await openResultComparisonPath(target.dataset.path)
+      await openResultPath(target.dataset.path)
       return
     }
 
