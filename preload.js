@@ -417,24 +417,6 @@ async function savePreviewResult(baseDestinationPath, runFolderName, stagedItem)
   }, stagedItem)
 }
 
-function normalizePreviewResult(item = {}, payload) {
-  const isBatchPreview = payload.mode === 'preview-save'
-  const stagedPath = item.stagedPath || item.outputPath || ''
-  const previewUrl = item.previewUrl || (stagedPath ? toPublicFileUrl(stagedPath) : '')
-  const cacheBustedPreviewUrl = previewUrl && payload.runId ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}` : previewUrl
-  return {
-    ...item,
-    mode: payload.mode,
-    previewStatus: isBatchPreview ? 'staged' : 'previewed',
-    stagedPath,
-    previewUrl: cacheBustedPreviewUrl,
-    saveSignature: createPreviewSignature(payload.toolId, payload.config),
-    runId: payload.runId,
-    runFolderName: payload.runFolderName,
-    savedOutputPath: item.savedOutputPath || '',
-  }
-}
-
 function normalizeDirectResult(item = {}) {
   return {
     ...item,
@@ -449,17 +431,25 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
     ? createOutputMeta(stagedPath, result, result)
     : null) || await readOutputMeta(stagedPath, sharpLib)
-  return normalizePreviewResult({
+  const previewUrl = toPublicFileUrl(stagedPath)
+  const cacheBustedPreviewUrl = previewUrl && payload.runId ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}` : previewUrl
+  return {
     assetId: asset.id,
     name: asset.name,
+    mode: payload.mode,
+    previewStatus: payload.mode === 'preview-save' ? 'staged' : 'previewed',
     outputName: meta.outputName,
     stagedPath,
-    previewUrl: toPublicFileUrl(stagedPath),
+    previewUrl: cacheBustedPreviewUrl,
     outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
-  }, payload)
+    saveSignature: createPreviewSignature(payload.toolId, payload.config),
+    runId: payload.runId,
+    runFolderName: payload.runFolderName,
+    savedOutputPath: '',
+  }
 }
 
 async function directResultToProcessed(asset, result, sharpLib = null) {
