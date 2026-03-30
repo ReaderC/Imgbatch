@@ -2408,8 +2408,8 @@ async function executeMergeTool(payload, sharpLib) {
       outputPath,
       outputName,
       outputSizeBytes: Number(result?.outputSizeBytes) || 0,
-      width: 0,
-      height: 0,
+      width: Number(result?.width) || 0,
+      height: Number(result?.height) || 0,
       savedOutputPath: outputPath || '',
     })
   } catch (error) {
