@@ -527,10 +527,6 @@ function syncResultUiAfterReplace(assetIds = []) {
   refreshResultView()
 }
 
-function updateResultUiAfterProcess() {
-  refreshResultView()
-}
-
 function handleResultSaveCompletion() {
   syncResultUiAfterSave()
 }
@@ -817,22 +813,6 @@ function mapPreviewResultToAsset(asset, processed, toolId) {
   }
 }
 
-async function runAssetPreview(tool, asset) {
-  const state = getState()
-  const runner = getPreviewRunner(tool.id)
-  const result = await runner(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
-  if (result?.processed?.length || result?.failed?.length) {
-    applyRunResult(result)
-  }
-  if (result?.ok || result?.partial) {
-    const nextAsset = getState().assets.find((item) => item.id === asset.id)
-    if (nextAsset?.previewUrl) return nextAsset
-    const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
-    return mapPreviewResultToAsset(asset, processed, tool.id)
-  }
-  throw new Error(result?.message || '预览失败。')
-}
-
 function isDirectPreviewTool(toolId) {
   return isPreviewableTool(toolId) && !isPreviewSaveTool(toolId)
 }
@@ -895,10 +875,6 @@ function createPreviewUnavailableMessage(tool, asset) {
 
 function notifyUnsupportedPreview(tool, asset) {
   notify({ type: 'info', message: createPreviewUnavailableMessage(tool, asset) })
-}
-
-function shouldUseUnsupportedPreview(toolId) {
-  return !shouldOpenRealPreview(toolId) && !isMergePreviewTool(toolId)
 }
 
 async function executePreviewRunner(toolId, config, assets, destinationPath) {
@@ -1028,10 +1004,6 @@ function shouldApplyResizePresetAction(action) {
 
 function shouldSetManualCropRatioAction(action) {
   return action === 'set-manual-crop-ratio'
-}
-
-function isUtilityTool(toolId) {
-  return toolId === SETTINGS_TOOL_ID
 }
 
 function getConfiguredToolSummary(tool) {
@@ -1190,18 +1162,6 @@ function maybeHandleOpenSettingsAction(action) {
   return true
 }
 
-function shouldShortCircuitClickAction(action, target, event) {
-  return maybeHandleOpenSettingsAction(action)
-    || maybeHandleSaveActions(action, target)
-    || maybeHandleBasicAssetActions(action, target)
-    || maybeHandlePreviewAction(action, target)
-    || maybeHandleProcessAction(action)
-    || maybeHandleOpenInputActions(action)
-    || maybeHandlePresetAction(action, target)
-    || maybeHandleToolActions(action, target, event)
-    || maybeHandleConfigActions(action, target)
-}
-
 function hasStagedOutput(asset) {
   return !!asset?.stagedOutputPath
 }
@@ -1241,14 +1201,6 @@ function getBulkSaveItems() {
   return buildStagedItems(getPreviewSaveAssets())
 }
 
-function normalizeToolLabel(tool) {
-  return tool?.label || '当前工具'
-}
-
-function getSelectionSummary(assets) {
-  return `${assets.length} 张`
-}
-
 function getPreviewStatus(asset) {
   return asset?.previewStatus || 'idle'
 }
@@ -1259,10 +1211,6 @@ function shouldUsePreviewSummary(asset) {
 
 function getSavableBulkItems() {
   return getBulkSaveItems().filter((item) => !!item?.stagedPath)
-}
-
-function getPreviewOutputSummary(asset) {
-  return `${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}`
 }
 
 function maybeShowPreviewSummary(asset) {
@@ -1287,31 +1235,6 @@ function getPreviewOutputPath(asset) {
 
 function getSavedOutputPath(asset) {
   return asset.savedOutputPath || ''
-}
-
-function maybeHandleAssetPreview(asset) {
-  if (!asset) return false
-  maybeShowPreviewSummary(asset)
-  return true
-}
-
-function maybeHandleSingleAssetSave(asset) {
-  if (!handleSavableAssetState(asset)) return false
-  void saveAssetResult(asset.id)
-  return true
-}
-
-function maybeHandleSaveAllAction() {
-  if (maybeWarnNoActionableSaveItems()) return true
-  void saveAllCurrentResults()
-  return true
-}
-
-function maybeHandleExistingPreview(asset) {
-  if (!asset) return false
-  if (!shouldUsePreviewSummary(asset)) return false
-  notify({ type: 'info', message: getPreviewNotificationMessage(asset) })
-  return true
 }
 
 function render(state) {
