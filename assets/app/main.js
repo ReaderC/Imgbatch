@@ -2118,10 +2118,6 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
     return
   }
   if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
-    if (isMergePreviewTool(tool.id)) {
-      notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
-      return
-    }
     notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
