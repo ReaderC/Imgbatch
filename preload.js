@@ -1003,15 +1003,6 @@ function resolveResizeTargetSize(asset, config) {
   return { width, height }
 }
 
-function applyResizeOperation(transformer, asset, config) {
-  const { width, height } = resolveResizeTargetSize(asset, config)
-  return transformer.resize({
-    width,
-    height,
-    fit: config.lockAspectRatio ? 'inside' : 'fill',
-  })
-}
-
 function withOutputFormat(transformer, format, quality) {
   if (format === 'jpeg') return transformer.jpeg({ quality, mozjpeg: true })
   if (format === 'png') {
@@ -1028,11 +1019,6 @@ function withOutputFormat(transformer, format, quality) {
   if (format === 'avif') return transformer.avif({ quality })
   if (format === 'gif') return transformer.gif({ effort: 7 })
   return transformer.png({ compressionLevel: 6 })
-}
-
-function applyTransparencyPolicy(transformer, format, keepTransparency, background = '#ffffff') {
-  if (keepTransparency && isAlphaCapableFormat(format)) return transformer
-  return transformer.flatten({ background: hexToRgbaObject(background, 1) })
 }
 
 async function createBmpBuffer(transformer) {
@@ -1232,7 +1218,9 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
         : 'srgb'
     transformed = transformed.withIccProfile(outputColorProfile)
   }
-  transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
+  if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
+    transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
+  }
   const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
 
   return writeTransformedAsset(transformed, format, quality, outputPath, {
@@ -1253,7 +1241,11 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
     return copyAssetToOutput(asset, outputPath)
   }
 
-  const resized = applyResizeOperation(createTransformer(sharpLib, asset), asset, config)
+  const resized = createTransformer(sharpLib, asset).resize({
+    width,
+    height,
+    fit: config.lockAspectRatio ? 'inside' : 'fill',
+  })
   return writeTransformedAsset(resized, format, 90, outputPath)
 }
 
