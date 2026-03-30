@@ -1949,7 +1949,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
         embedded = await pdf.embedJpg(imageBytes)
       } else {
-        embedded = await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
+        embedded = await pdf.embedJpg(prepared.embeddedBytes || imageBytes)
       }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
