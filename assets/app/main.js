@@ -633,24 +633,19 @@ function resetActiveResultUi() {
   setState({ activeRun: null })
 }
 
-function buildResultActions() {
-  if (!shouldShowResultActions()) return ''
-  return `
-    <div class="result-toolbar">
-      <button class="secondary-button" data-action="continue-processing">继续处理</button>
-      <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
-      <button class="primary-button" data-action="open-current-results">${hasVisibleResultComparison() ? '打开目录' : '显示结果'}</button>
-    </div>
-  `
-}
-
 function injectResultToolbar() {
   const shell = document.querySelector('.app-shell')
   if (!shell) return
   const existing = shell.querySelector('.result-toolbar')
   if (existing) existing.remove()
   if (!shouldShowResultActions()) return
-  shell.insertAdjacentHTML('beforeend', buildResultActions())
+  shell.insertAdjacentHTML('beforeend', `
+    <div class="result-toolbar">
+      <button class="secondary-button" data-action="continue-processing">继续处理</button>
+      <button class="secondary-button" data-action="replace-current-originals">替换原图</button>
+      <button class="primary-button" data-action="open-current-results">${hasVisibleResultComparison() ? '打开目录' : '显示结果'}</button>
+    </div>
+  `)
 }
 
 async function replaceAssetOriginal(assetId) {
