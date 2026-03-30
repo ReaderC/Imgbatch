@@ -4070,8 +4070,13 @@ body {
 }
 
 .manual-handle {
+  position: absolute;
+  display: block;
   width: 18px;
   height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: var(--primary);
   z-index: 4;
   touch-action: none;
   box-shadow: 0 2px 8px rgba(73, 86, 180, 0.18);
