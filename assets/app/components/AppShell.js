@@ -431,10 +431,6 @@ function renderInteractivePreviewModal(preview) {
           </button>
         </div>
         <div class="preview-modal__compare-shell">
-          <div class="preview-modal__compare-head ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
-            <span class="preview-compare-card__label">\u539f\u56fe</span>
-            <span class="preview-compare-card__label">\u5904\u7406\u540e</span>
-          </div>
           <div class="preview-modal__compare">
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
               <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom}; --preview-compare-aspect:${compareAspect};">
@@ -443,6 +439,10 @@ function renderInteractivePreviewModal(preview) {
                 </div>
                 <div class="preview-compare-stage__layer preview-compare-stage__layer--before" style="clip-path: inset(0 calc(100% - ${comparePercent}) 0 0);">
                   <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" draggable="false" />
+                </div>
+                <div class="preview-modal__compare-head ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
+                  <span class="preview-compare-card__label">\u539f\u56fe</span>
+                  <span class="preview-compare-card__label">\u5904\u7406\u540e</span>
                 </div>
                 <div class="preview-compare-stage__divider" style="left:${comparePercent}" data-action="drag-preview-compare">
                   <span class="preview-compare-stage__handle" aria-hidden="true"></span>

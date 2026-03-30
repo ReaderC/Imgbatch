@@ -3073,6 +3073,11 @@ body {
   gap: 10px;
 }
 
+.preview-modal__actions .preview-modal__close {
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 20px rgba(28, 34, 79, 0.12);
+}
+
 .preview-modal__actions .preview-modal__close .material-symbols-outlined {
   font-size: 22px;
   line-height: 1;
