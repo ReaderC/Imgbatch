@@ -23,6 +23,7 @@ const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermar
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
+const WATERMARK_IMAGE_CACHE = new Map()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -1326,10 +1327,18 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
     throw new Error('图片水印文件不存在')
   }
 
+  const imageInput = isDataUrl
+    ? input
+    : WATERMARK_IMAGE_CACHE.get(imagePath) || (() => {
+      const buffer = fs.readFileSync(imagePath)
+      WATERMARK_IMAGE_CACHE.set(imagePath, buffer)
+      return buffer
+    })()
+
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
-  const { data, info } = await sharpLib(input)
+  const { data, info } = await sharpLib(imageInput)
     .rotate(config.rotation, { background: TRANSPARENT_BG })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
