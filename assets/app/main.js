@@ -493,10 +493,6 @@ function getReplaceEntry(assetId) {
     name: asset.name,
     sourcePath: normalizeAssetPath(asset.sourcePath),
     resultPath,
-    // Legacy fallback fields kept here for quick rollback during verification.
-    // savedOutputPath: normalizeAssetPath(asset.savedOutputPath),
-    // outputPath: normalizeAssetPath(asset.outputPath),
-    // stagedOutputPath: normalizeAssetPath(asset.stagedOutputPath),
   }
 }
 

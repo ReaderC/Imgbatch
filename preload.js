@@ -1296,10 +1296,6 @@ function normalizeFsPath(value, fallback = '') {
 function resolveExistingResultPath(item = {}) {
   const candidates = [
     item.resultPath,
-    // Legacy fallback fields kept here for quick rollback during verification.
-    // item.savedOutputPath,
-    // item.outputPath,
-    // item.stagedOutputPath,
   ].map((value) => normalizeFsPath(value)).filter(Boolean)
 
   for (const candidate of candidates) {
