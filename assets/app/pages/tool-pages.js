@@ -7,6 +7,8 @@ const COLOR_PROFILE_OPTIONS = [
   ['p3', 'Display P3'],
   ['cmyk', 'CMYK'],
 ]
+const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
+const FORMAT_TRANSPARENCY_UNSUPPORTED = new Set(['JPEG', 'JPG', 'BMP'])
 const PDF_MARGIN_OPTIONS = [
   ['none', '无边距'],
   ['narrow', '窄'],
@@ -150,13 +152,23 @@ function renderCompressionConfig(config) {
 }
 
 function renderFormatConfig(config) {
+  const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
+  const qualitySupported = FORMAT_QUALITY_SUPPORTED.has(targetFormat)
+  const qualityHint = !qualitySupported
+    ? `${targetFormat} 输出不支持质量调节，此项不会生效。`
+    : targetFormat === 'PNG'
+      ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
+      : '质量越低，输出体积通常越小。'
+  const transparencyHint = FORMAT_TRANSPARENCY_UNSUPPORTED.has(targetFormat)
+    ? `${targetFormat} 不支持透明通道，输出时会自动铺白底。`
+    : ''
   return renderSettingsSection(`
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '质量', toolId: 'format', key: 'quality', type: 'number', value: config.quality, min: 1, max: 100 })}
-      ${renderSelectField({ label: '颜色配置', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
+      ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
+      ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
-    ${renderToggleRow('保留透明通道', '', 'format', 'keepTransparency', config.keepTransparency)}
+    ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', config.keepTransparency)}
   `)
 }
 
@@ -473,9 +485,9 @@ function normalizeColorValue(value = '#FFFFFF') {
   return /^#([0-9a-f]{6})$/i.test(text) ? text.toUpperCase() : '#FFFFFF'
 }
 
-function renderRangeField({ label, toolId, key, min, max, value, suffix = '' }) {
+function renderRangeField({ label, toolId, key, min, max, value, suffix = '', disabled = false, hint = '', hintClass = '' }) {
   return `
-    <label class="setting-row setting-row--range">
+    <label class="setting-row setting-row--range ${disabled ? 'is-disabled' : ''}">
       <span class="setting-row__header">
         <span class="setting-row__label">${label}</span>
         <span class="setting-row__value" data-range-value>${value}${suffix}</span>
@@ -492,8 +504,10 @@ function renderRangeField({ label, toolId, key, min, max, value, suffix = '' }) 
           data-key="${key}"
           data-value-suffix="${escapeAttribute(suffix)}"
           style="--range-progress:${getRangeProgress(value, min, max)}%;"
+          ${disabled ? 'disabled' : ''}
         />
       </span>
+      ${hint ? `<span class="setting-row__hint ${escapeAttribute(hintClass)}">${escapeAttribute(hint)}</span>` : ''}
     </label>
   `
 }
