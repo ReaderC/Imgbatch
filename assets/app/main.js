@@ -837,13 +837,6 @@ function mapPreviewResultToAsset(asset, processed, toolId) {
   }
 }
 
-function getPreviewedAssetFromResult(assetId, toolId, fallbackAsset, result) {
-  const nextAsset = getState().assets.find((item) => item.id === assetId)
-  if (nextAsset?.previewUrl) return nextAsset
-  const processed = (result?.processed || []).find((item) => item.assetId === assetId)
-  return mapPreviewResultToAsset(fallbackAsset, processed, toolId)
-}
-
 async function runAssetPreview(tool, asset) {
   const state = getState()
   const runner = getPreviewRunner(tool.id)
@@ -852,17 +845,12 @@ async function runAssetPreview(tool, asset) {
     applyRunResult(result)
   }
   if (result?.ok || result?.partial) {
-    return getPreviewedAssetFromResult(asset.id, tool.id, asset, result)
+    const nextAsset = getState().assets.find((item) => item.id === asset.id)
+    if (nextAsset?.previewUrl) return nextAsset
+    const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
+    return mapPreviewResultToAsset(asset, processed, tool.id)
   }
   throw new Error(result?.message || '预览失败。')
-}
-
-async function openProcessedPreview(tool, asset) {
-  const previewedAsset = await runAssetPreview(tool, asset)
-  if (openPreviewModal(previewedAsset)) {
-    return true
-  }
-  throw new Error('预览结果生成成功，但无法打开处理后的图片。')
 }
 
 function isDirectPreviewTool(toolId) {
@@ -1287,16 +1275,8 @@ function normalizeToolLabel(tool) {
   return tool?.label || '当前工具'
 }
 
-function getProcessedAssetCount(assets) {
-  return assets.length
-}
-
-function createSettingsInfoMessage() {
-  return `默认保存路径：${getState().settings.defaultSavePath || '未设置'}`
-}
-
 function getSelectionSummary(assets) {
-  return `${getProcessedAssetCount(assets)} 张`
+  return `${assets.length} 张`
 }
 
 function getPreviewStatus(asset) {
@@ -1305,10 +1285,6 @@ function getPreviewStatus(asset) {
 
 function shouldUsePreviewSummary(asset) {
   return ['staged', 'saved', 'stale'].includes(getPreviewStatus(asset))
-}
-
-function updateCurrentSettings(settings) {
-  updateSettings(settings)
 }
 
 function getSavableBulkItems() {
@@ -1361,19 +1337,11 @@ function maybeHandleSaveAllAction() {
   return true
 }
 
-function notifyPreviewNotification(asset) {
-  notify({ type: 'info', message: getPreviewNotificationMessage(asset) })
-}
-
 function maybeHandleExistingPreview(asset) {
   if (!asset) return false
   if (!shouldUsePreviewSummary(asset)) return false
-  notifyPreviewNotification(asset)
+  notify({ type: 'info', message: getPreviewNotificationMessage(asset) })
   return true
-}
-
-function getToolProcessingSummary(tool, assets) {
-  return `${normalizeToolLabel(tool)} · ${assets.length} 张 · ${getConfiguredToolSummary(tool)}`
 }
 
 function render(state) {
