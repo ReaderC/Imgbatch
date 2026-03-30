@@ -409,25 +409,6 @@ async function saveAllCurrentResults() {
   }
 }
 
-async function resolveWatermarkImagePath(file) {
-  if (!file) return ''
-  const directPath = file.path || file.filePath || file.webkitRelativePath || ''
-  if (directPath) return directPath
-  try {
-    const [resolvedPath] = await resolveInputPaths([file])
-    if (resolvedPath) return resolvedPath
-  } catch {
-    // fall through to data url
-  }
-
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => resolve('')
-    reader.readAsDataURL(file)
-  })
-}
-
 async function openSavedOutput(assetId) {
   const asset = getState().assets.find((item) => item.id === assetId)
   const targetPath = asset ? (getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath) : ''
@@ -1755,7 +1736,23 @@ function attachGlobalEvents() {
     const target = event.target
     if (target === watermarkFileInput) {
       const file = target.files?.[0]
-      const imagePath = await resolveWatermarkImagePath(file)
+      let imagePath = file?.path || file?.filePath || file?.webkitRelativePath || ''
+      if (!imagePath && file) {
+        try {
+          const [resolvedPath] = await resolveInputPaths([file])
+          if (resolvedPath) imagePath = resolvedPath
+        } catch {
+          // fall through to data url
+        }
+      }
+      if (!imagePath && file) {
+        imagePath = await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+          reader.onerror = () => resolve('')
+          reader.readAsDataURL(file)
+        })
+      }
       if (!imagePath) {
         notify({ type: 'error', message: '读取图片水印文件失败。' })
       } else {
