@@ -52,7 +52,9 @@ function createSettingsDialogState() {
     visible: true,
     saveLocationMode: settings.saveLocationMode || 'source',
     saveLocationCustomPath: settings.saveLocationCustomPath || settings.defaultSavePath || '',
+    performanceMode: settings.performanceMode || 'balanced',
     settingsSelectOpen: false,
+    performanceSelectOpen: false,
   }
 }
 
@@ -134,11 +136,12 @@ async function saveSettingsFromDialog() {
   const payload = {
     saveLocationMode: dialog.saveLocationMode || 'source',
     saveLocationCustomPath: dialog.saveLocationCustomPath || '',
+    performanceMode: dialog.performanceMode || 'balanced',
   }
   const settings = await saveSettings(payload)
   updateSettings(settings)
   closeSettingsDialog()
-  notify({ type: 'success', message: '已保存默认图片保存位置。' })
+  notify({ type: 'success', message: '已保存默认图片保存位置与性能模式。' })
 }
 
 async function chooseSettingsCustomPath() {
@@ -1278,6 +1281,12 @@ function attachGlobalEvents() {
 
     if (action === 'set-settings-save-mode') {
       updateSettingsDialog({ saveLocationMode: target.dataset.value })
+      closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'set-settings-performance-mode') {
+      updateSettingsDialog({ performanceMode: target.dataset.value || 'balanced' })
       closeConfigSelect(target)
       return
     }

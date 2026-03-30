@@ -39,12 +39,18 @@ function renderSettingsWorkspace(dialog) {
 
   const mode = dialog.saveLocationMode || 'source'
   const customPath = dialog.saveLocationCustomPath || ''
+  const performanceMode = dialog.performanceMode || 'balanced'
   const options = [
     ['source', '原图目录'],
     ['downloads', '下载目录'],
     ['pictures', '图片目录'],
     ['desktop', '桌面'],
     ['custom', '手动选择'],
+  ]
+  const performanceOptions = [
+    ['compatible', '兼容'],
+    ['balanced', '均衡'],
+    ['max', '高性能'],
   ]
 
   return `
@@ -85,6 +91,26 @@ function renderSettingsWorkspace(dialog) {
                 ? `<button type="button" class="secondary-button" data-action="pick-settings-custom-path">选择位置</button>`
                 : ''}
             </div>
+          </div>
+          <div class="settings-panel__group">
+            <div class="settings-panel__label">性能模式</div>
+            <div class="select-shell settings-select ${dialog.performanceSelectOpen ? 'is-open' : ''}">
+              <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="${dialog.performanceSelectOpen ? 'true' : 'false'}">
+                <span class="select-shell__text">${escapeHtml((performanceOptions.find(([value]) => value === performanceMode) || performanceOptions[1])[1])}</span>
+                <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${performanceOptions.map(([value, label]) => `
+                <button
+                  type="button"
+                  class="select-shell__option ${performanceMode === value ? 'is-active' : ''}"
+                  data-action="set-settings-performance-mode"
+                  data-value="${value}"
+                >${label}</button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="queue-subtitle">${escapeHtml(getPerformanceSummary(performanceMode))}</div>
           </div>
         </div>
         <div class="settings-page__actions">
@@ -359,6 +385,12 @@ function getSaveLocationSummary(mode, customPath) {
   if (mode === 'pictures') return '系统图片目录'
   if (mode === 'desktop') return '桌面'
   return customPath || '未选择自定义目录'
+}
+
+function getPerformanceSummary(mode) {
+  if (mode === 'compatible') return '较低资源占用，适合老机器或后台并行工作。'
+  if (mode === 'max') return '优先处理速度，会更积极使用 CPU 与内存。'
+  return '默认推荐模式，兼顾速度、稳定性与资源占用。'
 }
 
 function formatPresetTime(value) {

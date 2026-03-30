@@ -16,6 +16,7 @@ const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
+const PERFORMANCE_MODES = new Set(['compatible', 'balanced', 'max'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
@@ -472,13 +473,14 @@ function getAssetProcessingConcurrency(payload) {
   if (payload.mode === 'preview-only') return 1
   if (isMergeTool(payload.toolId)) return 1
   if (payload.assets.length <= 1) return 1
+  const profile = getPerformanceProfile(getAppSettings().performanceMode)
   if (HEAVY_ASSET_TOOLS.has(payload.toolId)) {
-    return Math.min(payload.assets.length, Math.max(1, Math.min(6, Math.floor(CPU_COUNT / 4) || 1)))
+    return Math.min(payload.assets.length, profile.heavyConcurrency)
   }
   if (MEDIUM_ASSET_TOOLS.has(payload.toolId)) {
-    return Math.min(payload.assets.length, Math.max(1, Math.min(12, Math.floor(CPU_COUNT / 2) || 1)))
+    return Math.min(payload.assets.length, profile.mediumConcurrency)
   }
-  return Math.min(payload.assets.length, Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1)))
+  return Math.min(payload.assets.length, profile.defaultConcurrency)
 }
 
 function formatResultMessage(payload, processed, failed) {
@@ -526,10 +528,12 @@ function buildSettingsPayload(settings = {}) {
     : {}
   const saveLocationMode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
   const saveLocationCustomPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
+  const performanceMode = PERFORMANCE_MODES.has(settings?.performanceMode) ? settings.performanceMode : 'balanced'
   return {
     defaultSavePath: saveLocationMode === 'custom' ? saveLocationCustomPath : '',
     saveLocationMode,
     saveLocationCustomPath,
+    performanceMode,
     defaultPresetByTool,
   }
 }
@@ -845,14 +849,49 @@ function supportsLocalProcessing(toolId) {
   return ['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop', 'merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
 }
 
+function getPerformanceProfile(mode) {
+  const normalized = PERFORMANCE_MODES.has(mode) ? mode : 'balanced'
+  if (normalized === 'compatible') {
+    return {
+      mode: normalized,
+      heavyConcurrency: Math.max(1, Math.min(3, Math.floor(CPU_COUNT / 6) || 1)),
+      mediumConcurrency: Math.max(1, Math.min(6, Math.floor(CPU_COUNT / 3) || 1)),
+      defaultConcurrency: Math.max(1, Math.min(4, Math.floor(CPU_COUNT / 4) || 1)),
+      sharpConcurrency: Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.5) || 1)),
+      cacheMemory: Math.min(256, Math.max(96, CPU_COUNT * 8)),
+      cacheItems: Math.max(32, CPU_COUNT * 4),
+    }
+  }
+  if (normalized === 'max') {
+    return {
+      mode: normalized,
+      heavyConcurrency: Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1)),
+      mediumConcurrency: Math.max(1, Math.min(16, Math.floor(CPU_COUNT * 0.75) || 1)),
+      defaultConcurrency: Math.max(1, Math.min(12, Math.floor(CPU_COUNT / 2) || 1)),
+      sharpConcurrency: Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.9) || 1)),
+      cacheMemory: Math.min(768, Math.max(160, CPU_COUNT * 24)),
+      cacheItems: Math.max(96, CPU_COUNT * 12),
+    }
+  }
+  return {
+    mode: normalized,
+    heavyConcurrency: Math.max(1, Math.min(6, Math.floor(CPU_COUNT / 4) || 1)),
+    mediumConcurrency: Math.max(1, Math.min(12, Math.floor(CPU_COUNT / 2) || 1)),
+    defaultConcurrency: Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1)),
+    sharpConcurrency: Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.75) || 1)),
+    cacheMemory: Math.min(512, Math.max(128, CPU_COUNT * 16)),
+    cacheItems: Math.max(64, CPU_COUNT * 8),
+  }
+}
+
 function getSharp() {
   try {
     const sharp = require('sharp')
-    if (!getSharp.configured) {
-      const workerCount = Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.75) || 1))
-      sharp.concurrency(workerCount)
-      sharp.cache({ memory: Math.min(512, Math.max(128, CPU_COUNT * 16)), items: Math.max(64, CPU_COUNT * 8), files: 0 })
-      getSharp.configured = true
+    const profile = getPerformanceProfile(getAppSettings().performanceMode)
+    if (getSharp.configuredMode !== profile.mode) {
+      sharp.concurrency(profile.sharpConcurrency)
+      sharp.cache({ memory: profile.cacheMemory, items: profile.cacheItems, files: 0 })
+      getSharp.configuredMode = profile.mode
     }
     return sharp
   } catch {

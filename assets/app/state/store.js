@@ -13,6 +13,7 @@ const state = {
     defaultSavePath: '',
     saveLocationMode: 'source',
     saveLocationCustomPath: '',
+    performanceMode: 'balanced',
     defaultPresetByTool: {},
   },
   settingsDialog: null,
