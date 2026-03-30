@@ -3083,8 +3083,11 @@ body {
 }
 
 .preview-compare-stage__before .preview-compare-stage__image {
-  width: max-content;
-  min-width: 100%;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .preview-compare-stage__divider {
@@ -3141,6 +3144,19 @@ body {
   right: 9px;
   border-right: 2px solid rgba(255, 255, 255, 0.95);
   transform: translateY(-50%) rotate(45deg);
+}
+
+.preview-compare-stage__image--after {
+  position: relative;
+  z-index: 0;
+}
+
+.preview-compare-stage__before {
+  z-index: 1;
+}
+
+.preview-compare-stage__divider {
+  z-index: 2;
 }
 
 .field textarea {
