@@ -377,9 +377,6 @@ function renderPreviewModal(preview) {
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
         <div class="preview-modal__actions">
-          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
-            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
-          </button>
           <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
             <span class="material-symbols-outlined">close</span>
           </button>

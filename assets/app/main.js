@@ -744,18 +744,20 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     notify({ type: 'info', message: getPreviewMessage(asset) })
     return false
   }
+  const compareMode = getPreviewCompareMode(toolId)
   setPreviewModal({
     name: asset.name,
     url: asset.previewUrl,
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
     summary: getPreviewMessage(asset),
-    compareMode: getPreviewCompareMode(toolId),
+    compareMode,
     compareWidth: Number(asset.stagedWidth || asset.width) || 0,
     compareHeight: Number(asset.stagedHeight || asset.height) || 0,
     compareRatio: 0.5,
     compareZoom: 1,
     compareLabelsHidden: false,
+    expanded: compareMode !== 'split',
   })
   return true
 }
@@ -1818,7 +1820,7 @@ function attachGlobalEvents() {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      if (preview.expanded) {
+      if (preview.expanded && preview.compareMode === 'split') {
         togglePreviewCompareFullscreen()
       } else {
         closePreviewModal()
