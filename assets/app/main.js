@@ -936,10 +936,6 @@ function isMergePreviewTool(toolId) {
   return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
 }
 
-function notifyPreviewUnavailable(tool, asset) {
-  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
-}
-
 async function previewWithRunner(tool, asset) {
   const state = getState()
   const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
@@ -2121,7 +2117,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
   }
   if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
     if (isMergePreviewTool(tool.id)) {
-      notifyPreviewUnavailable(tool, asset)
+      notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
       return
     }
     notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })

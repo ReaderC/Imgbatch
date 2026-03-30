@@ -2477,11 +2477,6 @@ body {
   cursor: pointer;
 }
 
-.preview-modal__actions .preview-modal__close .material-symbols-outlined {
-  font-size: 22px;
-  line-height: 1;
-}
-
 .preview-modal__help {
   position: absolute;
   top: 64px;
