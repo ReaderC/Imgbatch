@@ -1722,12 +1722,6 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
-function getPdfMarginValue(margin, pageWidth) {
-  if (margin === '无') return 0
-  if (margin === 'wide') return Math.round(pageWidth * 0.08)
-  return Math.round(pageWidth * 0.04)
-}
-
 function getPdfMarginValueResolved(margin, pageWidth) {
   if (margin === 'none') return 0
   if (margin === 'wide') return Math.round(pageWidth * 0.08)
@@ -1740,24 +1734,26 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
   const prepared = []
   const background = hexToRgbaObject(payload.config.background, 1)
-  const fitWidth = payload.config.direction === 'vertical' ? payload.config.pageWidth : undefined
-  const fitHeight = payload.config.direction === 'horizontal' ? payload.config.pageWidth : undefined
+  const isVertical = payload.config.direction === 'vertical'
+  const isCentered = payload.config.align === 'center'
+  const fitWidth = isVertical ? payload.config.pageWidth : undefined
+  const fitHeight = isVertical ? undefined : payload.config.pageWidth
 
   for (const asset of payload.assets) {
     const { data, info } = await sharpLib(asset.sourcePath)
       .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background })
       .png()
       .toBuffer({ resolveWithObject: true })
-    prepared.push({ buffer: data, width: info.width || 1, height: info.height || 1, asset })
+    prepared.push({ buffer: data, width: info.width || 1, height: info.height || 1 })
   }
 
   if (!prepared.length) throw new Error('没有可拼接的图片')
 
   const spacing = payload.config.spacing
-  const totalWidth = payload.config.direction === 'vertical'
+  const totalWidth = isVertical
     ? Math.max(...prepared.map((item) => item.width))
     : prepared.reduce((sum, item) => sum + item.width, 0) + spacing * Math.max(0, prepared.length - 1)
-  const totalHeight = payload.config.direction === 'vertical'
+  const totalHeight = isVertical
     ? prepared.reduce((sum, item) => sum + item.height, 0) + spacing * Math.max(0, prepared.length - 1)
     : Math.max(...prepared.map((item) => item.height))
 
@@ -1766,14 +1762,14 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const composites = prepared.map((item) => {
     const composite = {
       input: item.buffer,
-      left: payload.config.direction === 'vertical' && payload.config.align === 'center'
+      left: isVertical && isCentered
         ? Math.max(0, Math.round((totalWidth - item.width) / 2))
         : cursorX,
-      top: payload.config.direction === 'horizontal' && payload.config.align === 'center'
+      top: !isVertical && isCentered
         ? Math.max(0, Math.round((totalHeight - item.height) / 2))
         : cursorY,
     }
-    if (payload.config.direction === 'vertical') {
+    if (isVertical) {
       cursorY += item.height + spacing
     } else {
       cursorX += item.width + spacing
