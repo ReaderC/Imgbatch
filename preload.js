@@ -1730,11 +1730,20 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
-  let transformed = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
-
-  if (!config.keepTransparency) {
-    transformed = transformed.flatten({ background: hexToRgbaObject(config.background, 1) })
+  const rounded = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
+  if (config.keepTransparency) {
+    return writeTransformedAsset(rounded, outputFormat, 90, outputPath)
   }
+
+  const roundedBuffer = await rounded.png().toBuffer()
+  const transformed = sharpLib({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: hexToRgbaObject(config.background, 1),
+    },
+  }).composite([{ input: roundedBuffer, left: 0, top: 0 }])
 
   return writeTransformedAsset(transformed, outputFormat, 90, outputPath)
 }
