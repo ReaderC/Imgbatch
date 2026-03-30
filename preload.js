@@ -1238,7 +1238,8 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   }
 
   if (config.mode !== 'quality' && sourceFormat === format) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
+    if (sourceInput) fs.writeFileSync(outputPath, sourceInput)
+    else fs.copyFileSync(asset.sourcePath, outputPath)
     return createOutputMeta(outputPath, {
       size: asset.sizeBytes,
       width: asset.width,
