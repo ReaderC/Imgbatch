@@ -3075,28 +3075,18 @@ body {
   pointer-events: none;
 }
 
-.preview-compare-stage__before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  overflow: hidden;
-  border-right: 1px solid rgba(255, 255, 255, 0.55);
-}
-
-.preview-compare-stage__before .preview-compare-stage__image {
+.preview-compare-stage__image--before {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  z-index: 1;
 }
 
-.preview-compare-stage__divider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  transform: translateX(-50%);
-  pointer-events: none;
+.preview-compare-stage__image--after {
+  position: relative;
+  z-index: 0;
 }
 
 .preview-compare-stage__divider::before {
@@ -3109,6 +3099,19 @@ body {
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 0 0 1px rgba(73, 86, 180, 0.14);
+}
+
+.preview-compare-stage__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.preview-compare-stage__divider {
+  z-index: 2;
 }
 
 .preview-compare-stage__handle {
@@ -3144,19 +3147,6 @@ body {
   right: 9px;
   border-right: 2px solid rgba(255, 255, 255, 0.95);
   transform: translateY(-50%) rotate(45deg);
-}
-
-.preview-compare-stage__image--after {
-  position: relative;
-  z-index: 0;
-}
-
-.preview-compare-stage__before {
-  z-index: 1;
-}
-
-.preview-compare-stage__divider {
-  z-index: 2;
 }
 
 .field textarea {

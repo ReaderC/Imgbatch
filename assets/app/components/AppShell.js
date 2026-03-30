@@ -358,9 +358,7 @@ function renderInteractivePreviewModal(preview) {
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
               <div class="preview-modal__body preview-modal__body--compare">
                 <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '处理后')}" draggable="false" />
-                <div class="preview-compare-stage__before" style="width:${comparePercent}">
-                  <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '原图')}" draggable="false" />
-                </div>
+                <img class="preview-compare-stage__image preview-compare-stage__image--before" src="${beforeUrl}" alt="${escapeHtml(preview.name || '原图')}" draggable="false" style="clip-path: inset(0 calc(100% - ${comparePercent}) 0 0);" />
                 <div class="preview-compare-stage__divider" style="left:${comparePercent}" data-action="drag-preview-compare">
                   <span class="preview-compare-stage__handle" aria-hidden="true"></span>
                 </div>
