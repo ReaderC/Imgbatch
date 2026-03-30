@@ -2121,7 +2121,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const repeat = payload.config.loop ? 0 : -1
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
-  const preparedFrames = await mapWithConcurrency(payload.assets, frameConcurrency, async (asset) => {
+  const prepareFrame = async (asset) => {
     const data = await sharpLib(asset.sourcePath)
       .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
       .ensureAlpha()
@@ -2130,7 +2130,10 @@ async function writeMergeGifAsset(sharpLib, payload) {
     const palette = quantize(data, 256)
     const index = applyPalette(data, palette)
     return { index, palette }
-  })
+  }
+  const preparedFrames = payload.assets.length === 1
+    ? [await prepareFrame(payload.assets[0])]
+    : await mapWithConcurrency(payload.assets, frameConcurrency, prepareFrame)
 
   for (const frame of preparedFrames) {
     encoder.writeFrame(frame.index, frameWidth, frameHeight, {
