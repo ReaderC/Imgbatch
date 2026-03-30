@@ -1686,16 +1686,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   let transformed = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
 
   if (!config.keepTransparency) {
-    const background = {
-      create: {
-        width,
-        height,
-        channels: 4,
-        background: hexToRgbaObject(config.background, 1),
-      },
-    }
-    const imageBuffer = await transformed.png().toBuffer()
-    transformed = sharpLib(background).composite([{ input: imageBuffer }])
+    transformed = transformed.flatten({ background: hexToRgbaObject(config.background, 1) })
   }
 
   return writeTransformedAsset(transformed, outputFormat, 90, outputPath)
