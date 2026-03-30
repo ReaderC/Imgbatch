@@ -1742,17 +1742,15 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
 async function writeMergeImageAsset(sharpLib, payload) {
   const format = 'png'
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
-  const prepared = []
   const background = hexToRgbaObject(payload.config.background, 1)
   const isVertical = payload.config.direction === 'vertical'
   const isCentered = payload.config.align === 'center'
   const preventUpscale = Boolean(payload.config.preventUpscale)
   const fitWidth = isVertical ? payload.config.pageWidth : undefined
   const fitHeight = isVertical ? undefined : payload.config.pageWidth
-  let contentWidth = 0
-  let contentHeight = 0
-
-  for (const asset of payload.assets) {
+  const profile = getPerformanceProfile(getAppSettings().performanceMode)
+  const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
+  const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     const { data, info } = await sharpLib(asset.sourcePath)
       .resize({
         width: fitWidth,
@@ -1763,9 +1761,17 @@ async function writeMergeImageAsset(sharpLib, payload) {
       })
       .png()
       .toBuffer({ resolveWithObject: true })
-    const width = info.width || 1
-    const height = info.height || 1
-    prepared.push({ buffer: data, width, height })
+    return {
+      buffer: data,
+      width: info.width || 1,
+      height: info.height || 1,
+    }
+  })
+  let contentWidth = 0
+  let contentHeight = 0
+
+  for (const item of prepared) {
+    const { width, height } = item
     if (isVertical) {
       contentWidth = Math.max(contentWidth, width)
       contentHeight += height
