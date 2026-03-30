@@ -1442,6 +1442,19 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'confirm-dangerous-resize-preview') {
+      const assetId = getState().confirmDialog?.assetId
+      closeConfirmDialog()
+      if (assetId) await previewAsset(assetId, true)
+      return
+    }
+
+    if (action === 'confirm-dangerous-resize-process') {
+      closeConfirmDialog()
+      await processCurrentTool(true)
+      return
+    }
+
     if (action === 'save-preset') {
       const toolId = target.dataset.toolId
       await savePreset(toolId, getState().configs[toolId])
@@ -1860,7 +1873,7 @@ function restoreMainWindowAfterDialog() {
   }, 120)
 }
 
-async function previewAsset(assetId) {
+async function previewAsset(assetId, skipResizePercentConfirm = false) {
   const state = getState()
   const asset = state.assets.find((item) => item.id === assetId)
   if (!asset) {
@@ -1882,6 +1895,13 @@ async function previewAsset(assetId) {
     notify({ type: 'info', message: previewValidationMessage })
     return
   }
+  if (
+    tool.id === 'resize'
+    && !skipResizePercentConfirm
+    && openResizePercentConfirm('preview', assetId)
+  ) {
+    return
+  }
   if (state.isProcessing) return
 
   try {
@@ -1891,7 +1911,7 @@ async function previewAsset(assetId) {
   }
 }
 
-async function processCurrentTool() {
+async function processCurrentTool(skipResizePercentConfirm = false) {
   const state = getState()
   const tool = TOOL_MAP[state.activeTool]
 
@@ -1908,6 +1928,13 @@ async function processCurrentTool() {
   const validationMessage = getToolInputValidationMessage(tool.id, state.configs[tool.id] || {})
   if (validationMessage) {
     notify({ type: 'info', message: validationMessage })
+    return
+  }
+  if (
+    tool.id === 'resize'
+    && !skipResizePercentConfirm
+    && openResizePercentConfirm('process')
+  ) {
     return
   }
 
@@ -2238,6 +2265,45 @@ function isPositiveInputValue(value) {
 function isNonNegativeInputValue(value) {
   const numeric = getNumericInputValue(value)
   return Number.isFinite(numeric) && numeric >= 0
+}
+
+function getMeasureUnitFromValue(value) {
+  return String(value ?? '').trim().endsWith('%') ? '%' : 'px'
+}
+
+function getDangerousResizePercentConfig(config = {}) {
+  const widthUnit = getMeasureUnitFromValue(config.width)
+  const heightUnit = getMeasureUnitFromValue(config.height)
+  const widthValue = getNumericInputValue(config.width)
+  const heightValue = getNumericInputValue(config.height)
+  const widthPercent = widthUnit === '%' && Number.isFinite(widthValue) ? widthValue : 0
+  const heightPercent = heightUnit === '%' && Number.isFinite(heightValue) ? heightValue : 0
+  const hasLargeSinglePercent = widthPercent >= 400 || heightPercent >= 400
+  const hasLargeCombinedPercent = widthPercent >= 200 && heightPercent >= 200
+  if (!hasLargeSinglePercent && !hasLargeCombinedPercent) return null
+  return {
+    widthPercent,
+    heightPercent,
+    summary: [
+      widthPercent ? `宽度 ${Math.round(widthPercent)}%` : '',
+      heightPercent ? `高度 ${Math.round(heightPercent)}%` : '',
+    ].filter(Boolean).join('，'),
+  }
+}
+
+function openResizePercentConfirm(mode, assetId = '') {
+  const config = getState().configs.resize || {}
+  const danger = getDangerousResizePercentConfig(config)
+  if (!danger) return false
+  openConfirmDialog({
+    title: '确认放大倍率',
+    subtitle: danger.summary || '百分比尺寸过大',
+    message: '当前修改尺寸使用了较大的百分比，可能导致图片被放大很多倍，处理明显变慢，严重时可能占满内存。请确认这不是误操作。',
+    confirmLabel: '我确定',
+    confirmAction: mode === 'preview' ? 'confirm-dangerous-resize-preview' : 'confirm-dangerous-resize-process',
+    assetId,
+  })
+  return true
 }
 
 function getToolInputValidationMessage(toolId, config = {}) {
