@@ -955,57 +955,12 @@ function isSingleAssetPreviewTool(toolId) {
   return canGenerateSingleAssetPreview(toolId)
 }
 
-function getPreviewStatusFallback(tool, asset) {
-  return getPreviewPlaceholderMessage(tool, asset)
-}
-
 function notifyPreviewReady(tool) {
   notify({ type: 'success', message: buildPreviewNotification(tool) })
 }
 
 function notifyPreviewUnavailable(tool, asset) {
-  notify({ type: 'info', message: getPreviewStatusFallback(tool, asset) })
-}
-
-async function previewSingleAsset(tool, asset) {
-  if (isAlreadyPreviewed(tool.id, asset) && openPreviewModal(asset)) {
-    return
-  }
-  if (!isSingleAssetPreviewTool(tool.id)) {
-    notifyPreviewUnavailable(tool, asset)
-    return
-  }
-  const previewedAsset = await runAssetPreview(tool, asset)
-  if (!openPreviewModal(previewedAsset)) {
-    throw new Error(getPreviewOpenError(tool))
-  }
-  if (shouldDirectPreviewTool(tool.id)) {
-    notifyPreviewReady(tool)
-  }
-}
-
-async function previewMergeAsset(tool, asset) {
-  notifyPreviewUnavailable(tool, asset)
-}
-
-async function previewToolAsset(tool, asset) {
-  if (isMergePreviewTool(tool.id)) {
-    await previewMergeAsset(tool, asset)
-    return
-  }
-  await previewSingleAsset(tool, asset)
-}
-
-function canPreviewTool(toolId) {
-  return isSingleAssetPreviewTool(toolId)
-}
-
-function getPreviewToolState(toolId, asset) {
-  return canOpenExistingPreview(toolId, asset)
-}
-
-async function executePreview(tool, asset) {
-  await previewToolAsset(tool, asset)
+  notify({ type: 'info', message: getPreviewPlaceholderMessage(tool, asset) })
 }
 
 function canOpenToolPreview(toolId, asset) {
@@ -1028,19 +983,6 @@ function shouldUsePreviewProcessing(toolId) {
   return shouldOpenRealPreview(toolId)
 }
 
-function notifyPreviewNotImplemented(tool, asset) {
-  notifyPreviewUnavailable(tool, asset)
-}
-
-async function runPreviewFlow(tool, asset) {
-  if (openExistingPreview(tool.id, asset)) return
-  if (!shouldUsePreviewProcessing(tool.id)) {
-    notifyPreviewNotImplemented(tool, asset)
-    return
-  }
-  await executePreview(tool, asset)
-}
-
 function shouldShowPreviewNotification(toolId) {
   return isDirectPreviewTool(toolId)
 }
@@ -1049,27 +991,6 @@ function maybeNotifyDirectPreviewReady(tool) {
   if (shouldShowPreviewNotification(tool.id)) {
     notifyPreviewReady(tool)
   }
-}
-
-async function handleToolPreview(tool, asset) {
-  await runPreviewFlow(tool, asset)
-}
-
-function canHandlePreview(tool, asset) {
-  return !!tool && !!asset
-}
-
-async function openToolPreview(tool, asset) {
-  if (!canHandlePreview(tool, asset)) return
-  await handleToolPreview(tool, asset)
-}
-
-function getPreviewTool(toolId) {
-  return TOOL_MAP[toolId]
-}
-
-function resolvePreviewToolByState() {
-  return getPreviewTool(getState().activeTool)
 }
 
 function getPreviewAssetLabel(asset) {
@@ -1092,34 +1013,8 @@ function previewToolSupportsProcessing(toolId) {
   return shouldUsePreviewProcessing(toolId)
 }
 
-function getPreviewToolCandidate() {
-  return resolvePreviewToolByState()
-}
-
-async function processPreviewAsset(asset) {
-  const tool = getPreviewToolCandidate()
-  if (!tool || !asset) return
-  if (shouldUseUnsupportedPreview(tool.id)) {
-    notifyUnsupportedPreview(tool, asset)
-    return
-  }
-  await openToolPreview(tool, asset)
-}
-
-function getToolPreviewRunner(toolId) {
-  return getSingleAssetPreviewRunner(toolId)
-}
-
-function getPreviewExecutionMode(toolId) {
-  return getPreviewMode(toolId)
-}
-
 async function executePreviewRunner(toolId, config, assets, destinationPath) {
-  return getToolPreviewRunner(toolId)(toolId, config, assets, destinationPath, getPreviewExecutionMode(toolId))
-}
-
-function getPreviewedAsset(toolId, assetId, asset, result) {
-  return getPreviewAssetAfterRun(assetId, toolId, asset, result)
+  return getPreviewRunner(toolId)(toolId, config, assets, destinationPath)
 }
 
 async function previewWithRunner(tool, asset) {
@@ -1131,7 +1026,7 @@ async function previewWithRunner(tool, asset) {
   if (!(result?.ok || result?.partial)) {
     throw new Error(result?.message || '预览失败。')
   }
-  const previewedAsset = getPreviewedAsset(tool.id, asset.id, asset, result)
+  const previewedAsset = getPreviewAssetAfterRun(asset.id, tool.id, asset, result)
   if (!openPreviewModal(previewedAsset)) {
     throw new Error(getPreviewOpenError(tool))
   }
@@ -1151,20 +1046,6 @@ async function previewAssetWithTool(tool, asset) {
   await previewWithRunner(tool, asset)
 }
 
-function isPreviewSupported(toolId) {
-  return previewToolSupportsProcessing(toolId)
-}
-
-function getPreviewFlowTool() {
-  return resolvePreviewToolByState()
-}
-
-async function performAssetPreview(asset) {
-  const tool = getPreviewFlowTool()
-  if (!tool || !asset) return
-  await previewAssetWithTool(tool, asset)
-}
-
 function createToolPreviewFailure(error, tool) {
   return error?.message || `${tool.label} 预览失败。`
 }
@@ -1173,37 +1054,6 @@ function notifyToolPreviewFailure(error, tool) {
   notify({ type: 'error', message: createToolPreviewFailure(error, tool) })
 }
 
-function previewResultExists(toolId, asset) {
-  return canOpenExistingPreview(toolId, asset)
-}
-
-function shouldPreviewAssetDirectly(toolId) {
-  return isPreviewSupported(toolId)
-}
-
-function previewAssetUnavailable(tool, asset) {
-  notifyPreviewUnavailable(tool, asset)
-}
-
-function getPreviewToolFromState() {
-  return resolvePreviewToolByState()
-}
-
-function getPreviewAssetFromState(assetId) {
-  return getState().assets.find((item) => item.id === assetId)
-}
-
-async function triggerAssetPreview(assetId) {
-  const asset = getPreviewAssetFromState(assetId)
-  const tool = getPreviewToolFromState()
-  if (!asset || !tool) return
-  if (previewResultExists(tool.id, asset) && openPreviewModal(asset)) return
-  if (!shouldPreviewAssetDirectly(tool.id)) {
-    previewAssetUnavailable(tool, asset)
-    return
-  }
-  await previewAssetWithTool(tool, asset)
-}
 
 function getProcessSuccessMessage(result, tool) {
   if (result?.message) return result.message

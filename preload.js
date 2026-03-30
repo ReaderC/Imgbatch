@@ -1021,6 +1021,9 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 
   const qualitySteps = [90, 80, 70, 60, 50, 40, 30, 20, 10]
   const targetBytes = config.targetSizeKb * 1024
+  if (originalSizeBytes && targetBytes >= originalSizeBytes) {
+    throw new Error('目标大小未小于原图，已跳过该文件')
+  }
   let chosenBuffer = null
 
   for (const quality of qualitySteps) {
