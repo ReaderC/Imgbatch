@@ -2230,13 +2230,13 @@ function createProcessedOutput(asset, result, payload) {
 }
 
 async function createMergeOutput(outputPath, payload) {
-  const meta = await readOutputMeta(outputPath)
+  const stat = fs.statSync(outputPath)
   return mergeResultToProcessed({
     assetId: payload.assets[0]?.id || payload.toolId,
     name: path.basename(outputPath),
     outputPath,
-    outputName: meta.outputName,
-    outputSizeBytes: meta.outputSizeBytes,
+    outputName: path.basename(outputPath),
+    outputSizeBytes: stat.size,
     width: 0,
     height: 0,
   })
