@@ -788,10 +788,6 @@ function notifyPreviewUnavailable(tool, asset) {
   notify({ type: 'info', message: `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}` })
 }
 
-function notifyUnsupportedPreview(tool, asset) {
-  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
-}
-
 async function previewWithRunner(tool, asset) {
   const state = getState()
   const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
@@ -819,7 +815,7 @@ async function previewAssetWithTool(tool, asset) {
       notifyPreviewUnavailable(tool, asset)
       return
     }
-    notifyUnsupportedPreview(tool, asset)
+    notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
     return
   }
   await previewWithRunner(tool, asset)

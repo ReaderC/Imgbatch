@@ -981,12 +981,6 @@ function createTransformer(sharpLib, asset) {
   return createTransformerFromInput(sharpLib, asset.sourcePath, asset.ext)
 }
 
-function resolveResizeTargetSize(asset, config) {
-  const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
-  const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
-  return { width, height }
-}
-
 function withOutputFormat(transformer, format, quality) {
   if (format === 'jpeg') return transformer.jpeg({ quality, mozjpeg: true })
   if (format === 'png') {
@@ -1210,7 +1204,8 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
-  const { width, height } = resolveResizeTargetSize(asset, config)
+  const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
+  const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
   const sourceFormat = normalizeImageFormatName(asset.ext)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
