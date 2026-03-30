@@ -595,14 +595,6 @@ function createPreviewPayload(toolId, config, assets, destinationPath, mode = 'p
   }
 }
 
-function createDirectPayload(toolId, config, assets, destinationPath) {
-  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
-  return {
-    ...payload,
-    mode: 'direct',
-  }
-}
-
 function createSavePayload(toolId, stagedItems = [], destinationPath) {
   const output = resolveDestinationPath(destinationPath, [], getAppSettings())
   const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
@@ -1792,49 +1784,6 @@ async function writeMergeImageAsset(sharpLib, payload) {
     },
   }).composite(composites).png().toFile(outputPath)
 
-  return outputPath
-}
-
-async function writeMergePdfAsset(payload) {
-  const pdfLib = getPdfLib()
-  if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
-  const sharpLib = getSharp()
-  const outputPath = path.join(payload.destinationPath, 'merged.pdf')
-  const pdf = await pdfLib.PDFDocument.create()
-  const background = hexToRgbaObject(payload.config.background || '#ffffff', 1)
-  const backgroundColor = pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255)
-
-  for (const asset of payload.assets) {
-    const imageBytes = fs.readFileSync(asset.sourcePath)
-    const embedded = await embedPdfImage(pdf, sharpLib, imageBytes, asset.ext)
-
-    const pageSize = payload.config.pageSize === '与图片一致'
-      ? [embedded.width, embedded.height]
-      : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
-    const page = pdf.addPage(pageSize)
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: pageSize[0],
-      height: pageSize[1],
-      color: backgroundColor,
-    })
-    const margin = getPdfMarginValueResolved(payload.config.margin, pageSize[0])
-    const drawableWidth = pageSize[0] - margin * 2
-    const drawableHeight = pageSize[1] - margin * 2
-    const scale = Math.min(drawableWidth / embedded.width, drawableHeight / embedded.height)
-    const width = embedded.width * scale
-    const height = embedded.height * scale
-    page.drawImage(embedded, {
-      x: (pageSize[0] - width) / 2,
-      y: (pageSize[1] - height) / 2,
-      width,
-      height,
-    })
-  }
-
-  const bytes = await pdf.save()
-  fs.writeFileSync(outputPath, bytes)
   return outputPath
 }
 
