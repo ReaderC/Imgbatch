@@ -1586,9 +1586,13 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('watermark', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
   const sourceFormat = normalizeImageFormatName(asset.ext)
+  const watermarkOpacity = Number(config.opacity) || 0
 
-  if (sourceFormat === format && Number(config.opacity) <= 0) {
-    return copyAssetToOutput(asset, outputPath)
+  if (watermarkOpacity <= 0) {
+    if (sourceFormat === format) {
+      return copyAssetToOutput(asset, outputPath)
+    }
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath)
   }
 
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
