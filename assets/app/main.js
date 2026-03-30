@@ -1147,59 +1147,6 @@ function getDefaultSavePathLabel() {
   return getState().settings.defaultSavePath || '未设置'
 }
 
-function resolvePreviewAsset(assetId) {
-  return getState().assets.find((item) => item.id === assetId)
-}
-
-function ensurePreviewableTool(tool) {
-  return !!tool && isPreviewableTool(tool.id)
-}
-
-function getSavePathSummary() {
-  return getCurrentDestinationPath() || '将按源目录推导输出位置'
-}
-
-function previewGenericAsset(tool, asset) {
-  void previewAsset(asset.id)
-}
-
-function resolvePreviewAction(tool, asset) {
-  if (!tool || !asset) return
-  if (ensurePreviewableTool(tool)) {
-    previewGenericAsset(tool, asset)
-    return
-  }
-  notifyPreviewUnavailable(tool, asset)
-}
-
-function notifyMissingAsset() {
-  notify({ type: 'error', message: '未找到要预览的图片。' })
-}
-
-function notifyNoImages() {
-  notify({ type: 'info', message: '请先导入图片，再开始处理。' })
-}
-
-function notifyProcessingError(error) {
-  notify({ type: 'error', message: error?.message || '批处理触发失败。' })
-}
-
-function notifyImportError(error) {
-  notify({ type: 'error', message: error?.message || '导入失败。' })
-}
-
-function notifyLaunchError(error) {
-  notify({ type: 'error', message: error?.message || '读取启动图片失败。' })
-}
-
-function isProcessingLocked() {
-  return getState().isProcessing
-}
-
-function setProcessing(value) {
-  setState({ isProcessing: value })
-}
-
 function maybeHandleSaveActions(action, target) {
   if (shouldUseSingleSaveAction(action)) {
     void saveAssetResult(target.dataset.assetId)
@@ -1215,12 +1162,18 @@ function maybeHandleSaveActions(action, target) {
 function maybeHandlePreviewAction(action, target) {
   if (!shouldPreviewAssetAction(action)) return false
   const tool = getSelectedTool()
-  const asset = resolvePreviewAsset(target.dataset.assetId)
+  const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
   if (!asset) {
-    notifyMissingAsset()
+    notify({ type: 'error', message: '未找到要预览的图片。' })
     return true
   }
-  resolvePreviewAction(tool, asset)
+  if (tool && isPreviewableTool(tool.id)) {
+    void previewAsset(asset.id)
+    return true
+  }
+  if (tool) {
+    notifyPreviewUnavailable(tool, asset)
+  }
   return true
 }
 
@@ -1377,22 +1330,6 @@ function getRunSummary(tool) {
   return getConfiguredToolSummary(tool)
 }
 
-function shouldPreviewSaveTool(tool) {
-  return ensurePreviewableTool(tool)
-}
-
-function createSettingsStatePatch(settings) {
-  return settings
-}
-
-function applySettingsState(settings) {
-  updateSettings(createSettingsStatePatch(settings))
-}
-
-function resolveSelectedAsset(assetId) {
-  return resolvePreviewAsset(assetId)
-}
-
 function hasStagedOutput(asset) {
   return !!asset?.stagedOutputPath
 }
@@ -1461,19 +1398,7 @@ function shouldUsePreviewSummary(asset) {
 }
 
 function updateCurrentSettings(settings) {
-  applySettingsState(settings)
-}
-
-function getBulkSaveTargetItems() {
-  return getBulkSaveItems()
-}
-
-function maybeProcessUtilityTool(tool) {
-  return processUtilityTool(tool?.id)
-}
-
-function shouldProcessPreviewSave(tool) {
-  return shouldPreviewSaveTool(tool)
+  updateSettings(settings)
 }
 
 function getToolExecutionIntro(tool, assets) {
@@ -1481,7 +1406,7 @@ function getToolExecutionIntro(tool, assets) {
 }
 
 function shouldNotifyToolExecutionIntro(tool) {
-  return shouldProcessPreviewSave(tool)
+  return !!tool && isPreviewableTool(tool.id)
 }
 
 function shouldSaveStagedItem(item) {
@@ -1493,7 +1418,7 @@ function filterSavableItems(items) {
 }
 
 function getSavableBulkItems() {
-  return filterSavableItems(getBulkSaveTargetItems())
+  return filterSavableItems(getBulkSaveItems())
 }
 
 function createSettingsSuccessMessage(settings) {
@@ -1602,10 +1527,6 @@ function maybeHandleAssetPreview(asset) {
   return true
 }
 
-function getAssetById(assetId) {
-  return resolveSelectedAsset(assetId)
-}
-
 function maybeHandleSingleAssetSave(asset) {
   if (!maybeHandleSingleSaveState(asset)) return false
   void saveAssetResult(asset.id)
@@ -1620,10 +1541,6 @@ function maybeHandleSaveAllAction() {
 
 function shouldShowPreviewPath(asset) {
   return !!getPreviewOutputPath(asset)
-}
-
-function shouldShowCurrentSavePathHint(tool) {
-  return shouldPreviewSaveTool(tool)
 }
 
 function notifyPreviewNotification(asset) {
@@ -1643,10 +1560,6 @@ function maybeHandlePreviewOnly(asset) {
 
 function canUsePromptApi() {
   return typeof window?.prompt === 'function'
-}
-
-function getPreviewSavePathMessage() {
-  return `保存目录：${getSavePathSummary()}`
 }
 
 function getToolProcessingSummary(tool, assets) {
