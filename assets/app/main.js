@@ -636,23 +636,14 @@ function openColorPickerZoom(target) {
   if (!nativeInput.showPicker) nativeInput.click()
 }
 
-function handleColorMagnifierAction(target) {
-  openColorPickerZoom(target)
-}
-
-
 function shouldShowResultActions() {
   const activeRun = getState().activeRun
   const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
   return !!hasBatchRun || !!getState().resultView?.items?.length
 }
 
-function clearAllResultOverlays() {
-  closePreviewModal()
-}
-
 function resetActiveResultUi() {
-  clearAllResultOverlays()
+  closePreviewModal()
   setResultView(null)
   setState({ activeRun: null })
 }
@@ -1410,7 +1401,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-color-picker') {
-      handleColorMagnifierAction(target)
+      openColorPickerZoom(target)
       return
     }
 
