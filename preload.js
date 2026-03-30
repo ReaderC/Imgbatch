@@ -361,6 +361,26 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
 }
 
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
+  if (format === 'bmp') {
+    const buffer = await createBmpBuffer(transformer)
+    fs.writeFileSync(outputPath, buffer)
+    return createOutputMeta(outputPath, { size: buffer.length }, fallback)
+  }
+
+  if (format === 'ico') {
+    const { data, info } = await transformer
+      .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
+      .png({ compressionLevel: 9, effort: 10 })
+      .toBuffer({ resolveWithObject: true })
+    const buffer = createIcoBuffer(data, info.width || 256, info.height || 256)
+    fs.writeFileSync(outputPath, buffer)
+    return createOutputMeta(outputPath, {
+      size: buffer.length,
+      width: info.width || fallback.width || 256,
+      height: info.height || fallback.height || 256,
+    }, fallback)
+  }
+
   const info = await withOutputFormat(transformer, format, quality).toFile(outputPath)
   return createOutputMeta(outputPath, info, fallback)
 }
@@ -1181,22 +1201,6 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let transformed = applyColorProfile(createTransformer(sharpLib, asset), config.colorProfile)
   transformed = applyTransparencyPolicy(transformed, format, config.keepTransparency)
-
-  if (format === 'bmp') {
-    const buffer = await createBmpBuffer(transformed)
-    fs.writeFileSync(outputPath, buffer)
-    return { outputPath, outputSizeBytes: buffer.length }
-  }
-
-  if (format === 'ico') {
-    const { data, info } = await transformed
-      .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
-      .png()
-      .toBuffer({ resolveWithObject: true })
-    const buffer = createIcoBuffer(data, info.width || 256, info.height || 256)
-    fs.writeFileSync(outputPath, buffer)
-    return { outputPath, outputSizeBytes: buffer.length }
-  }
 
   return writeTransformedAsset(transformed, format, Math.round(config.quality), outputPath, {
     width: asset.width,
