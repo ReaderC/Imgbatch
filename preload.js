@@ -1005,8 +1005,12 @@ function getOutputName(asset, toolId, format) {
   return `${parsed.name}-${toolId}.${mapOutputExtension(format)}`
 }
 
+function createTransformerFromInput(sharpLib, input, ext = '') {
+  return sharpLib(input, { animated: String(ext).toLowerCase() === 'gif' })
+}
+
 function createTransformer(sharpLib, asset) {
-  return sharpLib(asset.sourcePath, { animated: String(asset.ext).toLowerCase() === 'gif' })
+  return createTransformerFromInput(sharpLib, asset.sourcePath, asset.ext)
 }
 
 function applyResizeOperation(transformer, asset, config) {
@@ -1120,6 +1124,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
   const targetBytes = config.targetSizeKb * 1024
+  const maxQuality = 90
 
   const ensureCompressedOutputIsSmaller = (outputSizeBytes) => {
     if (!originalSizeBytes || outputSizeBytes < originalSizeBytes) return
@@ -1144,11 +1149,12 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     return warning ? { ...output, warning } : output
   }
 
+  const sourceInput = fs.readFileSync(asset.sourcePath)
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
-    const normalizedQuality = Math.max(1, Math.min(90, Math.round(quality)))
+    const normalizedQuality = Math.max(1, Math.min(maxQuality, Math.round(quality)))
     if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
-    const buffer = await withOutputFormat(createTransformer(sharpLib, asset), format, normalizedQuality).toBuffer()
+    const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, sourceInput, asset.ext), format, normalizedQuality).toBuffer()
     cache.set(normalizedQuality, buffer)
     return buffer
   }
@@ -1180,10 +1186,10 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 
       chosenBuffer = bestBuffer
     }
-  } else if (estimatedQuality < qualitySteps[0]) {
+  } else if (estimatedQuality < maxQuality) {
     let bestBuffer = estimatedBuffer
     let left = estimatedQuality + 1
-    let right = qualitySteps[0]
+    let right = maxQuality
 
     while (left <= right) {
       const mid = Math.floor((left + right) / 2)
