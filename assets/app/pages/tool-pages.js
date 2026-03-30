@@ -15,7 +15,14 @@ const PDF_MARGIN_OPTIONS = [
   ['normal', '普通'],
   ['wide', '宽'],
 ]
-const PDF_PAGE_SIZE_OPTIONS = ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Original']
+const PDF_PAGE_SIZE_OPTIONS = [
+  ['A3', 'A3'],
+  ['A4', 'A4'],
+  ['A5', 'A5'],
+  ['Letter', '信纸'],
+  ['Legal', '法律纸'],
+  ['Original', '原始尺寸'],
+]
 const RESIZE_PRESETS = [
   { label: '1080×1080', width: '1080px', height: '1080px' },
   { label: '1080×1350', width: '1080px', height: '1350px' },
@@ -31,7 +38,16 @@ const WATERMARK_POSITIONS = [
   'middle-left', 'center', 'middle-right',
   'bottom-left', 'bottom-center', 'bottom-right',
 ]
-const CROP_RATIOS = ['Original', '1:1', '4:3', '3:2', '16:9', '9:16', '21:9', 'Custom']
+const CROP_RATIOS = [
+  ['Original', '原始比例'],
+  ['1:1', '1:1'],
+  ['4:3', '4:3'],
+  ['3:2', '3:2'],
+  ['16:9', '16:9'],
+  ['9:16', '9:16'],
+  ['21:9', '21:9'],
+  ['Custom', '自定义'],
+]
 
 export const MANUAL_CROP_RATIOS = [
   { label: '1:1', value: '1:1' },
