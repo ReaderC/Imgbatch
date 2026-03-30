@@ -1908,6 +1908,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       .toBuffer({ resolveWithObject: true })
     const scaledBuffer = scaled.data
     const scaledHeight = Math.max(1, scaled.info.height || Math.round(sourceHeight * (scaledWidth / sourceWidth)))
+    const scaledImage = sharpLib(scaledBuffer)
 
     if (scaledHeight <= drawableHeight) {
       const paged = await pdf.embedPng(scaledBuffer)
@@ -1931,7 +1932,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let offsetY = 0
     while (offsetY < scaledHeight) {
       const sliceHeight = Math.min(pageSliceHeight, scaledHeight - offsetY)
-      const sliceBuffer = await sharpLib(scaledBuffer)
+      const sliceBuffer = await scaledImage.clone()
         .extract({ left: 0, top: offsetY, width: scaledWidth, height: sliceHeight })
         .png()
         .toBuffer()
