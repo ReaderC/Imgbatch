@@ -57,7 +57,11 @@ function summarizeConfig(toolId, config = {}) {
   if (toolId === 'format') return `输出 ${config.targetFormat}${config.mode === 'quality' ? ` / 质量 ${config.quality}%` : ' / 仅转换'}`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
-  if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, config.unit || 'px')}`
+  if (toolId === 'corners') {
+    const radius = String(config.radius ?? '').trim()
+    const unit = config.unit || 'px'
+    return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`}`
+  }
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
   if (toolId === 'crop') return `裁剪 ${config.ratio}`
   if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
@@ -117,13 +121,6 @@ function normalizeMeasure(value, fallbackValue, fallbackUnit = 'px') {
     unit,
     raw: raw || `${fallbackValue}${unit}`,
   }
-}
-
-function formatMeasureValue(value, fallbackUnit = 'px') {
-  const raw = String(value ?? '').trim()
-  if (!raw) return `0${fallbackUnit}`
-  if (raw.endsWith('px') || raw.endsWith('%')) return raw
-  return `${raw}${fallbackUnit}`
 }
 
 function normalizeRunAssets(assets = []) {
@@ -824,10 +821,6 @@ function extractLaunchItems(value, visited = new Set()) {
   if (typeof value.sourcePath === 'string') return [value.sourcePath]
 
   return Object.values(value).flatMap((item) => extractLaunchItems(item, visited))
-}
-
-function supportsLocalProcessing(toolId) {
-  return ['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop', 'merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
 }
 
 function getPerformanceProfile(mode) {
@@ -2843,7 +2836,7 @@ const toolsApi = {
     const payload = createPreparedRunPayload(toolId, config, assets, destinationPath)
     const hostApi = getHostApi()
 
-    if (supportsLocalProcessing(payload.toolId)) {
+    if (['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop', 'merge-image', 'merge-pdf', 'merge-gif'].includes(payload.toolId)) {
       return executeLocalTool(payload)
     }
 
