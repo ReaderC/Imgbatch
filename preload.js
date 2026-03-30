@@ -1297,10 +1297,9 @@ function buildTextWatermarkSvg(asset, config) {
   `)
 }
 
-async function createTiledWatermarkBuffer(sharpLib, input, density) {
-  const meta = await sharpLib(input).metadata()
-  const width = Math.max(1, meta.width || 1)
-  const height = Math.max(1, meta.height || 1)
+async function createTiledWatermarkBuffer(sharpLib, input, density, sizeHint = null) {
+  const width = Math.max(1, sizeHint?.width || 1)
+  const height = Math.max(1, sizeHint?.height || 1)
   const clampedDensity = clampNumber(density, 20, 250, 100)
   const densityProgress = (clampedDensity - 20) / 230
   const gapRatio = 0.42 - densityProgress * 0.405
@@ -1373,7 +1372,7 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
 
   if (config.tiled) {
     overlay = {
-      input: await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density),
+      input: await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay),
       width: 0,
       height: 0,
     }
