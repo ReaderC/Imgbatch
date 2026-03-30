@@ -18,7 +18,8 @@ const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
-const MAX_ASSET_CONCURRENCY = Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1))
+const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
+const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -469,8 +470,15 @@ async function mapWithConcurrency(items, concurrency, iteratee) {
 
 function getAssetProcessingConcurrency(payload) {
   if (payload.mode === 'preview-only') return 1
+  if (isMergeTool(payload.toolId)) return 1
   if (payload.assets.length <= 1) return 1
-  return Math.min(MAX_ASSET_CONCURRENCY, payload.assets.length)
+  if (HEAVY_ASSET_TOOLS.has(payload.toolId)) {
+    return Math.min(payload.assets.length, Math.max(1, Math.min(6, Math.floor(CPU_COUNT / 4) || 1)))
+  }
+  if (MEDIUM_ASSET_TOOLS.has(payload.toolId)) {
+    return Math.min(payload.assets.length, Math.max(1, Math.min(12, Math.floor(CPU_COUNT / 2) || 1)))
+  }
+  return Math.min(payload.assets.length, Math.max(1, Math.min(8, Math.floor(CPU_COUNT / 3) || 1)))
 }
 
 function formatResultMessage(payload, processed, failed) {
@@ -841,9 +849,9 @@ function getSharp() {
   try {
     const sharp = require('sharp')
     if (!getSharp.configured) {
-      const workerCount = Math.max(1, Math.floor(CPU_COUNT / MAX_ASSET_CONCURRENCY))
+      const workerCount = Math.max(1, Math.min(CPU_COUNT, Math.floor(CPU_COUNT * 0.75) || 1))
       sharp.concurrency(workerCount)
-      sharp.cache({ memory: 128, items: Math.max(32, MAX_ASSET_CONCURRENCY * 16), files: 0 })
+      sharp.cache({ memory: Math.min(512, Math.max(128, CPU_COUNT * 16)), items: Math.max(64, CPU_COUNT * 8), files: 0 })
       getSharp.configured = true
     }
     return sharp
