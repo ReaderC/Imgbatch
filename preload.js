@@ -1864,6 +1864,19 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
+    const sourceFormat = normalizeImageFormatName(asset.ext)
+    const sourceWidth = Math.max(0, Number(asset.width) || 0)
+    const sourceHeight = Math.max(0, Number(asset.height) || 0)
+    const keepsOriginalSize = isVertical
+      ? ((preventUpscale && sourceWidth <= payload.config.pageWidth) || sourceWidth === payload.config.pageWidth)
+      : ((preventUpscale && sourceHeight <= payload.config.pageWidth) || sourceHeight === payload.config.pageWidth)
+    if (sourceFormat === format && sourceWidth > 0 && sourceHeight > 0 && keepsOriginalSize) {
+      return {
+        input: asset.sourcePath,
+        width: sourceWidth,
+        height: sourceHeight,
+      }
+    }
     const { data, info } = await sharpLib(asset.sourcePath)
       .resize({
         width: fitWidth,
@@ -1875,7 +1888,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       .png()
       .toBuffer({ resolveWithObject: true })
     return {
-      buffer: data,
+      input: data,
       width: info.width || 1,
       height: info.height || 1,
     }
@@ -1905,7 +1918,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   let cursorY = 0
   const composites = prepared.map((item) => {
     const composite = {
-      input: item.buffer,
+      input: item.input,
       left: isVertical && isCentered
         ? Math.max(0, Math.round((totalWidth - item.width) / 2))
         : cursorX,
