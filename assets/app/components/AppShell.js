@@ -386,16 +386,16 @@ function renderPreviewModal(preview) {
         </div>
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
-            <div class="preview-modal__compare-head preview-modal__compare-head--split ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
-              <span class="preview-compare-card__label">\u539f\u56fe</span>
+            <div class="preview-modal__body preview-modal__body--split">
+              <img src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" />
+              <button class="preview-modal__split-label preview-modal__split-label--left ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u539f\u56fe</button>
             </div>
-            <div class="preview-modal__body preview-modal__body--split"><img src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" /></div>
           </section>
           <section class="preview-compare-card">
-            <div class="preview-modal__compare-head preview-modal__compare-head--split ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
-              <span class="preview-compare-card__label">\u5904\u7406\u540e</span>
+            <div class="preview-modal__body preview-modal__body--split">
+              <img src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" />
+              <button class="preview-modal__split-label preview-modal__split-label--right ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u5904\u7406\u540e</button>
             </div>
-            <div class="preview-modal__body preview-modal__body--split"><img src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" /></div>
           </section>
         </div>
       </div>
