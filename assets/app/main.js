@@ -1027,15 +1027,6 @@ function toggleConfigSelect(target) {
   target.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
-function getDestinationSummaryMessage() {
-  const defaultSavePath = getState().settings.defaultSavePath || ''
-  return defaultSavePath ? `默认保存路径：${defaultSavePath}` : '未设置默认保存路径，将按源目录生成输出目录。'
-}
-
-function notifyDestinationSummary() {
-  notify({ type: 'info', message: getDestinationSummaryMessage() })
-}
-
 function hasStagedOutput(asset) {
   return !!asset?.stagedOutputPath
 }
@@ -1069,22 +1060,6 @@ function handleSavableAssetState(asset) {
 
 function getPreviewSaveAssets() {
   return getState().assets.filter((asset) => asset.previewStatus === 'staged' && asset.stagedOutputPath)
-}
-
-function getBulkSaveItems() {
-  return buildStagedItems(getPreviewSaveAssets())
-}
-
-function getPreviewStatus(asset) {
-  return asset?.previewStatus || 'idle'
-}
-
-function shouldUsePreviewSummary(asset) {
-  return ['staged', 'saved', 'stale'].includes(getPreviewStatus(asset))
-}
-
-function getSavableBulkItems() {
-  return getBulkSaveItems().filter((item) => !!item?.stagedPath)
 }
 
 function getPreviewOutputPath(asset) {
