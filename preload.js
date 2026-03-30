@@ -1870,7 +1870,14 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     const ensureEmbedded = async () => {
       if (embedded) return embedded
-      embedded = await embedPdfImage(pdf, sharpLib, imageBytes, asset.ext)
+      const format = String(asset.ext || '').toLowerCase()
+      if (format === 'png' || format === 'webp' || format === 'avif' || format === 'gif') {
+        embedded = await pdf.embedPng(imageBytes)
+      } else if (format === 'jpg' || format === 'jpeg') {
+        embedded = await pdf.embedJpg(imageBytes)
+      } else {
+        embedded = await pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
+      }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
       return embedded
@@ -1974,17 +1981,6 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     outputPath,
     outputSizeBytes: bytes.length,
   }
-}
-
-async function embedPdfImage(pdf, sharpLib, imageBytes, ext) {
-  const format = String(ext || '').toLowerCase()
-  if (format === 'png' || format === 'webp' || format === 'avif' || format === 'gif') {
-    return pdf.embedPng(imageBytes)
-  }
-  if (format === 'jpg' || format === 'jpeg') {
-    return pdf.embedJpg(imageBytes)
-  }
-  return pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
 }
 
 async function writeMergeGifAsset(sharpLib, payload) {
