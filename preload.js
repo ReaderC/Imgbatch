@@ -1750,12 +1750,13 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const format = 'png'
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
   const prepared = []
+  const background = hexToRgbaObject(payload.config.background, 1)
+  const fitWidth = payload.config.direction === 'vertical' ? payload.config.pageWidth : undefined
+  const fitHeight = payload.config.direction === 'horizontal' ? payload.config.pageWidth : undefined
 
   for (const asset of payload.assets) {
-    const fitWidth = payload.config.direction === 'vertical' ? payload.config.pageWidth : undefined
-    const fitHeight = payload.config.direction === 'horizontal' ? payload.config.pageWidth : undefined
     const { data, info } = await sharpLib(asset.sourcePath)
-      .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background: hexToRgbaObject(payload.config.background, 1) })
+      .resize({ width: fitWidth, height: fitHeight, fit: 'contain', background })
       .png()
       .toBuffer({ resolveWithObject: true })
     prepared.push({ buffer: data, width: info.width || 1, height: info.height || 1, asset })
@@ -1796,7 +1797,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       width: totalWidth,
       height: totalHeight,
       channels: 4,
-      background: hexToRgbaObject(payload.config.background, 1),
+      background,
     },
   }).composite(composites).png().toFile(outputPath)
 
