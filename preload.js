@@ -1195,8 +1195,8 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     chosenBuffer = bestBuffer
   }
 
-  fs.writeFileSync(outputPath, chosenBuffer)
   ensureTargetCompressionFits(chosenBuffer.length)
+  fs.writeFileSync(outputPath, chosenBuffer)
   ensureCompressedOutputIsSmaller(chosenBuffer.length)
   return {
     outputPath,
