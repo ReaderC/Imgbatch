@@ -1825,6 +1825,27 @@ function clearQueueSortIndicators() {
     .forEach((item) => item.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after'))
 }
 
+function getAdjacentSortableItem(item, direction) {
+  let current = item
+  while (current) {
+    current = direction === 'next' ? current.nextElementSibling : current.previousElementSibling
+    if (!current) return null
+    if (current.matches?.('.queue-item--sortable[data-asset-id]')) return current
+  }
+  return null
+}
+
+function markQueueSortInsertionGap(item, placement) {
+  if (!item) return
+  if (placement === 'after') {
+    item.classList.add('is-drop-after')
+    getAdjacentSortableItem(item, 'next')?.classList.add('is-drop-before')
+    return
+  }
+  item.classList.add('is-drop-before')
+  getAdjacentSortableItem(item, 'prev')?.classList.add('is-drop-after')
+}
+
 function beginQueueSortDrag(item, event) {
   const tool = TOOL_MAP[getState().activeTool]
   if (tool?.mode !== 'sort') return
@@ -1845,7 +1866,7 @@ function updateQueueSortDropIndicator(item, clientY) {
   }
   const rect = item.getBoundingClientRect()
   const placement = clientY > rect.top + rect.height / 2 ? 'after' : 'before'
-  item.classList.add(placement === 'after' ? 'is-drop-after' : 'is-drop-before')
+  markQueueSortInsertionGap(item, placement)
 }
 
 function finishQueueSortDrop(item, clientY) {
