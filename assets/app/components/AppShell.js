@@ -307,7 +307,7 @@ function renderPreviewModal(preview) {
   const beforeUrl = preview.beforeUrl || preview.url
   const afterUrl = preview.afterUrl || preview.url
   return `
-    <div class="preview-modal" data-preview-overlay="true">
+    <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare">
         <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
           <span class="material-symbols-outlined">close</span>
