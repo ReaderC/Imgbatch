@@ -1956,6 +1956,9 @@ async function embedPdfImage(pdf, sharpLib, imageBytes, ext) {
   if (format === 'png' || format === 'webp' || format === 'avif' || format === 'gif') {
     return pdf.embedPng(imageBytes)
   }
+  if (format === 'jpg' || format === 'jpeg') {
+    return pdf.embedJpg(imageBytes)
+  }
   return pdf.embedJpg(await sharpLib(imageBytes).jpeg().toBuffer())
 }
 
