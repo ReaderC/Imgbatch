@@ -1473,14 +1473,18 @@ async function revealPath(targetPath) {
   const resolved = resolvePathForReveal(normalizedTarget)
   if (!resolved) return false
   try {
-    const targetExists = normalizedTarget ? fs.existsSync(normalizedTarget) : false
-    const targetStat = targetExists ? fs.statSync(normalizedTarget) : null
-    if (typeof shell.showItemInFolder === 'function' && targetExists && !targetStat?.isDirectory()) {
+    let targetStat = null
+    try {
+      targetStat = normalizedTarget ? fs.statSync(normalizedTarget) : null
+    } catch {
+      targetStat = null
+    }
+    if (typeof shell.showItemInFolder === 'function' && targetStat && !targetStat.isDirectory()) {
       shell.showItemInFolder(normalizedTarget)
       return true
     }
     const directoryEntry = path.join(resolved, '.')
-    if (typeof shell.showItemInFolder === 'function' && fs.existsSync(resolved)) {
+    if (typeof shell.showItemInFolder === 'function') {
       shell.showItemInFolder(directoryEntry)
       return true
     }
