@@ -2088,7 +2088,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
       failed: failedCount,
     })
   }
-  const outcomes = await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), async (asset) => {
+  const executeAsset = async (asset) => {
     if (!isProcessableAsset(asset)) {
       failedCount += 1
       emitAssetProgress()
@@ -2118,7 +2118,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
         failed: { assetId: asset.id, name: asset.name, error: error?.message || '处理失败' },
       }
     }
-  })
+  }
+  const outcomes = totalCount === 1
+    ? [await executeAsset(payload.assets[0])]
+    : await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), executeAsset)
 
   const processed = []
   const failed = []
