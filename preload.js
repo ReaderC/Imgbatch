@@ -1219,6 +1219,12 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight) {
     return copyAssetToOutput(asset, outputPath)
   }
+  if (sourceWidth > 0 && sourceHeight > 0 && width === sourceWidth && height === sourceHeight) {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+      width: sourceWidth,
+      height: sourceHeight,
+    })
+  }
 
   const resized = createTransformer(sharpLib, asset).resize({
     width,
@@ -1611,6 +1617,12 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
     return copyAssetToOutput(asset, outputPath)
   }
+  if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+      width: asset.width,
+      height: asset.height,
+    })
+  }
 
   const solidBackground = hexToRgbaObject(config.background, 1)
   let transformed = createTransformer(sharpLib, asset)
@@ -1688,6 +1700,9 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   if (radius <= 0 && normalizeImageFormatName(asset.ext) === outputFormat) {
     return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
   }
+  if (radius <= 0) {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, 90, outputPath, { width, height })
+  }
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
@@ -1708,6 +1723,12 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
 
   if (noPadding && sourceFormat === format) {
     return copyAssetToOutput(asset, outputPath)
+  }
+  if (noPadding) {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+      width: asset.width,
+      height: asset.height,
+    })
   }
 
   const background = hexToRgbaObject(config.color, config.opacity / 100)
@@ -1765,6 +1786,16 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.width === sourceWidth
     && box.height === sourceHeight) {
     return copyAssetToOutput(asset, outputPath)
+  }
+  if (sourceWidth > 0 && sourceHeight > 0
+    && box.left === 0
+    && box.top === 0
+    && box.width === sourceWidth
+    && box.height === sourceHeight) {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+      width: sourceWidth,
+      height: sourceHeight,
+    })
   }
 
   const transformed = createTransformer(sharpLib, asset).extract(box)
