@@ -4774,32 +4774,32 @@ body {
 }
 
 .app-shell {
-  grid-template-rows: 64px minmax(0, 1fr) !important;
+  grid-template-rows: 56px minmax(0, 1fr) !important;
 }
 
 .topbar {
-  min-height: 64px !important;
-  padding: 0 20px 0 24px !important;
+  min-height: 56px !important;
+  padding: 0 16px 0 20px !important;
   background: #F0F4F8 !important;
   border-bottom: 0 !important;
   backdrop-filter: none !important;
 }
 
 .topbar__title {
-  font-size: 18px;
-}
-
-.topbar .sidebar__brand-subtitle {
-  font-size: 12px;
+  font-size: 17px;
 }
 
 .topbar__actions {
-  right: 20px !important;
+  right: 16px !important;
 }
 
 .topbar__meta > .primary-button,
 .topbar__meta > .secondary-button {
-  min-height: 38px !important;
+  min-height: 34px !important;
+}
+
+.topbar__heading {
+  gap: 10px !important;
 }
 
 .panel-footer-actions {
