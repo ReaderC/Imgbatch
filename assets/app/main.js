@@ -940,6 +940,19 @@ function getProcessSuccessMessage(result, tool) {
   return isPreviewSaveTool(tool.id) ? `已生成 ${tool.label} 结果，确认后可保存。` : `已触发 ${tool.label} 批处理。`
 }
 
+function getCompressionOversizeWarning(result, tool) {
+  if (tool?.id !== 'compression') return ''
+  if (result?.config?.mode !== 'target') return ''
+  const targetKb = Number(result?.config?.targetSizeKb) || 0
+  const targetBytes = targetKb > 0 ? targetKb * 1024 : 0
+  if (!targetBytes) return ''
+  const oversizeItems = (result?.processed || []).filter((item) => Number(item?.outputSizeBytes) > targetBytes)
+  if (!oversizeItems.length) return ''
+  const worstBytes = Math.max(...oversizeItems.map((item) => Number(item?.outputSizeBytes) || 0))
+  if (worstBytes <= targetBytes * 1.5) return ''
+  return `按体积存在明显偏离：目标 ${targetKb} KB，最大结果 ${formatBytes(worstBytes)}。极端图片无法保证严格命中目标体积。`
+}
+
 function getProcessFallbackMessage(tool, assetCount) {
   const summary = describeToolConfig(tool.id, getState().configs[tool.id])
   return `处理占位：${tool.label} · ${assetCount} 张 · ${summary}`
@@ -1874,6 +1887,10 @@ async function processCurrentTool() {
 
     if (result?.ok || result?.partial) {
       notify({ type: result.partial ? 'info' : 'success', message: getProcessSuccessMessage(result, tool) })
+      const compressionWarning = getCompressionOversizeWarning(result, tool)
+      if (compressionWarning) {
+        notify({ type: 'info', message: compressionWarning })
+      }
       return
     }
 
