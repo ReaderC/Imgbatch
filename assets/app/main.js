@@ -647,18 +647,6 @@ function shouldShowResultActions() {
   return !!hasBatchRun || !!getState().resultView?.items?.length
 }
 
-function ensureResultViewVisible() {
-  if (getState().resultView?.items?.length) return true
-  refreshResultView()
-  return !!getState().resultView?.items?.length
-}
-
-function showResultComparison() {
-  const visible = ensureResultViewVisible()
-  if (visible) closePreviewModal()
-  return visible
-}
-
 function clearAllResultOverlays() {
   closePreviewModal()
 }
@@ -709,7 +697,9 @@ async function replaceAssetOriginal(assetId) {
 
 async function openCurrentResultsDirectory() {
   if (!hasVisibleResultComparison()) {
-    const visible = showResultComparison()
+    refreshResultView()
+    const visible = !!getState().resultView?.items?.length
+    if (visible) closePreviewModal()
     if (visible) return
   }
   const asset = getState().assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item))
