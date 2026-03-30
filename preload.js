@@ -1605,15 +1605,15 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   }
 
   const solidBackground = hexToRgbaObject(config.background, 1)
-  let transformed = null
+  let transformed = createTransformer(sharpLib, asset)
 
   if (config.autoCrop) {
-    transformed = createTransformer(sharpLib, asset)
+    transformed = transformed
       .ensureAlpha()
       .rotate(config.angle, { background: TRANSPARENT_BG })
       .trim()
   } else {
-    transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: solidBackground })
+    transformed = transformed.rotate(config.angle, { background: solidBackground })
   }
 
   if (config.keepAspectRatio && asset.width && asset.height) {
