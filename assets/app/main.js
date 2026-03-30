@@ -1123,14 +1123,6 @@ function processUtilityTool(toolId) {
   return createSettingsToolResult()
 }
 
-function resolveToolById(toolId) {
-  return TOOL_MAP[toolId]
-}
-
-function getSelectedTool() {
-  return resolveToolById(getState().activeTool)
-}
-
 function getConfiguredToolSummary(tool) {
   return describeToolConfig(tool.id, getState().configs[tool.id])
 }
@@ -1161,7 +1153,7 @@ function maybeHandleSaveActions(action, target) {
 
 function maybeHandlePreviewAction(action, target) {
   if (!shouldPreviewAssetAction(action)) return false
-  const tool = getSelectedTool()
+  const tool = TOOL_MAP[getState().activeTool]
   const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
   if (!asset) {
     notify({ type: 'error', message: '未找到要预览的图片。' })
@@ -1283,20 +1275,9 @@ function toggleConfigSelect(target) {
   target.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
-function getSettingsState() {
-  return getState().settings
-}
-
-function getSettingsDefaultSavePath() {
-  return getSettingsState().defaultSavePath || ''
-}
-
-function hasDefaultSavePath() {
-  return !!getSettingsDefaultSavePath()
-}
-
 function getDestinationSummaryMessage() {
-  return hasDefaultSavePath() ? `默认保存路径：${getSettingsDefaultSavePath()}` : '未设置默认保存路径，将按源目录生成输出目录。'
+  const defaultSavePath = getState().settings.defaultSavePath || ''
+  return defaultSavePath ? `默认保存路径：${defaultSavePath}` : '未设置默认保存路径，将按源目录生成输出目录。'
 }
 
 function notifyDestinationSummary() {
@@ -1320,14 +1301,6 @@ function shouldShortCircuitClickAction(action, target, event) {
     || maybeHandlePresetAction(action, target)
     || maybeHandleToolActions(action, target, event)
     || maybeHandleConfigActions(action, target)
-}
-
-function getPreviewStatusMessage(asset) {
-  return getPreviewMessage(asset)
-}
-
-function getRunSummary(tool) {
-  return getConfiguredToolSummary(tool)
 }
 
 function hasStagedOutput(asset) {
@@ -1378,7 +1351,7 @@ function getProcessedAssetCount(assets) {
 }
 
 function createSettingsInfoMessage() {
-  return `默认保存路径：${getSettingsDefaultSavePath() || '未设置'}`
+  return `默认保存路径：${getState().settings.defaultSavePath || '未设置'}`
 }
 
 function getSelectionSummary(assets) {
@@ -1386,7 +1359,7 @@ function getSelectionSummary(assets) {
 }
 
 function createProcessMessage(tool, assets) {
-  return `${normalizeToolLabel(tool)} · ${getSelectionSummary(assets)} · ${getRunSummary(tool)}`
+  return `${normalizeToolLabel(tool)} · ${getSelectionSummary(assets)} · ${getConfiguredToolSummary(tool)}`
 }
 
 function getPreviewStatus(asset) {
@@ -1438,7 +1411,7 @@ function createSettingsPayload(value) {
 }
 
 function getSettingsPromptDefaultValue() {
-  return getSettingsDefaultSavePath() || getState().destinationPath || ''
+  return getState().settings.defaultSavePath || getState().destinationPath || ''
 }
 
 function shouldProcessClickAction(action, target, event) {
@@ -1462,7 +1435,7 @@ function openSettingsPrompt() {
 }
 
 function getPreviewSummary(asset) {
-  return getPreviewStatusMessage(asset)
+  return getPreviewMessage(asset)
 }
 
 function maybeShowPreviewSummary(asset) {
