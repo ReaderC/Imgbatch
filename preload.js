@@ -362,6 +362,16 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
   }
 }
 
+function copyAssetToOutput(asset, outputPath, sourceInput = null, fallback = asset) {
+  if (sourceInput) fs.writeFileSync(outputPath, sourceInput)
+  else fs.copyFileSync(asset.sourcePath, outputPath)
+  return createOutputMeta(outputPath, {
+    size: asset.sizeBytes,
+    width: asset.width,
+    height: asset.height,
+  }, fallback)
+}
+
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
@@ -1242,13 +1252,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   }
 
   if (config.mode !== 'quality' && sourceFormat === format) {
-    if (sourceInput) fs.writeFileSync(outputPath, sourceInput)
-    else fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath, sourceInput)
   }
 
   const baseTransformer = sourceInput
@@ -1273,12 +1277,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
   if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: sourceWidth,
-      height: sourceHeight,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   const resized = applyResizeOperation(createTransformer(sharpLib, asset), asset, config)
@@ -1619,12 +1618,7 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.ext)
 
   if (sourceFormat === format && Number(config.opacity) <= 0) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
@@ -1649,12 +1643,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
 
   if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   const solidBackground = getRotateBackground(config.background)
@@ -1691,12 +1680,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.ext)
 
   if (sourceFormat === format && !config.horizontal && !config.vertical && !config.autoCropTransparent) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   let transformed = createTransformer(sharpLib, asset)
@@ -1731,12 +1715,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
 
   if (radius <= 0 && normalizeImageFormatName(asset.ext) === outputFormat) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width,
-      height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
   }
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
@@ -1766,12 +1745,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
   if (noPadding && sourceFormat === format) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   const background = hexToRgbaObject(config.color, config.opacity / 100)
@@ -1828,12 +1802,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.top === 0
     && box.width === sourceWidth
     && box.height === sourceHeight) {
-    fs.copyFileSync(asset.sourcePath, outputPath)
-    return createOutputMeta(outputPath, {
-      size: asset.sizeBytes,
-      width: sourceWidth,
-      height: sourceHeight,
-    }, asset)
+    return copyAssetToOutput(asset, outputPath)
   }
 
   const transformed = createTransformer(sharpLib, asset).extract(box)
