@@ -5,6 +5,7 @@ import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPrese
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const SETTINGS_TOOL_ID = 'settings'
 
 const app = document.getElementById('app')
@@ -1853,6 +1854,11 @@ async function previewAsset(assetId) {
     notifyPreviewUnavailable(tool, asset)
     return
   }
+  const previewValidationMessage = getToolInputValidationMessage(tool.id, state.configs[tool.id] || {})
+  if (previewValidationMessage) {
+    notify({ type: 'info', message: previewValidationMessage })
+    return
+  }
   if (state.isProcessing) return
 
   try {
@@ -1876,12 +1882,10 @@ async function processCurrentTool() {
     return
   }
 
-  if (tool.id === 'compression' && state.configs.compression?.mode === 'target') {
-    const rawTargetSize = String(state.configs.compression?.targetSizeKb ?? '').trim()
-    if (!rawTargetSize) {
-      notify({ type: 'info', message: '请输入目标大小 KB 后再开始处理。' })
-      return
-    }
+  const validationMessage = getToolInputValidationMessage(tool.id, state.configs[tool.id] || {})
+  if (validationMessage) {
+    notify({ type: 'info', message: validationMessage })
+    return
   }
 
   if (state.isProcessing) return
@@ -2192,6 +2196,91 @@ function parseValue(value) {
     return Number(value)
   }
   return value
+}
+
+function getNumericInputValue(value) {
+  if (typeof value === 'number') return value
+  const raw = String(value ?? '').trim()
+  if (!raw) return Number.NaN
+  const normalized = raw.replace(/(px|%)$/i, '').trim()
+  if (!normalized) return Number.NaN
+  return Number(normalized)
+}
+
+function isPositiveInputValue(value) {
+  const numeric = getNumericInputValue(value)
+  return Number.isFinite(numeric) && numeric > 0
+}
+
+function isNonNegativeInputValue(value) {
+  const numeric = getNumericInputValue(value)
+  return Number.isFinite(numeric) && numeric >= 0
+}
+
+function getToolInputValidationMessage(toolId, config = {}) {
+  if (toolId === 'compression') {
+    if (config.mode === 'target') {
+      return isPositiveInputValue(config.targetSizeKb) ? '' : '目标大小 KB 必须大于 0 后才能开始处理。'
+    }
+    return isPositiveInputValue(config.quality) ? '' : '压缩质量必须大于 0 后才能开始处理。'
+  }
+
+  if (toolId === 'format') {
+    if (config.mode !== 'quality') return ''
+    const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
+    if (!FORMAT_QUALITY_SUPPORTED.has(targetFormat)) return ''
+    return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
+  }
+
+  if (toolId === 'resize') {
+    if (!isPositiveInputValue(config.width)) return '宽度必须大于 0 后才能开始处理。'
+    if (!isPositiveInputValue(config.height)) return '高度必须大于 0 后才能开始处理。'
+    return ''
+  }
+
+  if (toolId === 'watermark') {
+    if (!isPositiveInputValue(config.opacity)) return '水印透明度必须大于 0 后才能开始处理。'
+    if (!isNonNegativeInputValue(config.margin)) return '水印边距不能小于 0。'
+    if (config.tiled && !isPositiveInputValue(config.density)) return '平铺密度必须大于 0 后才能开始处理。'
+    if (config.type === 'image') {
+      return String(config.imagePath || '').trim() ? '' : '请选择图片水印文件后再开始处理。'
+    }
+    if (!String(config.text || '').trim()) return '请输入水印文本后再开始处理。'
+    return isPositiveInputValue(config.fontSize) ? '' : '字体大小必须大于 0 后才能开始处理。'
+  }
+
+  if (toolId === 'corners') {
+    return isPositiveInputValue(config.radius) ? '' : '圆角半径必须大于 0 后才能开始处理。'
+  }
+
+  if (toolId === 'padding') {
+    const edges = [config.top, config.right, config.bottom, config.left]
+    if (edges.some((value) => !isNonNegativeInputValue(value))) return '留白边距不能小于 0。'
+    return edges.some((value) => getNumericInputValue(value) > 0) ? '' : '请至少设置一个大于 0 的留白边距后再开始处理。'
+  }
+
+  if (toolId === 'crop') {
+    if (config.ratio === 'Custom' || config.useCustomRatio) {
+      if (!isPositiveInputValue(config.customRatioX)) return '自定义比例宽度必须大于 0。'
+      if (!isPositiveInputValue(config.customRatioY)) return '自定义比例高度必须大于 0。'
+    }
+    if (!isPositiveInputValue(config.width)) return '裁剪宽度必须大于 0 后才能开始处理。'
+    if (!isPositiveInputValue(config.height)) return '裁剪高度必须大于 0 后才能开始处理。'
+    return ''
+  }
+
+  if (toolId === 'merge-image') {
+    if (!isPositiveInputValue(config.pageWidth)) return '页面宽度必须大于 0 后才能开始处理。'
+    return isNonNegativeInputValue(config.spacing) ? '' : '图片间距不能小于 0。'
+  }
+
+  if (toolId === 'merge-gif') {
+    if (!isPositiveInputValue(config.width)) return 'GIF 宽度必须大于 0 后才能开始处理。'
+    if (!isPositiveInputValue(config.height)) return 'GIF 高度必须大于 0 后才能开始处理。'
+    return isPositiveInputValue(config.interval) ? '' : '间隔秒数必须大于 0 后才能开始处理。'
+  }
+
+  return ''
 }
 
 function describeToolConfig(toolId, config) {
