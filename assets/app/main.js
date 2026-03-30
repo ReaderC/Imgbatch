@@ -1780,12 +1780,17 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('keydown', (event) => {
-    if (!getState().previewModal?.url) return
+    const preview = getState().previewModal
+    if (!preview?.url) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      closePreviewModal()
+      if (preview.expanded) {
+        togglePreviewCompareFullscreen()
+      } else {
+        closePreviewModal()
+      }
       return
     }
     if (event.key === 'ArrowLeft') {
