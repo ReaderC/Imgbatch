@@ -621,12 +621,6 @@ function openColorPickerZoom(target) {
   if (!nativeInput.showPicker) nativeInput.click()
 }
 
-function shouldShowResultActions() {
-  const activeRun = getState().activeRun
-  const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
-  return !!hasBatchRun || !!getState().resultView?.items?.length
-}
-
 function resetActiveResultUi() {
   closePreviewModal()
   setResultView(null)
@@ -638,7 +632,9 @@ function injectResultToolbar() {
   if (!shell) return
   const existing = shell.querySelector('.result-toolbar')
   if (existing) existing.remove()
-  if (!shouldShowResultActions()) return
+  const activeRun = getState().activeRun
+  const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
+  if (!(hasBatchRun || getState().resultView?.items?.length)) return
   shell.insertAdjacentHTML('beforeend', `
     <div class="result-toolbar">
       <button class="secondary-button" data-action="continue-processing">继续处理</button>
