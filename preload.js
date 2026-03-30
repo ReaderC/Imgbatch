@@ -1634,6 +1634,18 @@ function mapFlipOutputFormat(asset, config) {
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
+
+  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+    }, asset)
+  }
+
   const solidBackground = getRotateBackground(config.background)
   let transformed = null
 
@@ -1665,6 +1677,17 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const format = mapFlipOutputFormat(asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+
+  if (sourceFormat === format && !config.horizontal && !config.vertical && !config.autoCropTransparent) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+    }, asset)
+  }
+
   let transformed = createTransformer(sharpLib, asset)
 
   if (config.horizontal) transformed = transformed.flop()
@@ -1695,6 +1718,16 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const height = asset.height || metadata?.height || 1
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
+
+  if (radius <= 0 && normalizeImageFormatName(asset.ext) === outputFormat) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width,
+      height,
+    }, asset)
+  }
+
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
   let transformed = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
