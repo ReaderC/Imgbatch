@@ -736,16 +736,12 @@ function getPreviewMessage(asset) {
   return `这张图片还没预览：${truncate(asset.name, 20)} · ${describeToolConfig(toolId, getState().configs[toolId])}`
 }
 
-function getPreviewCompareMode(toolId) {
-  return RESHAPED_PREVIEW_TOOLS.has(toolId) ? 'split' : 'slider'
-}
-
 function openPreviewModal(asset, toolId = getState().activeTool) {
   if (!asset?.previewUrl) {
     notify({ type: 'info', message: getPreviewMessage(asset) })
     return false
   }
-  const compareMode = getPreviewCompareMode(toolId)
+  const compareMode = RESHAPED_PREVIEW_TOOLS.has(toolId) ? 'split' : 'slider'
   setPreviewModal({
     name: asset.name,
     url: asset.previewUrl,
@@ -917,21 +913,6 @@ function shouldReusePreviewResult(toolId, asset) {
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
 }
 
-function mapPreviewResultToAsset(asset, processed, toolId) {
-  if (!processed) return asset
-  return {
-    ...asset,
-    previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
-    stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
-    stagedWidth: processed.width || asset.stagedWidth || 0,
-    stagedHeight: processed.height || asset.stagedHeight || 0,
-    previewStatus: processed.previewStatus || (isPreviewSaveTool(toolId) ? 'previewed' : 'saved'),
-    stagedToolId: toolId,
-    savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
-    outputPath: processed.outputPath || asset.outputPath || '',
-  }
-}
-
 function isMergePreviewTool(toolId) {
   return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
 }
@@ -947,7 +928,21 @@ async function previewWithRunner(tool, asset) {
   }
   const nextAsset = getState().assets.find((item) => item.id === asset.id)
   const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
-  const previewedAsset = nextAsset?.previewUrl ? nextAsset : mapPreviewResultToAsset(asset, processed, tool.id)
+  const previewedAsset = nextAsset?.previewUrl
+    ? nextAsset
+    : processed
+      ? {
+          ...asset,
+          previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
+          stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
+          stagedWidth: processed.width || asset.stagedWidth || 0,
+          stagedHeight: processed.height || asset.stagedHeight || 0,
+          previewStatus: processed.previewStatus || (isPreviewSaveTool(tool.id) ? 'previewed' : 'saved'),
+          stagedToolId: tool.id,
+          savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
+          outputPath: processed.outputPath || asset.outputPath || '',
+        }
+      : asset
   if (!openPreviewModal(previewedAsset, tool.id)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
   }
