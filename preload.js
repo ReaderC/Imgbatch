@@ -404,24 +404,6 @@ function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
   return path.join(finalDirectory, outputName)
 }
 
-async function savePreviewResult(baseDestinationPath, runFolderName, stagedItem) {
-  const sourcePath = sanitizeText(stagedItem?.stagedPath)
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
-    throw new Error('预览结果不存在，无法保存')
-  }
-
-  const targetPath = resolveSaveTargetPath(baseDestinationPath, runFolderName, stagedItem.outputName || path.basename(sourcePath))
-  if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
-    fs.copyFileSync(sourcePath, targetPath)
-  }
-
-  return createOutputMeta(targetPath, {
-    size: stagedItem?.outputSizeBytes,
-    width: stagedItem?.width,
-    height: stagedItem?.height,
-  }, stagedItem)
-}
-
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
@@ -538,6 +520,7 @@ function formatResultMessage(payload, processed, failed) {
 function createResultEnvelope(payload, processed, failed) {
   const ok = processed.length > 0 && failed.length === 0
   const partial = processed.length > 0 && failed.length > 0
+  const message = formatResultMessage(payload, processed, failed)
   return {
     ok,
     partial,
@@ -545,7 +528,7 @@ function createResultEnvelope(payload, processed, failed) {
     processed,
     failed,
     elapsedMs: Number(payload?.elapsedMs) || 0,
-    message: formatResultMessage(payload, processed, failed),
+    message,
   }
 }
 
@@ -562,27 +545,6 @@ function buildSettingsPayload(settings = {}) {
     saveLocationCustomPath,
     performanceMode,
     defaultPresetByTool,
-  }
-}
-
-function createPreviewPayload(toolId, config, assets, destinationPath, mode = 'preview-save') {
-  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
-  if (mode !== 'preview-only') {
-    return {
-      ...payload,
-      mode,
-    }
-  }
-
-  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
-  const runFolderName = buildRunFolderName(payload.createdAt, toolId)
-  const runPath = path.join(basePreviewPath, runFolderName)
-  return {
-    ...payload,
-    destinationPath: runPath,
-    baseDestinationPath: basePreviewPath,
-    runFolderName,
-    mode,
   }
 }
 
@@ -2400,7 +2362,19 @@ async function executeSaveFlow(payload) {
 
   for (const item of payload.stagedItems) {
     try {
-      const saved = await savePreviewResult(payload.destinationPath, payload.runFolderName, item)
+      const sourcePath = sanitizeText(item?.stagedPath)
+      if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('预览结果不存在，无法保存')
+      }
+      const targetPath = resolveSaveTargetPath(payload.destinationPath, payload.runFolderName, item.outputName || path.basename(sourcePath))
+      if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+        fs.copyFileSync(sourcePath, targetPath)
+      }
+      const saved = createOutputMeta(targetPath, {
+        size: item?.outputSizeBytes,
+        width: item?.width,
+        height: item?.height,
+      }, item)
       processed.push({
         assetId: item.assetId,
         name: item.name,
@@ -2422,7 +2396,23 @@ async function executeSaveFlow(payload) {
 }
 
 async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
-  return executeLocalTool(createPreviewPayload(toolId, config, assets, destinationPath, mode))
+  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+  if (mode !== 'preview-only') {
+    return executeLocalTool({
+      ...payload,
+      mode,
+    })
+  }
+
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const runFolderName = buildRunFolderName(payload.createdAt, toolId)
+  return executeLocalTool({
+    ...payload,
+    destinationPath: path.join(basePreviewPath, runFolderName),
+    baseDestinationPath: basePreviewPath,
+    runFolderName,
+    mode,
+  })
 }
 
 async function saveStagedResult(toolId, stagedItem, destinationPath) {
