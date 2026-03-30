@@ -762,6 +762,12 @@ function setPreviewCompareRatio(ratio) {
   setPreviewModal({ ...preview, compareRatio: nextRatio })
 }
 
+function nudgePreviewCompareRatio(delta) {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  setPreviewCompareRatio((Number(preview.compareRatio) || 0.5) + delta)
+}
+
 function updatePreviewCompareRatioFromEvent(event) {
   const stage = document.querySelector('.preview-compare-stage[data-role="preview-compare-stage"]')
   if (!stage) return
@@ -1206,8 +1212,9 @@ function attachGlobalEvents() {
   document.addEventListener('click', async (event) => {
     const modalRoot = event.target.closest('.preview-modal')
     if (modalRoot) {
-      const clickedInsideDialog = !!event.target.closest('.preview-modal__dialog')
-      if (!clickedInsideDialog && event.target === modalRoot) {
+      const clickedCompareBody = !!event.target.closest('.preview-modal__body--compare')
+      const clickedCloseButton = !!event.target.closest('.preview-modal__close')
+      if (!clickedCompareBody && !clickedCloseButton) {
         closePreviewModal()
         return
       }
@@ -1739,6 +1746,28 @@ function attachGlobalEvents() {
     endPreviewCompareDrag()
     endRotateDrag()
     endManualCropDrag()
+  })
+
+  document.addEventListener('dblclick', (event) => {
+    if (!event.target.closest('.preview-modal__body--compare')) return
+    setPreviewCompareRatio(0.5)
+  })
+
+  document.addEventListener('keydown', (event) => {
+    if (!getState().previewModal?.url) return
+    if (event.key === 'Escape') {
+      closePreviewModal()
+      return
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      nudgePreviewCompareRatio(event.shiftKey ? -0.1 : -0.02)
+      return
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      nudgePreviewCompareRatio(event.shiftKey ? 0.1 : 0.02)
+    }
   })
 
   window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)

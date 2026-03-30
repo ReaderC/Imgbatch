@@ -3081,7 +3081,7 @@ body {
   touch-action: none;
   cursor: ew-resize;
   height: 100%;
-  border-radius: 26px;
+  border-radius: 0;
   background: transparent;
 }
 
@@ -4275,7 +4275,7 @@ body {
 }
 
 .preview-modal {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .preview-modal__dialog,
