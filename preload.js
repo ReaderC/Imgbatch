@@ -391,7 +391,7 @@ function estimateCompressionQuality(originalSizeBytes, targetBytes) {
   if (!originalSizeBytes || !targetBytes) return 75
   const ratio = Math.max(0.02, Math.min(0.98, targetBytes / originalSizeBytes))
   const estimated = Math.round(12 + (78 * Math.sqrt(ratio)))
-  return Math.max(10, Math.min(90, estimated))
+  return Math.max(1, Math.min(90, estimated))
 }
 
 function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
