@@ -1035,33 +1035,6 @@ function canSaveAsset(asset) {
   return hasStagedOutput(asset) && asset.previewStatus === 'staged'
 }
 
-function notifyStalePreview() {
-  notify({ type: 'info', message: '当前预览已过期，请重新处理后再保存。' })
-}
-
-function notifyNoPreviewToSave() {
-  notify({ type: 'info', message: '当前没有可保存的处理结果。' })
-}
-
-function ensureSavableAsset(asset) {
-  if (!asset) return 'missing'
-  if (asset.previewStatus === 'stale') return 'stale'
-  if (!canSaveAsset(asset)) return 'empty'
-  return 'ready'
-}
-
-function handleSavableAssetState(asset) {
-  const state = ensureSavableAsset(asset)
-  if (state === 'stale') notifyStalePreview()
-  if (state === 'empty') notifyNoPreviewToSave()
-  if (state === 'missing') notifyNoPreviewToSave()
-  return state === 'ready'
-}
-
-function getPreviewSaveAssets() {
-  return getState().assets.filter((asset) => asset.previewStatus === 'staged' && asset.stagedOutputPath)
-}
-
 function getPreviewOutputPath(asset) {
   return asset.stagedOutputPath || ''
 }
