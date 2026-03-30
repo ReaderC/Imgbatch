@@ -2504,6 +2504,36 @@ body {
   line-height: 1;
 }
 
+.preview-modal__help {
+  position: absolute;
+  top: 64px;
+  right: 16px;
+  z-index: 4;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 36px rgba(28, 34, 79, 0.16);
+  color: var(--on-surface);
+}
+
+.preview-modal__help-title {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.preview-modal__help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .preview-modal__title {
   font-family: 'Manrope', sans-serif;
   font-size: 18px;

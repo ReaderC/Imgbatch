@@ -762,6 +762,7 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     compareOffsetX: 0,
     compareOffsetY: 0,
     compareLabelsHidden: false,
+    helpOpen: false,
     expanded: compareMode !== 'split',
   })
   return true
@@ -781,6 +782,12 @@ function togglePreviewCompareLabels() {
   const preview = getState().previewModal
   if (!preview?.url) return
   setPreviewModal({ ...preview, compareLabelsHidden: !preview.compareLabelsHidden })
+}
+
+function togglePreviewHelp() {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  setPreviewModal({ ...preview, helpOpen: !preview.helpOpen })
 }
 
 function setPreviewCompareRatio(ratio) {
@@ -1318,7 +1325,9 @@ function attachGlobalEvents() {
       const clickedSplitLabel = !!event.target.closest('.preview-modal__split-label')
       const clickedCloseButton = !!event.target.closest('.preview-modal__close')
       const clickedCompareLabels = !!event.target.closest('.preview-modal__compare-head')
-      if (!clickedCompareBody && !clickedSplitBody && !clickedSplitLabel && !clickedCloseButton && !clickedCompareLabels) {
+      const clickedHelpButton = !!event.target.closest('[data-action="toggle-preview-help"]')
+      const clickedHelpPanel = !!event.target.closest('.preview-modal__help')
+      if (!clickedCompareBody && !clickedSplitBody && !clickedSplitLabel && !clickedCloseButton && !clickedCompareLabels && !clickedHelpButton && !clickedHelpPanel) {
         closePreviewModal()
         return
       }
@@ -1361,6 +1370,11 @@ function attachGlobalEvents() {
 
     if (action === 'toggle-preview-compare-labels') {
       togglePreviewCompareLabels()
+      return
+    }
+
+    if (action === 'toggle-preview-help') {
+      togglePreviewHelp()
       return
     }
 

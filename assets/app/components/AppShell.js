@@ -384,10 +384,14 @@ function renderPreviewModal(preview) {
   const compareOffsetY = Number(preview.compareOffsetY) || 0
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
+  const helpOpen = !!preview.helpOpen
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
         <div class="preview-modal__actions">
+          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
+            <span class="material-symbols-outlined">help</span>
+          </button>
           <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
             <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
           </button>
@@ -395,6 +399,7 @@ function renderPreviewModal(preview) {
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
+        ${helpOpen ? renderPreviewHelp('split') : ''}
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
             <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect}; --preview-compare-zoom:${compareZoom}; --preview-compare-offset-x:${compareOffsetX}px; --preview-compare-offset-y:${compareOffsetY}px;">
@@ -432,14 +437,19 @@ function renderInteractivePreviewModal(preview) {
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
+  const helpOpen = !!preview.helpOpen
   return `
     <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
       <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
         <div class="preview-modal__actions">
+          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
+            <span class="material-symbols-outlined">help</span>
+          </button>
           <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
+        ${helpOpen ? renderPreviewHelp('slider') : ''}
         <div class="preview-modal__compare-shell">
           <div class="preview-modal__compare">
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
@@ -462,6 +472,33 @@ function renderInteractivePreviewModal(preview) {
           </div>
         </div>
       </div>
+    </div>
+  `
+}
+
+function renderPreviewHelp(mode = 'slider') {
+  const modeTips = mode === 'split'
+    ? [
+        '滚轮可同步放大或缩小两张图片。',
+        '放大后可按住右键拖拽图片位置查看边缘细节。',
+        '点击左下角“原图”或右下角“处理后”可切换角标显示。',
+        '点击右上角全屏按钮可在悬浮与全屏查看之间切换。',
+      ]
+    : [
+        '滚轮可放大或缩小当前对比图片。',
+        '放大后可按住右键拖拽图片位置查看边缘细节。',
+        '按住左键拖动中线可调整处理前后的对比范围。',
+        '双击图片可快速回到中线 50% 位置。',
+        '点击底部角标可切换“原图 / 处理后”标签显示。',
+      ]
+  return `
+    <div class="preview-modal__help">
+      <div class="preview-modal__help-title">操作说明</div>
+      <ul class="preview-modal__help-list">
+        ${modeTips.map((item) => `<li>${item}</li>`).join('')}
+        <li>按 Esc 可关闭当前预览。</li>
+        <li>点击图片外区域或右上角关闭按钮也可退出预览。</li>
+      </ul>
     </div>
   `
 }
