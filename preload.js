@@ -1780,6 +1780,16 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const preventUpscale = Boolean(payload.config.preventUpscale)
   const fitWidth = isVertical ? payload.config.pageWidth : undefined
   const fitHeight = isVertical ? undefined : payload.config.pageWidth
+  if (payload.assets.length === 1) {
+    const asset = payload.assets[0]
+    const sourceFormat = normalizeImageFormatName(asset.ext)
+    const keepsOriginalSize = isVertical
+      ? ((preventUpscale && Number(asset.width) <= payload.config.pageWidth) || Number(asset.width) === payload.config.pageWidth)
+      : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
+    if (sourceFormat === format && keepsOriginalSize) {
+      return copyAssetToOutput(asset, outputPath)
+    }
+  }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
