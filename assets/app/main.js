@@ -363,23 +363,19 @@ function getCurrentDestinationPath() {
   return state.destinationPath || state.settings.defaultSavePath || ''
 }
 
-function getStagedItemByAssetId(assetId) {
-  const state = getState()
-  const asset = state.assets.find((item) => item.id === assetId)
-  if (!asset?.stagedOutputPath || asset.previewStatus !== 'staged' || asset.stagedToolId !== state.activeTool) return null
-  return {
-    assetId: asset.id,
-    name: asset.name,
-    stagedPath: asset.stagedOutputPath,
-    outputName: asset.stagedOutputName,
-    runId: asset.runId,
-    runFolderName: asset.runFolderName,
-  }
-}
-
 async function saveAssetResult(assetId) {
   const state = getState()
-  const stagedItem = getStagedItemByAssetId(assetId)
+  const asset = state.assets.find((item) => item.id === assetId)
+  const stagedItem = asset?.stagedOutputPath && asset.previewStatus === 'staged' && asset.stagedToolId === state.activeTool
+    ? {
+        assetId: asset.id,
+        name: asset.name,
+        stagedPath: asset.stagedOutputPath,
+        outputName: asset.stagedOutputName,
+        runId: asset.runId,
+        runFolderName: asset.runFolderName,
+      }
+    : null
   if (!stagedItem) {
     notify({ type: 'info', message: '当前图片还没有可保存的处理结果。' })
     return
@@ -463,13 +459,9 @@ async function runBusyAction(task) {
   }
 }
 
-function getProcessingRunId() {
-  const state = getState()
-  return state.processingProgress?.runId || state.activeRun?.runId || ''
-}
-
 async function cancelCurrentRun() {
-  const runId = getProcessingRunId()
+  const state = getState()
+  const runId = state.processingProgress?.runId || state.activeRun?.runId || ''
   if (!runId || getState().cancelRequested) return
   setState({ cancelRequested: true })
   const cancelled = await cancelRun(runId)
@@ -488,20 +480,6 @@ function notifyActionResult(result, fallbackMessage) {
   })
 }
 
-function getResultPathForReplacement(assetId) {
-  const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
-  const resultViewPath = normalizeAssetPath(resultItem?.outputPath)
-  if (resultViewPath) return resultViewPath
-
-  const asset = getState().assets.find((item) => item.id === assetId)
-  return normalizeAssetPath(
-    asset?.savedOutputPath
-    || asset?.stagedOutputPath
-    || asset?.outputPath
-    || '',
-  )
-}
-
 function normalizeAssetPath(value = '') {
   const text = String(value || '').replaceAll('\\', '/').trim()
   if (!text) return ''
@@ -511,7 +489,14 @@ function normalizeAssetPath(value = '') {
 function getReplaceEntry(assetId) {
   const asset = getState().assets.find((item) => item.id === assetId)
   if (!asset?.sourcePath) return null
-  const resultPath = getResultPathForReplacement(assetId)
+  const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
+  const resultPath = normalizeAssetPath(
+    resultItem?.outputPath
+    || asset?.savedOutputPath
+    || asset?.stagedOutputPath
+    || asset?.outputPath
+    || '',
+  )
   if (!resultPath) return null
   return {
     assetId: asset.id,
