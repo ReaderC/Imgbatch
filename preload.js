@@ -2228,20 +2228,6 @@ function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   }
 }
 
-function createMergeOutput(result, payload) {
-  const outputPath = typeof result === 'string' ? result : result.outputPath
-  const outputName = path.basename(outputPath)
-  return normalizeDirectResult({
-    assetId: payload.assets[0]?.id || payload.toolId,
-    name: outputName,
-    outputPath,
-    outputName,
-    outputSizeBytes: Number(result?.outputSizeBytes) || 0,
-    width: 0,
-    height: 0,
-  })
-}
-
 async function executeMergeTool(payload, sharpLib) {
   const processed = []
   const failed = []
@@ -2252,7 +2238,17 @@ async function executeMergeTool(payload, sharpLib) {
         ? writeMergePdfAssetReal
         : writeMergeGifAsset
     const result = await mergeHandler(sharpLib, payload)
-    processed.push(createMergeOutput(result, payload))
+    const outputPath = typeof result === 'string' ? result : result.outputPath
+    const outputName = path.basename(outputPath)
+    processed.push(normalizeDirectResult({
+      assetId: payload.assets[0]?.id || payload.toolId,
+      name: outputName,
+      outputPath,
+      outputName,
+      outputSizeBytes: Number(result?.outputSizeBytes) || 0,
+      width: 0,
+      height: 0,
+    }))
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }

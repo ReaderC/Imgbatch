@@ -901,11 +901,6 @@ function notifyToolPreviewFailure(error, tool) {
 }
 
 
-function getProcessSuccessMessage(result, tool) {
-  if (result?.message) return result.message
-  return isPreviewSaveTool(tool.id) ? `已生成 ${tool.label} 结果，确认后可保存。` : `已触发 ${tool.label} 批处理。`
-}
-
 function getCompressionOversizeWarning(result, tool) {
   if (tool?.id !== 'compression') return ''
   if (result?.config?.mode !== 'target') return ''
@@ -917,11 +912,6 @@ function getCompressionOversizeWarning(result, tool) {
   const worstBytes = Math.max(...oversizeItems.map((item) => Number(item?.outputSizeBytes) || 0))
   if (worstBytes <= targetBytes * 1.5) return ''
   return `按体积存在明显偏离：目标 ${targetKb} KB，最大结果 ${formatBytes(worstBytes)}。极端图片无法保证严格命中目标体积。`
-}
-
-function getProcessFallbackMessage(tool, assetCount) {
-  const summary = describeToolConfig(tool.id, getState().configs[tool.id])
-  return `处理占位：${tool.label} · ${assetCount} 张 · ${summary}`
 }
 
 function getAssetsForTool(toolId, assets) {
@@ -1985,7 +1975,10 @@ async function processCurrentTool() {
     }
 
     if (result?.ok || result?.partial) {
-      notify({ type: result.partial ? 'info' : 'success', message: getProcessSuccessMessage(result, tool) })
+      notify({
+        type: result.partial ? 'info' : 'success',
+        message: result?.message || (isPreviewSaveTool(tool.id) ? `已生成 ${tool.label} 结果，确认后可保存。` : `已触发 ${tool.label} 批处理。`),
+      })
       const compressionWarning = getCompressionOversizeWarning(result, tool)
       if (compressionWarning) {
         notify({ type: 'info', message: compressionWarning, durationMs: 6500 })
@@ -1999,7 +1992,10 @@ async function processCurrentTool() {
       return
     }
 
-    notify({ type: 'info', message: result?.message || getProcessFallbackMessage(tool, assets.length) })
+    notify({
+      type: 'info',
+      message: result?.message || `处理占位：${tool.label} · ${assets.length} 张 · ${describeToolConfig(tool.id, getState().configs[tool.id])}`,
+    })
   } catch (error) {
     notify({ type: 'error', message: error?.message || '批处理触发失败。' })
   }
