@@ -1966,21 +1966,22 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
+  const frameWidth = payload.config.width
+  const frameHeight = payload.config.height
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval * 100))
   const repeat = payload.config.loop ? 0 : -1
 
   for (const asset of payload.assets) {
     const { data } = await sharpLib(asset.sourcePath)
-      .resize({ width: payload.config.width, height: payload.config.height, fit: 'contain', background })
+      .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })
 
-    const rgba = new Uint8Array(data)
-    const palette = quantize(rgba, 256)
-    const index = applyPalette(rgba, palette)
-    encoder.writeFrame(index, payload.config.width, payload.config.height, {
+    const palette = quantize(data, 256)
+    const index = applyPalette(data, palette)
+    encoder.writeFrame(index, frameWidth, frameHeight, {
       palette,
       delay,
       repeat,
