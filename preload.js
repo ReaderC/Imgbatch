@@ -1478,7 +1478,9 @@ async function revealPath(targetPath) {
   const resolved = resolvePathForReveal(normalizedTarget)
   if (!resolved) return false
   try {
-    if (typeof shell.showItemInFolder === 'function' && normalizedTarget && fs.existsSync(normalizedTarget) && !fs.statSync(normalizedTarget).isDirectory()) {
+    const targetExists = normalizedTarget ? fs.existsSync(normalizedTarget) : false
+    const targetStat = targetExists ? fs.statSync(normalizedTarget) : null
+    if (typeof shell.showItemInFolder === 'function' && targetExists && !targetStat?.isDirectory()) {
       shell.showItemInFolder(normalizedTarget)
       return true
     }
@@ -1602,10 +1604,6 @@ function revealResultDirectoryIfNeeded(result) {
 
 function buildSavedResultWithReveal(payload, processed, failed) {
   return revealResultDirectoryIfNeeded(buildSavedResult(payload, processed, failed))
-}
-
-function buildEnvelopeWithReveal(payload, processed, failed) {
-  return revealResultDirectoryIfNeeded(createResultEnvelope(payload, processed, failed))
 }
 
 function buildFallbackFailureWithReveal(payload, message) {
