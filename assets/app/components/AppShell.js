@@ -302,68 +302,6 @@ function renderResultStrip(label, size, dimensions) {
   `
 }
 
-function renderPreviewModalLegacyUnused(preview) {
-  if (!preview?.url) return ''
-  if (preview.compareMode !== 'split') {
-    return renderInteractivePreviewModal(preview)
-  }
-  const beforeUrl = preview.beforeUrl || preview.url
-  const afterUrl = preview.afterUrl || preview.url
-  const isExpanded = !!preview.expanded
-  const labelsHidden = !!preview.compareLabelsHidden
-  return `
-    <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
-      <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
-        <div class="preview-modal__actions">
-          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '缩小显示' : '全屏显示'}">
-            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
-          </button>
-          <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
-        <div class="preview-modal__compare preview-modal__compare--split">
-          <section class="preview-compare-card">
-            <div class="preview-modal__compare-head preview-modal__compare-head--split ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
-              <span class="preview-compare-card__label">原图</span>
-            </div>
-            <div class="preview-modal__body preview-modal__body--split"><img src="${beforeUrl}" alt="${escapeHtml(preview.name || '原图')}" /></div>
-          </section>
-          <section class="preview-compare-card">
-            <div class="preview-modal__compare-head preview-modal__compare-head--split ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels">
-              <span class="preview-compare-card__label">处理后</span>
-            </div>
-            <div class="preview-modal__body preview-modal__body--split"><img src="${afterUrl}" alt="${escapeHtml(preview.name || '处理后')}" /></div>
-          </section>
-        </div>
-      </div>
-    </div>
-  `
-  return `
-    <div class="preview-modal ${isExpanded ? 'preview-modal--expanded' : ''}" data-preview-overlay="true">
-      <div class="preview-modal__dialog preview-modal__dialog--compare">
-        <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-        <div class="preview-modal__meta">
-          <div class="preview-modal__title">${escapeHtml(preview.name || '预览')}</div>
-          <div class="preview-modal__subtitle">${escapeHtml(preview.summary || '')}</div>
-        </div>
-        <div class="preview-modal__compare">
-          <section class="preview-compare-card">
-            <div class="preview-compare-card__label">处理前</div>
-            <div class="preview-modal__body"><img src="${beforeUrl}" alt="${escapeHtml(preview.name || '原图')}" /></div>
-          </section>
-          <section class="preview-compare-card">
-            <div class="preview-compare-card__label">处理后</div>
-            <div class="preview-modal__body"><img src="${afterUrl}" alt="${escapeHtml(preview.name || '结果')}" /></div>
-          </section>
-        </div>
-      </div>
-    </div>
-  `
-}
-
 function renderPreviewModal(preview) {
   if (!preview?.url) return ''
   if (preview.compareMode !== 'split') {
