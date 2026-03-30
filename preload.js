@@ -1435,19 +1435,18 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
   }
 }
 
-function resolvePathForReveal(targetPath) {
-  if (!targetPath) return ''
-  try {
-    if (fs.statSync(targetPath).isDirectory()) return targetPath
-    return path.dirname(targetPath)
-  } catch {
-    return ''
-  }
-}
-
 async function revealPath(targetPath) {
   const normalizedTarget = path.normalize(sanitizeText(targetPath))
-  const resolved = resolvePathForReveal(normalizedTarget)
+  let resolved = ''
+  try {
+    if (normalizedTarget && fs.statSync(normalizedTarget).isDirectory()) {
+      resolved = normalizedTarget
+    } else {
+      resolved = normalizedTarget ? path.dirname(normalizedTarget) : ''
+    }
+  } catch {
+    resolved = ''
+  }
   if (!resolved) return false
   try {
     let targetStat = null
