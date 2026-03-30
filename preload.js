@@ -510,21 +510,6 @@ function formatResultMessage(payload, processed, failed) {
   return `${payload.toolLabel} 执行失败：${failed[0]?.error || '没有可处理的图片'}`
 }
 
-function createResultEnvelope(payload, processed, failed) {
-  const ok = processed.length > 0 && failed.length === 0
-  const partial = processed.length > 0 && failed.length > 0
-  const message = formatResultMessage(payload, processed, failed)
-  return {
-    ok,
-    partial,
-    ...payload,
-    processed,
-    failed,
-    elapsedMs: Number(payload?.elapsedMs) || 0,
-    message,
-  }
-}
-
 function buildSettingsPayload(settings = {}) {
   const defaultPresetByTool = settings?.defaultPresetByTool && typeof settings.defaultPresetByTool === 'object'
     ? Object.fromEntries(Object.entries(settings.defaultPresetByTool).map(([toolId, presetId]) => [sanitizeText(toolId), sanitizeText(presetId)]).filter((entry) => entry[0] && entry[1]))
@@ -2377,7 +2362,16 @@ async function executeSaveFlow(payload) {
     }
   }
 
-  return revealResultDirectoryIfNeeded(createResultEnvelope({ ...payload, mode: 'save' }, processed, failed))
+  const savePayload = { ...payload, mode: 'save' }
+  return revealResultDirectoryIfNeeded({
+    ok: processed.length > 0 && failed.length === 0,
+    partial: processed.length > 0 && failed.length > 0,
+    ...savePayload,
+    processed,
+    failed,
+    elapsedMs: Number(savePayload?.elapsedMs) || 0,
+    message: formatResultMessage(savePayload, processed, failed),
+  })
 }
 
 async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
