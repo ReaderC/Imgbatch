@@ -478,7 +478,9 @@ function getResultPathForReplacement(assetId) {
 }
 
 function normalizeAssetPath(value = '') {
-  return String(value || '').replaceAll('\\', '/').trim()
+  const text = String(value || '').replaceAll('\\', '/').trim()
+  if (!text) return ''
+  return text.replace(/^([A-Za-z]):(?![\\/])/, '$1:/')
 }
 
 function getReplaceEntry(assetId) {
@@ -491,10 +493,10 @@ function getReplaceEntry(assetId) {
     name: asset.name,
     sourcePath: normalizeAssetPath(asset.sourcePath),
     resultPath,
-    // Keep legacy fields so old result states still have a fallback chain in preload.
-    savedOutputPath: normalizeAssetPath(asset.savedOutputPath),
-    outputPath: normalizeAssetPath(asset.outputPath),
-    stagedOutputPath: normalizeAssetPath(asset.stagedOutputPath),
+    // Legacy fallback fields kept here for quick rollback during verification.
+    // savedOutputPath: normalizeAssetPath(asset.savedOutputPath),
+    // outputPath: normalizeAssetPath(asset.outputPath),
+    // stagedOutputPath: normalizeAssetPath(asset.stagedOutputPath),
   }
 }
 

@@ -1289,15 +1289,17 @@ async function revealPath(targetPath) {
 function normalizeFsPath(value, fallback = '') {
   const text = sanitizeText(value, fallback)
   if (!text) return ''
-  return path.normalize(text.replaceAll('/', path.sep))
+  const normalized = text.replaceAll('/', path.sep).replace(/^([A-Za-z]):(?![\\/])/, `$1:${path.sep}`)
+  return path.resolve(path.normalize(normalized))
 }
 
 function resolveExistingResultPath(item = {}) {
   const candidates = [
     item.resultPath,
-    item.savedOutputPath,
-    item.outputPath,
-    item.stagedOutputPath,
+    // Legacy fallback fields kept here for quick rollback during verification.
+    // item.savedOutputPath,
+    // item.outputPath,
+    // item.stagedOutputPath,
   ].map((value) => normalizeFsPath(value)).filter(Boolean)
 
   for (const candidate of candidates) {
