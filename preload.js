@@ -25,6 +25,7 @@ const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
 const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
+const WATERMARK_TEXT_CACHE = new Map()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -1365,17 +1366,30 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
 async function buildWatermarkComposite(sharpLib, asset, config) {
   let overlay = config.type === 'image'
     ? await createImageWatermarkBuffer(sharpLib, asset, config)
-    : { input: buildTextWatermarkSvg(asset, config), width: 0, height: 0 }
+    : null
 
   if (config.type === 'text') {
-    const trimmed = await sharpLib(overlay.input)
-      .trim()
-      .png()
-      .toBuffer({ resolveWithObject: true })
-    overlay = {
-      input: trimmed.data,
-      width: trimmed.info.width || 1,
-      height: trimmed.info.height || 1,
+    const renderScaleKey = Math.round(getWatermarkRenderScale(asset) * 100)
+    const textOverlayKey = [
+      config.text,
+      config.color,
+      Math.round(clampNumber(config.opacity, 0, 100, 60)),
+      Math.max(1, Math.round(config.fontSize || 32)),
+      Math.round(toNumber(config.rotation, 0)),
+      renderScaleKey,
+    ].join('|')
+    overlay = WATERMARK_TEXT_CACHE.get(textOverlayKey) || null
+    if (!overlay) {
+      const trimmed = await sharpLib(buildTextWatermarkSvg(asset, config))
+        .trim()
+        .png()
+        .toBuffer({ resolveWithObject: true })
+      overlay = {
+        input: trimmed.data,
+        width: trimmed.info.width || 1,
+        height: trimmed.info.height || 1,
+      }
+      WATERMARK_TEXT_CACHE.set(textOverlayKey, overlay)
     }
   }
 
