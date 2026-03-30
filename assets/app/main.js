@@ -797,20 +797,12 @@ function isMergePreviewTool(toolId) {
   return ['merge-pdf', 'merge-image', 'merge-gif'].includes(toolId)
 }
 
-function shouldOpenRealPreview(toolId) {
-  return isPreviewableTool(toolId) && !isMergePreviewTool(toolId)
-}
-
 function notifyPreviewUnavailable(tool, asset) {
   notify({ type: 'info', message: `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}` })
 }
 
-function getPreviewAssetLabel(asset) {
-  return truncate(asset?.name || '当前图片', 20)
-}
-
 function notifyUnsupportedPreview(tool, asset) {
-  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${getPreviewAssetLabel(asset)}` })
+  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
 }
 
 async function previewWithRunner(tool, asset) {
@@ -835,7 +827,7 @@ async function previewWithRunner(tool, asset) {
 
 async function previewAssetWithTool(tool, asset) {
   if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset)) return
-  if (!shouldOpenRealPreview(tool.id)) {
+  if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
     if (isMergePreviewTool(tool.id)) {
       notifyPreviewUnavailable(tool, asset)
       return
