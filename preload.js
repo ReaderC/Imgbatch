@@ -1857,8 +1857,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
     return {
       outputPath,
       outputSizeBytes: info.size || 0,
-      outputWidth: info.width || 0,
-      outputHeight: info.height || 0,
+      width: info.width || 0,
+      height: info.height || 0,
     }
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
@@ -1946,6 +1946,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
   return {
     outputPath,
     outputSizeBytes: Number(info?.size) || 0,
+    width: totalWidth,
+    height: totalHeight,
   }
 }
 
@@ -2139,6 +2141,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   return {
     outputPath,
     outputSizeBytes: bytes.length,
+    width: frameWidth,
+    height: frameHeight,
   }
 }
 
