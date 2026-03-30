@@ -881,70 +881,23 @@ function shouldOpenRealPreview(toolId) {
   return isPreviewableTool(toolId) && !isMergePreviewTool(toolId)
 }
 
-function getPreviewReuseAsset(toolId, asset) {
-  return shouldReusePreviewResult(toolId, asset) ? asset : null
-}
-
 function getPreviewPlaceholderMessage(tool, asset) {
   return `${tool.label} 暂不支持当前预览：${truncate(asset.name, 20)}`
 }
 
-function hasPreviewUrl(asset) {
-  return !!asset?.previewUrl
-}
-
-function shouldOpenPreviewModalForAsset(asset) {
-  return hasPreviewUrl(asset)
-}
-
-function buildPreviewNotification(tool) {
-  return getNonSavePreviewSuccessMessage(tool)
-}
-
-function canGenerateSingleAssetPreview(toolId) {
-  return shouldOpenRealPreview(toolId)
-}
-
-function isAlreadyPreviewed(toolId, asset) {
-  return !!getPreviewReuseAsset(toolId, asset)
-}
-
-function getPreviewableToolLabel(tool) {
-  return tool?.label || '当前工具'
-}
-
 function getPreviewOpenError(tool) {
-  return `${getPreviewableToolLabel(tool)} 预览结果无法打开。`
-}
-
-function shouldDirectPreviewTool(toolId) {
-  return isDirectPreviewTool(toolId)
-}
-
-function canOpenExistingPreview(toolId, asset) {
-  return shouldReusePreviewResult(toolId, asset)
-}
-
-function getPreviewAssetResult(assetId) {
-  return getState().assets.find((item) => item.id === assetId)
-}
-
-function getPreviewResultProcessed(result, assetId) {
-  return (result?.processed || []).find((item) => item.assetId === assetId)
-}
-
-function createPreviewFallbackAsset(asset, processed, toolId) {
-  return mapPreviewResultToAsset(asset, processed, toolId)
+  return `${tool?.label || '当前工具'} 预览结果无法打开。`
 }
 
 function getPreviewAssetAfterRun(assetId, toolId, asset, result) {
-  const nextAsset = getPreviewAssetResult(assetId)
-  if (shouldOpenPreviewModalForAsset(nextAsset)) return nextAsset
-  return createPreviewFallbackAsset(asset, getPreviewResultProcessed(result, assetId), toolId)
+  const nextAsset = getState().assets.find((item) => item.id === assetId)
+  if (nextAsset?.previewUrl) return nextAsset
+  const processed = (result?.processed || []).find((item) => item.assetId === assetId)
+  return mapPreviewResultToAsset(asset, processed, toolId)
 }
 
 function notifyPreviewReady(tool) {
-  notify({ type: 'success', message: buildPreviewNotification(tool) })
+  notify({ type: 'success', message: getNonSavePreviewSuccessMessage(tool) })
 }
 
 function notifyPreviewUnavailable(tool, asset) {
