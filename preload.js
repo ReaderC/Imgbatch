@@ -292,17 +292,6 @@ function createRunDescriptor(baseDestinationPath, toolId, createdAt) {
   }
 }
 
-function createPreviewDirectory(toolId, createdAt) {
-  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
-  const runFolderName = buildRunFolderName(createdAt, toolId)
-  const runPath = path.join(basePreviewPath, runFolderName)
-  return {
-    basePreviewPath,
-    runFolderName,
-    runPath,
-  }
-}
-
 function getAppSettings() {
   const hostApi = getHostApi()
   return hostApi.dbStorage?.getItem?.(SETTINGS_STORAGE_KEY) || {}
@@ -591,12 +580,14 @@ function createPreviewPayload(toolId, config, assets, destinationPath, mode = 'p
     }
   }
 
-  const preview = createPreviewDirectory(toolId, payload.createdAt)
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const runFolderName = buildRunFolderName(payload.createdAt, toolId)
+  const runPath = path.join(basePreviewPath, runFolderName)
   return {
     ...payload,
-    destinationPath: preview.runPath,
-    baseDestinationPath: preview.basePreviewPath,
-    runFolderName: preview.runFolderName,
+    destinationPath: runPath,
+    baseDestinationPath: basePreviewPath,
+    runFolderName,
     mode,
   }
 }
@@ -2189,11 +2180,6 @@ function createFallbackFailure(payload, message) {
   }
 }
 
-function resolveExecutionMode(toolId) {
-  if (isMergeTool(toolId)) return 'direct'
-  return isPreviewSaveTool(toolId) ? 'preview-save' : 'direct'
-}
-
 async function executeSaveFlow(payload) {
   if (!payload.stagedItems?.length) {
     return revealResultDirectoryIfNeeded(createFallbackFailure(payload, '没有可保存的预览结果。'))
@@ -2250,7 +2236,7 @@ function saveSettings(settings) {
 function createPreparedRunPayload(toolId, config, assets, destinationPath) {
   return {
     ...prepareRunPayload(toolId, config, assets, destinationPath),
-    mode: resolveExecutionMode(toolId),
+    mode: isMergeTool(toolId) ? 'direct' : isPreviewSaveTool(toolId) ? 'preview-save' : 'direct',
   }
 }
 
