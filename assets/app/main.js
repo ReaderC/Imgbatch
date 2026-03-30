@@ -1158,7 +1158,11 @@ function restoreUiSnapshot(snapshot) {
   const target = findElementByDescriptor(snapshot.activeField)
   if (!target) return
   target.focus({ preventScroll: true })
-  if (snapshot.selection && 'setSelectionRange' in target) {
+  const selectionCapableTypes = new Set(['text', 'search', 'url', 'tel', 'password'])
+  const inputType = String(target.type || '').toLowerCase()
+  const canRestoreSelection = 'setSelectionRange' in target
+    && (!inputType || selectionCapableTypes.has(inputType) || target.tagName === 'TEXTAREA')
+  if (snapshot.selection && canRestoreSelection) {
     target.setSelectionRange(snapshot.selection.start, snapshot.selection.end)
   }
 }
@@ -1873,6 +1877,14 @@ async function processCurrentTool() {
   if (tool.id === 'manual-crop' && !getAssetsForTool(tool.id, state.assets).length) {
     notify({ type: 'info', message: '请先至少标记一张图片，再开始手动裁剪。' })
     return
+  }
+
+  if (tool.id === 'compression' && state.configs.compression?.mode === 'target') {
+    const rawTargetSize = String(state.configs.compression?.targetSizeKb ?? '').trim()
+    if (!rawTargetSize) {
+      notify({ type: 'info', message: '请输入目标大小 KB 后再开始处理。' })
+      return
+    }
   }
 
   if (state.isProcessing) return
