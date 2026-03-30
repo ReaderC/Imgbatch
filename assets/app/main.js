@@ -960,19 +960,6 @@ async function previewWithRunner(tool, asset) {
   }
 }
 
-async function previewAssetWithTool(tool, asset) {
-  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) return
-  if (!isPreviewableTool(tool.id) || isMergePreviewTool(tool.id)) {
-    if (isMergePreviewTool(tool.id)) {
-      notifyPreviewUnavailable(tool, asset)
-      return
-    }
-    notify({ type: 'info', message: `${tool.label} 暂不支持预览：${truncate(asset?.name || '当前图片', 20)}` })
-    return
-  }
-  await previewWithRunner(tool, asset)
-}
-
 function getCompressionOversizeWarning(result, tool) {
   if (tool?.id !== 'compression') return ''
   if (result?.config?.mode !== 'target') return ''

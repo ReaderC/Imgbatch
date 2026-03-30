@@ -2477,28 +2477,6 @@ body {
   cursor: pointer;
 }
 
-.preview-modal__dialog > .preview-modal__close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-}
-
-
-
-
-.preview-modal__actions .preview-modal__close:last-child::before {
-  content: '×';
-}
-
-.preview-modal__meta {
-  padding-right: 44px;
-}
-
-.preview-modal__actions .preview-modal__close:last-child::before {
-  content: none !important;
-  display: none !important;
-}
-
 .preview-modal__actions .preview-modal__close .material-symbols-outlined {
   font-size: 22px;
   line-height: 1;
