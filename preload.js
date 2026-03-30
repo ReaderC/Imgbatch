@@ -1341,38 +1341,51 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
-  return sharpLib(input)
+  const { data, info } = await sharpLib(input)
     .rotate(config.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
     .png()
-    .toBuffer()
+    .toBuffer({ resolveWithObject: true })
+  return {
+    input: data,
+    width: info.width || 1,
+    height: info.height || 1,
+  }
 }
 
 async function buildWatermarkComposite(sharpLib, asset, config) {
-  let input = config.type === 'image'
+  let overlay = config.type === 'image'
     ? await createImageWatermarkBuffer(sharpLib, asset, config)
-    : buildTextWatermarkSvg(asset, config)
+    : { input: buildTextWatermarkSvg(asset, config), width: 0, height: 0 }
 
   if (config.type === 'text') {
-    input = await sharpLib(input)
+    const trimmed = await sharpLib(overlay.input)
       .trim()
       .png()
-      .toBuffer()
+      .toBuffer({ resolveWithObject: true })
+    overlay = {
+      input: trimmed.data,
+      width: trimmed.info.width || 1,
+      height: trimmed.info.height || 1,
+    }
   }
 
   if (config.tiled) {
-    input = await createTiledWatermarkBuffer(sharpLib, input, config.density)
+    overlay = {
+      input: await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density),
+      width: 0,
+      height: 0,
+    }
     return {
-      input,
+      input: overlay.input,
       tile: true,
       gravity: 'centre',
     }
   }
 
-  const overlayMeta = await sharpLib(input).metadata()
-  const overlayWidth = Math.max(1, overlayMeta.width || 1)
-  const overlayHeight = Math.max(1, overlayMeta.height || 1)
+  const overlayWidth = Math.max(1, overlay.width || 1)
+  const overlayHeight = Math.max(1, overlay.height || 1)
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
   const margin = Math.max(0, config.margin || 0)
@@ -1388,7 +1401,7 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
       : Math.round((assetHeight - overlayHeight) / 2)
 
   return {
-    input,
+    input: overlay.input,
     left: Math.max(0, horizontal),
     top: Math.max(0, vertical),
   }
