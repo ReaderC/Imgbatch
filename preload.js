@@ -1210,13 +1210,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     : createTransformer(sharpLib, asset)
   let transformed = baseTransformer
   if (typeof transformed.withIccProfile === 'function') {
-    const normalizedColorProfile = String(config.colorProfile || '').trim().toLowerCase()
-    const outputColorProfile = normalizedColorProfile === 'p3' || normalizedColorProfile === 'display-p3' || normalizedColorProfile === 'display p3'
-      ? 'p3'
-      : normalizedColorProfile === 'cmyk'
-        ? 'cmyk'
-        : 'srgb'
-    transformed = transformed.withIccProfile(outputColorProfile)
+    transformed = transformed.withIccProfile(config.colorProfile || 'srgb')
   }
   if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
     transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
