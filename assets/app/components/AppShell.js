@@ -380,6 +380,8 @@ function renderPreviewModal(preview) {
   const compareZoom = Number.isFinite(Number(preview.compareZoom))
     ? Math.max(1, Math.min(5, Number(preview.compareZoom)))
     : 1
+  const compareOffsetX = Number(preview.compareOffsetX) || 0
+  const compareOffsetY = Number(preview.compareOffsetY) || 0
   const isExpanded = !!preview.expanded
   const labelsHidden = !!preview.compareLabelsHidden
   return `
@@ -395,13 +397,13 @@ function renderPreviewModal(preview) {
         </div>
         <div class="preview-modal__compare preview-modal__compare--split">
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect}; --preview-compare-zoom:${compareZoom};">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${beforeAspect}; --preview-compare-zoom:${compareZoom}; --preview-compare-offset-x:${compareOffsetX}px; --preview-compare-offset-y:${compareOffsetY}px;">
               <img src="${beforeUrl}" alt="${escapeHtml(preview.name || '\u539f\u56fe')}" />
               <button class="preview-modal__split-label preview-modal__split-label--left ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u539f\u56fe</button>
             </div>
           </section>
           <section class="preview-compare-card">
-            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${afterAspect}; --preview-compare-zoom:${compareZoom};">
+            <div class="preview-modal__body preview-modal__body--split" style="--preview-split-aspect:${afterAspect}; --preview-compare-zoom:${compareZoom}; --preview-compare-offset-x:${compareOffsetX}px; --preview-compare-offset-y:${compareOffsetY}px;">
               <img src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" />
               <button class="preview-modal__split-label preview-modal__split-label--right ${labelsHidden ? 'is-hidden' : ''}" data-action="toggle-preview-compare-labels" type="button">\u5904\u7406\u540e</button>
             </div>
@@ -422,6 +424,8 @@ function renderInteractivePreviewModal(preview) {
   const compareZoom = Number.isFinite(Number(preview.compareZoom))
     ? Math.max(1, Math.min(5, Number(preview.compareZoom)))
     : 1
+  const compareOffsetX = Number(preview.compareOffsetX) || 0
+  const compareOffsetY = Number(preview.compareOffsetY) || 0
   const compareWidth = Number(preview.compareWidth) || 1
   const compareHeight = Number(preview.compareHeight) || 1
   const compareAspect = Math.max(0.1, compareWidth / compareHeight)
@@ -439,7 +443,7 @@ function renderInteractivePreviewModal(preview) {
         <div class="preview-modal__compare-shell">
           <div class="preview-modal__compare">
             <div class="preview-compare-stage" data-action="drag-preview-compare" data-role="preview-compare-stage">
-              <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom}; --preview-compare-aspect:${compareAspect};">
+              <div class="preview-modal__body preview-modal__body--compare" style="--preview-compare-zoom:${compareZoom}; --preview-compare-aspect:${compareAspect}; --preview-compare-offset-x:${compareOffsetX}px; --preview-compare-offset-y:${compareOffsetY}px;">
                 <div class="preview-compare-stage__layer preview-compare-stage__layer--after">
                   <img class="preview-compare-stage__image preview-compare-stage__image--after" src="${afterUrl}" alt="${escapeHtml(preview.name || '\u5904\u7406\u540e')}" draggable="false" />
                 </div>

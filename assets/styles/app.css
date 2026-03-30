@@ -3204,7 +3204,7 @@ body {
   height: 100%;
   object-fit: contain;
   border-radius: 0;
-  transform: scale(var(--preview-compare-zoom, 1));
+  transform: translate(var(--preview-compare-offset-x, 0px), var(--preview-compare-offset-y, 0px)) scale(var(--preview-compare-zoom, 1));
   transform-origin: center center;
 }
 
@@ -3262,7 +3262,7 @@ body {
   margin: 0;
   object-fit: contain;
   pointer-events: none;
-  transform: scale(var(--preview-compare-zoom, 1));
+  transform: translate(var(--preview-compare-offset-x, 0px), var(--preview-compare-offset-y, 0px)) scale(var(--preview-compare-zoom, 1));
   transform-origin: center center;
 }
 

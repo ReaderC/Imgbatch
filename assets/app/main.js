@@ -19,6 +19,7 @@ const DRAG_CONTEXT = {
   rotateDial: null,
   manualCrop: null,
   previewCompare: null,
+  previewPan: null,
   queueSort: null,
 }
 let resultMarqueeFrame = 0
@@ -758,6 +759,8 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
     compareHeight: Number(asset.stagedHeight || asset.height) || 0,
     compareRatio: 0.5,
     compareZoom: 1,
+    compareOffsetX: 0,
+    compareOffsetY: 0,
     compareLabelsHidden: false,
     expanded: compareMode !== 'split',
   })
@@ -795,7 +798,22 @@ function setPreviewCompareZoom(zoom) {
   const nextZoom = Math.max(1, Math.min(5, zoom))
   const currentZoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
   if (Math.abs(currentZoom - nextZoom) < 0.01) return
-  setPreviewModal({ ...preview, compareZoom: nextZoom })
+  setPreviewModal({
+    ...preview,
+    compareZoom: nextZoom,
+    compareOffsetX: nextZoom <= 1.01 ? 0 : Number(preview.compareOffsetX) || 0,
+    compareOffsetY: nextZoom <= 1.01 ? 0 : Number(preview.compareOffsetY) || 0,
+  })
+}
+
+function setPreviewCompareOffset(offsetX, offsetY) {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  setPreviewModal({
+    ...preview,
+    compareOffsetX: Math.round(offsetX),
+    compareOffsetY: Math.round(offsetY),
+  })
 }
 
 function nudgePreviewCompareRatio(delta) {
@@ -822,13 +840,42 @@ function beginPreviewCompareDrag(event, target) {
   event.preventDefault()
 }
 
+function beginPreviewComparePan(event, target) {
+  if (event.button !== 2) return
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  const zoom = Number.isFinite(Number(preview.compareZoom)) ? Number(preview.compareZoom) : 1
+  if (zoom <= 1.01) return
+  DRAG_CONTEXT.previewPan = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: Number(preview.compareOffsetX) || 0,
+    originY: Number(preview.compareOffsetY) || 0,
+  }
+  event.preventDefault()
+}
+
 function handlePreviewCompareDrag(event) {
   if (!DRAG_CONTEXT.previewCompare) return
   updatePreviewCompareRatioFromEvent(event)
 }
 
+function handlePreviewComparePan(event) {
+  const context = DRAG_CONTEXT.previewPan
+  if (!context) return
+  setPreviewCompareOffset(
+    context.originX + (event.clientX - context.startX),
+    context.originY + (event.clientY - context.startY),
+  )
+}
+
 function endPreviewCompareDrag() {
   DRAG_CONTEXT.previewCompare = null
+}
+
+function endPreviewComparePan() {
+  DRAG_CONTEXT.previewPan = null
 }
 
 function formatBytes(bytes = 0) {
@@ -1220,6 +1267,11 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointerdown', (event) => {
+    const previewBody = event.target.closest('.preview-modal__body--compare, .preview-modal__body--split')
+    if (previewBody) {
+      beginPreviewComparePan(event, previewBody)
+      return
+    }
     const target = event.target.closest('[data-action]')
     if (!target) return
     if (target.dataset.action === 'drag-preview-compare') {
@@ -1785,6 +1837,10 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointermove', (event) => {
+    if (DRAG_CONTEXT.previewPan) {
+      handlePreviewComparePan(event)
+      return
+    }
     if (DRAG_CONTEXT.previewCompare) {
       handlePreviewCompareDrag(event)
       return
@@ -1799,15 +1855,25 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointerup', () => {
+    endPreviewComparePan()
     endPreviewCompareDrag()
     endRotateDrag()
     endManualCropDrag()
   })
 
   document.addEventListener('pointercancel', () => {
+    endPreviewComparePan()
     endPreviewCompareDrag()
     endRotateDrag()
     endManualCropDrag()
+  })
+
+  document.addEventListener('contextmenu', (event) => {
+    if (!event.target.closest('.preview-modal__body--compare, .preview-modal__body--split')) return
+    const preview = getState().previewModal
+    const zoom = Number.isFinite(Number(preview?.compareZoom)) ? Number(preview.compareZoom) : 1
+    if (zoom <= 1.01) return
+    event.preventDefault()
   })
 
   document.addEventListener('dblclick', (event) => {
