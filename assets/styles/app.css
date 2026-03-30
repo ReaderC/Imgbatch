@@ -546,12 +546,6 @@ body {
   border: 1px solid rgba(91, 94, 114, 0.08);
 }
 
-.result-info-card .preview-compare-card__label {
-  align-self: center;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-}
-
 .result-info-card__list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
