@@ -418,7 +418,7 @@ function renderPreviewHelp(mode = 'slider') {
   const modeTips = mode === 'split'
     ? [
         '滚轮可同步放大或缩小两张图片。',
-        '放大后可按住右键拖拽图片位置查看边缘细节。',
+        '放大后可按住左键或右键拖拽图片位置查看边缘细节。',
         '点击左下角“原图”或右下角“处理后”可切换角标显示。',
         '点击右上角全屏按钮可在悬浮与全屏查看之间切换。',
       ]
@@ -434,7 +434,7 @@ function renderPreviewHelp(mode = 'slider') {
       <div class="preview-modal__help-title">操作说明</div>
       <ul class="preview-modal__help-list">
         ${modeTips.map((item) => `<li>${item}</li>`).join('')}
-        <li>按 Esc 可关闭当前预览。</li>
+        <li>按 Esc 可退出当前预览；双栏全屏模式下会先退出全屏。</li>
         <li>点击图片外区域或右上角关闭按钮也可退出预览。</li>
       </ul>
     </div>
