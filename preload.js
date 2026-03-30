@@ -27,6 +27,7 @@ const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
 const WATERMARK_TILED_CACHE = new Map()
+const CANCELLED_RUNS = new Set()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -912,6 +913,35 @@ function emitProcessingProgress(detail = {}) {
     window.dispatchEvent(new CustomEvent('imgbatch-processing-progress', { detail }))
   } catch {
     // Ignore progress bridge errors so processing is not affected.
+  }
+}
+
+function cancelRun(runId) {
+  const normalized = String(runId || '').trim()
+  if (!normalized) return false
+  CANCELLED_RUNS.add(normalized)
+  return true
+}
+
+function clearCancelledRun(runId) {
+  const normalized = String(runId || '').trim()
+  if (!normalized) return
+  CANCELLED_RUNS.delete(normalized)
+}
+
+function isRunCancelled(runId) {
+  return CANCELLED_RUNS.has(String(runId || '').trim())
+}
+
+function createRunCancelledError() {
+  const error = new Error('已停止当前任务。')
+  error.code = 'RUN_CANCELLED'
+  return error
+}
+
+function throwIfRunCancelled(runId) {
+  if (isRunCancelled(runId)) {
+    throw createRunCancelledError()
   }
 }
 
@@ -1839,6 +1869,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
 }
 
 async function writeMergeImageAsset(sharpLib, payload) {
+  throwIfRunCancelled(payload.runId)
   const format = 'png'
   const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
   const background = hexToRgbaObject(payload.config.background, 1)
@@ -1876,6 +1907,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
+    throwIfRunCancelled(payload.runId)
     const sourceWidth = Math.max(0, Number(asset.width) || 0)
     const sourceHeight = Math.max(0, Number(asset.height) || 0)
     const keepsOriginalSize = isVertical
@@ -1904,6 +1936,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       height: info.height || 1,
     }
   })
+  throwIfRunCancelled(payload.runId)
   let contentWidth = 0
   let contentHeight = 0
 
@@ -1953,6 +1986,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       background,
     },
   }).composite(composites).png().toFile(outputPath)
+  throwIfRunCancelled(payload.runId)
 
   return {
     outputPath,
@@ -1963,6 +1997,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
 }
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
+  throwIfRunCancelled(payload.runId)
   const pdfLib = getPdfLib()
   if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
@@ -1981,6 +2016,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     })
   }
   const prepareAsset = async (asset) => {
+    throwIfRunCancelled(payload.runId)
     const imageBytes = fs.readFileSync(asset.sourcePath)
     const fixedPageSize = payload.config.pageSize === 'Original'
       ? null
@@ -2045,8 +2081,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const preparedAssets = payload.assets.length === 1
     ? [await prepareAsset(payload.assets[0])]
     : await mapWithConcurrency(payload.assets, prepareConcurrency, prepareAsset)
+  throwIfRunCancelled(payload.runId)
 
   for (const prepared of preparedAssets) {
+    throwIfRunCancelled(payload.runId)
     const { asset, imageBytes, fixedPageSize } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
@@ -2129,6 +2167,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     const scaledImage = sharpLib(scaledBuffer)
     let offsetY = 0
     while (offsetY < scaledHeight) {
+      throwIfRunCancelled(payload.runId)
       const sliceHeight = Math.min(pageSliceHeight, scaledHeight - offsetY)
       const sliceBuffer = await scaledImage.clone()
         .extract({ left: 0, top: offsetY, width: scaledWidth, height: sliceHeight })
@@ -2148,6 +2187,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   }
 
   const bytes = await pdf.save()
+  throwIfRunCancelled(payload.runId)
   fs.writeFileSync(outputPath, bytes)
   return {
     outputPath,
@@ -2158,6 +2198,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 }
 
 async function writeMergeGifAsset(sharpLib, payload) {
+  throwIfRunCancelled(payload.runId)
   const gifenc = getGifEncoder()
   if (!gifenc) throw new Error('缺少 gifenc 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
@@ -2171,6 +2212,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const prepareFrame = async (asset) => {
+    throwIfRunCancelled(payload.runId)
     const data = await sharpLib(asset.sourcePath)
       .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
       .ensureAlpha()
@@ -2183,8 +2225,10 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const preparedFrames = payload.assets.length === 1
     ? [await prepareFrame(payload.assets[0])]
     : await mapWithConcurrency(payload.assets, frameConcurrency, prepareFrame)
+  throwIfRunCancelled(payload.runId)
 
   for (const frame of preparedFrames) {
+    throwIfRunCancelled(payload.runId)
     encoder.writeFrame(frame.index, frameWidth, frameHeight, {
       palette: frame.palette,
       delay,
@@ -2193,6 +2237,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   }
 
   encoder.finish()
+  throwIfRunCancelled(payload.runId)
   const bytes = Buffer.from(encoder.bytes())
   fs.writeFileSync(outputPath, bytes)
   return {
@@ -2228,6 +2273,7 @@ function isMergeTool(toolId) {
 async function executeSingleAssetTool(payload, sharpLib) {
   let completedCount = 0
   let failedCount = 0
+  let cancelled = false
   const totalCount = payload.assets.length
   const emitAssetProgress = () => {
     emitProcessingProgress({
@@ -2243,6 +2289,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
     })
   }
   const executeAsset = async (asset) => {
+    if (cancelled || isRunCancelled(payload.runId)) {
+      cancelled = true
+      return { processed: null, failed: null, cancelled: true }
+    }
     if (!isProcessableAsset(asset)) {
       failedCount += 1
       emitAssetProgress()
@@ -2254,6 +2304,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
 
     try {
       const result = await executeAssetTool(sharpLib, payload, asset)
+      if (isRunCancelled(payload.runId)) {
+        cancelled = true
+        return { processed: null, failed: null, cancelled: true }
+      }
 
       const processed = await (payload.mode === 'direct'
         ? directResultToProcessed(asset, result, sharpLib)
@@ -2265,6 +2319,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
         failed: null,
       }
     } catch (error) {
+      if (error?.code === 'RUN_CANCELLED') {
+        cancelled = true
+        return { processed: null, failed: null, cancelled: true }
+      }
       failedCount += 1
       emitAssetProgress()
       return {
@@ -2282,11 +2340,13 @@ async function executeSingleAssetTool(payload, sharpLib) {
   for (const item of outcomes) {
     if (item?.processed) processed.push(item.processed)
     if (item?.failed) failed.push(item.failed)
+    if (item?.cancelled) cancelled = true
   }
 
   return {
     processed,
     failed,
+    cancelled,
   }
 }
 
@@ -2391,13 +2451,16 @@ function createPreparedRunPayload(toolId, config, assets, destinationPath) {
 async function executeMergeTool(payload, sharpLib) {
   const processed = []
   const failed = []
+  let cancelled = false
   try {
+    throwIfRunCancelled(payload.runId)
     const mergeHandler = payload.toolId === 'merge-image'
       ? writeMergeImageAsset
       : payload.toolId === 'merge-pdf'
         ? writeMergePdfAssetReal
         : writeMergeGifAsset
     const result = await mergeHandler(sharpLib, payload)
+    throwIfRunCancelled(payload.runId)
     const outputPath = typeof result === 'string' ? result : result.outputPath
     const outputName = path.basename(outputPath)
     processed.push({
@@ -2413,10 +2476,14 @@ async function executeMergeTool(payload, sharpLib) {
       savedOutputPath: outputPath || '',
     })
   } catch (error) {
+    if (error?.code === 'RUN_CANCELLED') {
+      cancelled = true
+      return { processed, failed, cancelled }
+    }
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }
 
-  return { processed, failed }
+  return { processed, failed, cancelled }
 }
 
 async function executeLocalTool(payload) {
@@ -2438,6 +2505,7 @@ async function executeLocalTool(payload) {
   }
 
   ensureDirectory(payload.destinationPath)
+  clearCancelledRun(payload.runId)
   const startedAt = Date.now()
   emitProcessingProgress({
     phase: 'start',
@@ -2452,14 +2520,25 @@ async function executeLocalTool(payload) {
     startedAt,
   })
 
-  const { processed, failed } = isMergeTool(payload.toolId)
-    ? await executeMergeTool(payload, sharpLib)
-    : await executeSingleAssetTool(payload, sharpLib)
+  let processed = []
+  let failed = []
+  let cancelled = false
+  try {
+    ({ processed, failed, cancelled } = isMergeTool(payload.toolId)
+      ? await executeMergeTool(payload, sharpLib)
+      : await executeSingleAssetTool(payload, sharpLib))
+  } finally {
+    clearCancelledRun(payload.runId)
+  }
   const elapsedMs = Date.now() - startedAt
 
   const ok = processed.length > 0 && failed.length === 0
   const partial = processed.length > 0 && failed.length > 0
-  const message = ok
+  const message = cancelled
+    ? (processed.length
+      ? `已停止 ${payload.toolLabel}，已完成 ${processed.length} 项。`
+      : `已停止 ${payload.toolLabel}。`)
+    : ok
     ? `已完成 ${payload.toolLabel}：${processed.length} 项，输出到 ${payload.destinationPath}`
     : partial
       ? `${payload.toolLabel} 部分完成：成功 ${processed.length} 项，失败 ${failed.length} 项`
@@ -2477,11 +2556,13 @@ async function executeLocalTool(payload) {
     failed: failed.length,
     elapsedMs,
     startedAt,
+    cancelled,
   })
 
   return {
     ok,
     partial,
+    cancelled,
     ...payload,
     elapsedMs,
     processed,
@@ -2793,6 +2874,10 @@ const toolsApi = {
       ...payload,
       message: `宿主处理管线待接入：${payload.toolLabel} · ${payload.queuedCount} 张 · ${payload.summary}`,
     }
+  },
+
+  cancelRun(runId) {
+    return cancelRun(runId)
   },
 }
 

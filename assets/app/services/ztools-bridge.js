@@ -55,6 +55,11 @@ export async function runTool(toolId, config, assets, destinationPath) {
   return window.imgbatch.runTool(toolId, config, assets, destinationPath)
 }
 
+export async function cancelRun(runId) {
+  if (!hasBridge() || typeof window.imgbatch.cancelRun !== 'function') return false
+  return window.imgbatch.cancelRun(runId)
+}
+
 export async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
   if (!hasBridge()) {
     return runTool(toolId, config, assets, destinationPath)

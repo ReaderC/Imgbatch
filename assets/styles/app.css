@@ -4873,6 +4873,12 @@ body {
   min-height: 34px !important;
 }
 
+.topbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .topbar__heading {
   gap: 8px !important;
 }

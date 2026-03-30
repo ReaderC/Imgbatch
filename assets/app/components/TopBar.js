@@ -18,6 +18,11 @@ export function renderTopBar(state) {
       </div>
       <div class="topbar__actions">
         <div class="topbar__meta">
+          ${state.isProcessing
+            ? `<button class="secondary-button topbar__stop-button" data-action="cancel-current-run" ${state.cancelRequested ? 'disabled' : ''}>
+                ${state.cancelRequested ? '停止中' : '停止任务'}
+              </button>`
+            : ''}
           <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${state.isProcessing ? 'disabled' : ''}>
             ${state.isProcessing
               ? `${progress?.completed || 0}/${progress?.total || 0} 处理中`

@@ -1,7 +1,7 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
 import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -451,12 +451,30 @@ async function openResultPath(targetPath) {
 }
 
 async function runBusyAction(task) {
-  setState({ isProcessing: true })
+  setState({ isProcessing: true, cancelRequested: false })
   try {
     return await task()
   } finally {
-    setState({ isProcessing: false })
+    setState({ isProcessing: false, cancelRequested: false })
   }
+}
+
+function getProcessingRunId() {
+  const state = getState()
+  return state.processingProgress?.runId || state.activeRun?.runId || ''
+}
+
+async function cancelCurrentRun() {
+  const runId = getProcessingRunId()
+  if (!runId || getState().cancelRequested) return
+  setState({ cancelRequested: true })
+  const cancelled = await cancelRun(runId)
+  if (!cancelled) {
+    setState({ cancelRequested: false })
+    notify({ type: 'error', message: '当前任务暂不支持停止。' })
+    return
+  }
+  notify({ type: 'info', message: '已请求停止当前任务，正在尽快中止。', durationMs: 3000 })
 }
 
 function notifyActionResult(result, fallbackMessage) {
@@ -1261,6 +1279,11 @@ function attachGlobalEvents() {
 
     if (action === 'process-current') {
       await processCurrentTool()
+      return
+    }
+
+    if (action === 'cancel-current-run') {
+      await cancelCurrentRun()
       return
     }
 

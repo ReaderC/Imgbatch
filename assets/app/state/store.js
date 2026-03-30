@@ -8,6 +8,7 @@ const state = {
   searchQuery: '',
   destinationPath: '',
   isProcessing: false,
+  cancelRequested: false,
   processingProgress: null,
   activeRun: null,
   settings: {
