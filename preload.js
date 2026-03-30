@@ -1718,6 +1718,18 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('padding', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
+  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
+
+  if (noPadding && sourceFormat === format) {
+    fs.copyFileSync(asset.sourcePath, outputPath)
+    return createOutputMeta(outputPath, {
+      size: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+    }, asset)
+  }
+
   const background = hexToRgbaObject(config.color, config.opacity / 100)
   const transformed = createTransformer(sharpLib, asset).extend({
     top: config.top,
