@@ -1637,7 +1637,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.ext)
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
 
-  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio) {
+  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
     fs.copyFileSync(asset.sourcePath, outputPath)
     return createOutputMeta(outputPath, {
       size: asset.sizeBytes,
