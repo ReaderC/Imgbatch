@@ -1189,12 +1189,11 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   }
 
   if (format === 'ico') {
-    const pngBuffer = await transformed
+    const { data, info } = await transformed
       .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
       .png()
-      .toBuffer()
-    const iconMeta = await sharpLib(pngBuffer).metadata()
-    const buffer = createIcoBuffer(pngBuffer, iconMeta.width || 256, iconMeta.height || 256)
+      .toBuffer({ resolveWithObject: true })
+    const buffer = createIcoBuffer(data, info.width || 256, info.height || 256)
     fs.writeFileSync(outputPath, buffer)
     return { outputPath, outputSizeBytes: buffer.length }
   }
@@ -1882,12 +1881,11 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       continue
     }
 
-    const sourceMeta = await sharpLib(asset.sourcePath).metadata()
-    const sourceWidth = Math.max(1, sourceMeta.width || embedded.width || 1)
-    const sourceHeight = Math.max(1, sourceMeta.height || embedded.height || 1)
+    const sourceWidth = Math.max(1, asset.width || embedded.width || 1)
+    const sourceHeight = Math.max(1, asset.height || embedded.height || 1)
     const scaledWidth = Math.max(1, Math.round(drawableWidth))
     const scaledHeight = Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
-    const scaledBuffer = await sharpLib(asset.sourcePath)
+    const scaledBuffer = await sharpLib(imageBytes)
       .resize({ width: scaledWidth, fit: 'fill' })
       .png()
       .toBuffer()
