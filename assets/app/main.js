@@ -754,6 +754,12 @@ function closePreviewModal() {
   setPreviewModal(null)
 }
 
+function togglePreviewCompareFullscreen() {
+  const preview = getState().previewModal
+  if (!preview?.url) return
+  setPreviewModal({ ...preview, expanded: !preview.expanded })
+}
+
 function setPreviewCompareRatio(ratio) {
   const preview = getState().previewModal
   if (!preview?.url) return
@@ -1247,6 +1253,11 @@ function attachGlobalEvents() {
 
     if (action === 'close-preview-modal') {
       closePreviewModal()
+      return
+    }
+
+    if (action === 'toggle-preview-compare-fullscreen') {
+      togglePreviewCompareFullscreen()
       return
     }
 
@@ -1756,19 +1767,35 @@ function attachGlobalEvents() {
   document.addEventListener('keydown', (event) => {
     if (!getState().previewModal?.url) return
     if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
       closePreviewModal()
       return
     }
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
       nudgePreviewCompareRatio(event.shiftKey ? -0.1 : -0.02)
       return
     }
     if (event.key === 'ArrowRight') {
       event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
       nudgePreviewCompareRatio(event.shiftKey ? 0.1 : 0.02)
     }
-  })
+  }, true)
+
+  document.addEventListener('keyup', (event) => {
+    if (!getState().previewModal?.url) return
+    if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    }
+  }, true)
 
   window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)
   window.addEventListener('resize', () => {

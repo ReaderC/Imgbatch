@@ -3027,6 +3027,23 @@ body {
   box-shadow: none;
 }
 
+.preview-modal__dialog--expanded {
+  width: calc(100vw - 8px);
+  max-width: none;
+  height: calc(100vh - 8px);
+  padding: 4px;
+}
+
+.preview-modal__actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .preview-modal__compare {
   min-width: 0;
   flex: 1;
@@ -3170,29 +3187,6 @@ body {
   transform: translateY(-50%) rotate(45deg);
 }
 
-.preview-modal__dialog--compare .preview-modal__meta {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 72px;
-  z-index: 3;
-  padding: 0;
-  pointer-events: none;
-}
-
-.preview-modal__dialog--compare .preview-modal__title,
-.preview-modal__dialog--compare .preview-modal__subtitle {
-  display: inline-block;
-  max-width: min(72vw, 680px);
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(10px);
-}
-
-.preview-modal__dialog--compare .preview-modal__subtitle {
-  margin-top: 8px;
-}
 
 .field textarea {
   padding-top: 14px;
@@ -4146,10 +4140,10 @@ body {
     padding: 6px;
   }
 
-  .preview-modal__dialog--compare .preview-modal__meta {
-    top: 14px;
-    left: 14px;
-    right: 58px;
+  .preview-modal__actions {
+    top: 12px;
+    right: 12px;
+    gap: 8px;
   }
 
   .preview-modal__compare-head {

@@ -339,15 +339,17 @@ function renderInteractivePreviewModal(preview) {
     ? Math.max(0, Math.min(1, Number(preview.compareRatio)))
     : 0.5
   const comparePercent = `${Math.round(compareRatio * 1000) / 10}%`
+  const isExpanded = !!preview.expanded
   return `
     <div class="preview-modal" data-preview-overlay="true">
-      <div class="preview-modal__dialog preview-modal__dialog--compare">
-        <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-        <div class="preview-modal__meta">
-          <div class="preview-modal__title">${escapeHtml(preview.name || '预览')}</div>
-          <div class="preview-modal__subtitle">${escapeHtml(preview.summary || '')}</div>
+      <div class="preview-modal__dialog preview-modal__dialog--compare ${isExpanded ? 'preview-modal__dialog--expanded' : ''}">
+        <div class="preview-modal__actions">
+          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '缩小显示' : '全屏显示'}">
+            <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
+          </button>
+          <button class="preview-modal__close" data-action="close-preview-modal" title="关闭">
+            <span class="material-symbols-outlined">close</span>
+          </button>
         </div>
         <div class="preview-modal__compare-shell">
           <div class="preview-modal__compare-head">
