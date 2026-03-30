@@ -7,6 +7,8 @@ const { execFileSync } = require('child_process')
 const IMAGE_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.avif', '.ico'
 ])
+const TRANSPARENT_BG = { r: 0, g: 0, b: 0, alpha: 0 }
+const OPAQUE_WHITE_BG = { r: 255, g: 255, b: 255, alpha: 1 }
 const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
@@ -1312,14 +1314,13 @@ async function createTiledWatermarkBuffer(sharpLib, input, density, sizeHint = n
   const canvasHeight = height + gap
   const left = Math.max(0, Math.round((canvasWidth - width) / 2))
   const top = Math.max(0, Math.round((canvasHeight - height) / 2))
-  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
 
   return sharpLib({
     create: {
       width: canvasWidth,
       height: canvasHeight,
       channels: 4,
-      background: transparentBackground,
+      background: TRANSPARENT_BG,
     },
   })
     .composite([{ input, left, top }])
@@ -1345,9 +1346,8 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
   const watermarkWidth = Math.max(32, Math.round(baseWidth * 0.18 * renderScale))
-  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
   const { data, info } = await sharpLib(input)
-    .rotate(config.rotation, { background: transparentBackground })
+    .rotate(config.rotation, { background: TRANSPARENT_BG })
     .resize({ width: watermarkWidth, withoutEnlargement: true })
     .ensureAlpha(config.opacity / 100)
     .png()
@@ -1588,14 +1588,13 @@ function mapFlipOutputFormat(asset, config) {
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
-  const transparentBackground = { r: 0, g: 0, b: 0, alpha: 0 }
   const solidBackground = getRotateBackground(config.background)
   let transformed = null
 
   if (config.autoCrop) {
     transformed = createTransformer(sharpLib, asset)
       .ensureAlpha()
-      .rotate(config.angle, { background: transparentBackground })
+      .rotate(config.angle, { background: TRANSPARENT_BG })
       .trim()
   } else {
     transformed = createTransformer(sharpLib, asset).rotate(config.angle, { background: solidBackground })
@@ -1606,7 +1605,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
       width: asset.width,
       height: asset.height,
       fit: 'contain',
-      background: config.autoCrop ? transparentBackground : solidBackground,
+      background: config.autoCrop ? TRANSPARENT_BG : solidBackground,
     })
   }
 
@@ -1620,14 +1619,13 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const format = mapFlipOutputFormat(asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
-  const opaqueWhite = hexToRgbaObject('#ffffff', 1)
   let transformed = createTransformer(sharpLib, asset)
 
   if (config.horizontal) transformed = transformed.flop()
   if (config.vertical) transformed = transformed.flip()
   if (config.autoCropTransparent) transformed = transformed.ensureAlpha().trim()
   if (config.autoCropTransparent && !isAlphaCapableFormat(format)) {
-    transformed = transformed.flatten({ background: opaqueWhite })
+    transformed = transformed.flatten({ background: OPAQUE_WHITE_BG })
   }
   transformed = applyMetadataPolicy(transformed, config.preserveMetadata)
 
