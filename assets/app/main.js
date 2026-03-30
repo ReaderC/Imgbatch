@@ -1080,14 +1080,6 @@ function getConfiguredToolSummary(tool) {
   return describeToolConfig(tool.id, getState().configs[tool.id])
 }
 
-function getToolAssets(tool) {
-  return getAssetsForTool(tool.id, getState().assets)
-}
-
-function getToolRunner(tool) {
-  return getProcessRunner(tool.id)
-}
-
 function getDefaultSavePathLabel() {
   return getState().settings.defaultSavePath || '未设置'
 }
@@ -1327,10 +1319,6 @@ function updateCurrentSettings(settings) {
   updateSettings(settings)
 }
 
-function getToolExecutionIntro(tool, assets) {
-  return `${normalizeToolLabel(tool)} 正在处理 ${getSelectionSummary(assets)}`
-}
-
 function shouldNotifyToolExecutionIntro(tool) {
   return !!tool && isPreviewableTool(tool.id)
 }
@@ -1367,10 +1355,6 @@ function getSettingsPromptDefaultValue() {
   return getState().settings.defaultSavePath || getState().destinationPath || ''
 }
 
-function shouldProcessClickAction(action, target, event) {
-  return shouldShortCircuitClickAction(action, target, event)
-}
-
 function getPreviewOutputDimensions(asset) {
   return `${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}`
 }
@@ -1399,40 +1383,16 @@ function maybeShowPreviewSummary(asset) {
   return false
 }
 
-function canApplyResult(result) {
-  return !!(result?.processed?.length || result?.failed?.length)
-}
-
-function maybeHandleSingleSaveState(asset) {
-  return handleSavableAssetState(asset)
-}
-
 function getSettingsSavedMessage(settings) {
   return createSettingsSuccessMessage(settings)
 }
 
-function shouldUseWindowPrompt() {
-  return typeof window?.prompt === 'function'
-}
-
-function getActionableSaveItems() {
-  return getSavableBulkItems()
-}
-
-function canActionSaveItems() {
-  return getActionableSaveItems().length > 0
-}
-
 function maybeWarnNoActionableSaveItems() {
-  if (!canActionSaveItems()) {
+  if (!getSavableBulkItems().length) {
     notifyNoPreviewToSave()
     return true
   }
   return false
-}
-
-function getPendingSaveItemsCount() {
-  return getActionableSaveItems().length
 }
 
 function getPreviewOutputPath(asset) {
@@ -1443,18 +1403,14 @@ function getSavedOutputPath(asset) {
   return asset.savedOutputPath || ''
 }
 
-function canPreviewAsset(asset) {
-  return !!asset
-}
-
 function maybeHandleAssetPreview(asset) {
-  if (!canPreviewAsset(asset)) return false
+  if (!asset) return false
   maybeShowPreviewSummary(asset)
   return true
 }
 
 function maybeHandleSingleAssetSave(asset) {
-  if (!maybeHandleSingleSaveState(asset)) return false
+  if (!handleSavableAssetState(asset)) return false
   void saveAssetResult(asset.id)
   return true
 }
@@ -1463,10 +1419,6 @@ function maybeHandleSaveAllAction() {
   if (maybeWarnNoActionableSaveItems()) return true
   void saveAllCurrentResults()
   return true
-}
-
-function shouldShowPreviewPath(asset) {
-  return !!getPreviewOutputPath(asset)
 }
 
 function notifyPreviewNotification(asset) {
@@ -1478,10 +1430,6 @@ function maybeHandleExistingPreview(asset) {
   if (!shouldUsePreviewSummary(asset)) return false
   notifyPreviewNotification(asset)
   return true
-}
-
-function maybeHandlePreviewOnly(asset) {
-  return maybeHandleExistingPreview(asset)
 }
 
 function canUsePromptApi() {
