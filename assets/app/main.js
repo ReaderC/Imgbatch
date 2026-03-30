@@ -307,6 +307,39 @@ function confirmDeleteSelectedPreset() {
   })
 }
 
+function confirmReplaceAssetOriginal(assetId) {
+  const asset = getState().assets.find((item) => item.id === assetId)
+  if (!asset) return
+  const resultPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset)
+  if (!resultPath) {
+    notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
+    return
+  }
+  openConfirmDialog({
+    title: '替换原图',
+    subtitle: asset.name,
+    message: '确认用处理结果覆盖原图吗？此操作不可撤销。',
+    confirmLabel: '确认替换',
+    confirmAction: 'confirm-replace-asset-original',
+    assetId,
+  })
+}
+
+function confirmReplaceCurrentOriginals() {
+  const assets = getState().assets.filter((item) => (getSavedOutputPath(item) || getPreviewOutputPath(item)) && item.sourcePath)
+  if (!assets.length) {
+    notify({ type: 'info', message: '当前没有可替换的处理结果。' })
+    return
+  }
+  openConfirmDialog({
+    title: '批量替换原图',
+    subtitle: `共 ${assets.length} 张`,
+    message: `确认用处理结果覆盖 ${assets.length} 张原图吗？此操作不可撤销。`,
+    confirmLabel: '确认替换',
+    confirmAction: 'confirm-replace-current-originals',
+  })
+}
+
 function isPreviewSaveTool(toolId) {
   return PREVIEW_SAVE_TOOLS.has(toolId)
 }
@@ -688,8 +721,6 @@ async function replaceAssetOriginal(assetId) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
   }
-  if (!window.confirm(`确认用处理结果覆盖原图？\n\n${asset.name}`)) return
-
   try {
     const result = await runBusyAction(() => replaceOriginals([getReplacePayload(asset, resultPath)]))
     if (result?.processed?.length) {
@@ -720,8 +751,6 @@ async function replaceCurrentOriginals() {
     notify({ type: 'info', message: '当前没有可替换的处理结果。' })
     return
   }
-  if (!window.confirm(`确认用处理结果覆盖 ${assets.length} 张原图？此操作不可撤销。`)) return
-
   try {
     const result = await runBusyAction(() => replaceOriginals(assets.map((asset) => getReplacePayload(asset, getSavedOutputPath(asset) || getPreviewOutputPath(asset)))))
     if (result?.processed?.length) {
@@ -1407,7 +1436,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'replace-current-originals') {
-      await replaceCurrentOriginals()
+      confirmReplaceCurrentOriginals()
       return
     }
 
@@ -1440,7 +1469,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'replace-asset-original') {
-      await replaceAssetOriginal(target.dataset.assetId)
+      confirmReplaceAssetOriginal(target.dataset.assetId)
       return
     }
 
@@ -1522,6 +1551,19 @@ function attachGlobalEvents() {
     if (action === 'confirm-delete-selected-preset') {
       closeConfirmDialog()
       await removeSelectedPreset()
+      return
+    }
+
+    if (action === 'confirm-replace-asset-original') {
+      const assetId = getState().confirmDialog?.assetId
+      closeConfirmDialog()
+      if (assetId) await replaceAssetOriginal(assetId)
+      return
+    }
+
+    if (action === 'confirm-replace-current-originals') {
+      closeConfirmDialog()
+      await replaceCurrentOriginals()
       return
     }
 
