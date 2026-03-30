@@ -117,8 +117,8 @@ export function renderManualCropPage(state) {
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
             <button class="footer-button" data-action="manual-crop-skip" ${!current ? 'disabled' : ''}>跳过并下一张</button>
             <button class="footer-button primary" data-action="manual-crop-complete" ${!current ? 'disabled' : ''}>标记并下一张</button>
-            <button class="primary-button" data-action="process-current" ${!completedCount || state.isProcessing ? 'disabled' : ''}>
-              ${state.isProcessing ? '裁剪中…' : `开始裁剪 ${completedCount} 张`}
+            <button class="primary-button" data-action="process-current" ${!current || state.isProcessing ? 'disabled' : ''}>
+              ${state.isProcessing ? '裁剪中…' : completedCount ? `开始裁剪 ${completedCount} 张` : '先标记图片'}
             </button>
           </div>
         </div>

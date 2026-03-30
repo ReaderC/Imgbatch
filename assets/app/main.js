@@ -438,6 +438,8 @@ function getReplacePayload(asset, resultPath) {
     name: asset.name,
     sourcePath,
     savedOutputPath: outputPath,
+    outputPath: normalizeAssetPath(asset?.outputPath),
+    stagedOutputPath: normalizeAssetPath(asset?.stagedOutputPath),
   }
 }
 

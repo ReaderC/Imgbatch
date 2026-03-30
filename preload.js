@@ -1292,8 +1292,21 @@ function normalizeFsPath(value, fallback = '') {
   return path.normalize(text.replaceAll('/', path.sep))
 }
 
+function resolveExistingResultPath(item = {}) {
+  const candidates = [
+    item.savedOutputPath,
+    item.outputPath,
+    item.stagedOutputPath,
+  ].map((value) => normalizeFsPath(value)).filter(Boolean)
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return candidates[0] || ''
+}
+
 function replaceOriginalWithSaved(item = {}) {
-  const sourcePath = normalizeFsPath(item.savedOutputPath || item.outputPath)
+  const sourcePath = resolveExistingResultPath(item)
   const targetPath = normalizeFsPath(item.sourcePath)
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     throw new Error('处理结果不存在，无法替换原图')
