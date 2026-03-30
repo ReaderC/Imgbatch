@@ -1120,6 +1120,12 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     throw new Error('压缩结果未小于原图，已跳过该文件')
   }
 
+  const ensureTargetCompressionFits = (outputSizeBytes) => {
+    if (!targetBytes || outputSizeBytes <= targetBytes) return
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath)
+    throw new Error('压缩结果未达到目标体积，已跳过该文件')
+  }
+
   if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
     const output = await writeTransformedAsset(createTransformer(sharpLib, asset), format, Math.round(config.quality), outputPath, {
       width: asset.width,
@@ -1190,6 +1196,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
 
   fs.writeFileSync(outputPath, chosenBuffer)
+  ensureTargetCompressionFits(chosenBuffer.length)
   ensureCompressedOutputIsSmaller(chosenBuffer.length)
   return {
     outputPath,
