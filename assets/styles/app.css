@@ -2329,52 +2329,6 @@ body {
   word-break: break-word;
 }
 
-.result-page__summary,
-.result-page__empty {
-  color: var(--on-surface-variant);
-}
-
-.result-page__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-}
-
-.result-page__summary,
-.result-page__empty {
-  font-size: 13px;
-  color: var(--on-surface-variant);
-}
-
-.result-page__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 240px;
-}
-
-.workspace--result {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.result-page__summary,
-.result-page__empty {
-  font-size: 13px;
-  color: var(--on-surface-variant);
-}
-
-.result-page__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 240px;
-}
-
-.workspace--result {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .preview-modal__dialog {
   position: relative;
   width: min(1100px, 100%);
