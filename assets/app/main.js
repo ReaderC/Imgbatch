@@ -841,22 +841,12 @@ function openExistingPreview(toolId, asset) {
   return false
 }
 
-function maybeNotifyDirectPreviewReady(tool) {
-  if (isDirectPreviewTool(tool.id)) {
-    notifyPreviewReady(tool)
-  }
-}
-
 function getPreviewAssetLabel(asset) {
   return truncate(asset?.name || '当前图片', 20)
 }
 
-function createPreviewUnavailableMessage(tool, asset) {
-  return `${tool.label} 暂不支持预览：${getPreviewAssetLabel(asset)}`
-}
-
 function notifyUnsupportedPreview(tool, asset) {
-  notify({ type: 'info', message: createPreviewUnavailableMessage(tool, asset) })
+  notify({ type: 'info', message: `${tool.label} 暂不支持预览：${getPreviewAssetLabel(asset)}` })
 }
 
 async function executePreviewRunner(toolId, config, assets, destinationPath) {
@@ -876,7 +866,9 @@ async function previewWithRunner(tool, asset) {
   if (!openPreviewModal(previewedAsset)) {
     throw new Error(getPreviewOpenError(tool))
   }
-  maybeNotifyDirectPreviewReady(tool)
+  if (isDirectPreviewTool(tool.id)) {
+    notifyPreviewReady(tool)
+  }
 }
 
 async function previewAssetWithTool(tool, asset) {
