@@ -1165,10 +1165,15 @@ function attachGlobalEvents() {
 
   document.addEventListener('click', async (event) => {
     const modalRoot = event.target.closest('.preview-modal')
-    if (modalRoot && !event.target.closest('[data-action]')) {
-      if (!event.target.closest('.preview-modal__dialog')) {
+    if (modalRoot) {
+      const clickedInsideDialog = !!event.target.closest('.preview-modal__dialog')
+      if (!clickedInsideDialog && event.target === modalRoot) {
         closePreviewModal()
+        return
       }
+    }
+
+    if (modalRoot && !event.target.closest('[data-action]')) {
       return
     }
 
