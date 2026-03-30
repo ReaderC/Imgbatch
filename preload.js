@@ -10,7 +10,7 @@ const IMAGE_EXTENSIONS = new Set([
 const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
-const LOSSY_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
+const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
 const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ico'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
@@ -1117,6 +1117,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('compression', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
+  const targetBytes = config.targetSizeKb * 1024
 
   const ensureCompressedOutputIsSmaller = (outputSizeBytes) => {
     if (!originalSizeBytes || outputSizeBytes < originalSizeBytes) return
@@ -1124,20 +1125,24 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     throw new Error('压缩结果未小于原图，已跳过该文件')
   }
 
-  if (config.mode !== 'target' || !LOSSY_OUTPUT_FORMATS.has(format)) {
+  if (config.mode === 'target' && originalSizeBytes && targetBytes >= originalSizeBytes) {
+    throw new Error('目标大小未小于原图，已跳过该文件')
+  }
+
+  if (config.mode !== 'target' || !TARGET_COMPRESSION_FORMATS.has(format)) {
     const output = await writeTransformedAsset(createTransformer(sharpLib, asset), format, Math.round(config.quality), outputPath, {
       width: asset.width,
       height: asset.height,
     })
     ensureCompressedOutputIsSmaller(output.outputSizeBytes)
-    return output
+    if (config.mode !== 'target') return output
+    const warning = output.outputSizeBytes > targetBytes
+      ? `当前输出格式 ${String(format || '').toUpperCase()} 不支持精确按体积，已输出当前结果 ${Math.max(1, Math.round(output.outputSizeBytes / 1024))} KB。`
+      : ''
+    return warning ? { ...output, warning } : output
   }
 
   const qualitySteps = [90, 80, 70, 60, 50, 40, 30, 20, 10]
-  const targetBytes = config.targetSizeKb * 1024
-  if (originalSizeBytes && targetBytes >= originalSizeBytes) {
-    throw new Error('目标大小未小于原图，已跳过该文件')
-  }
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(90, Math.round(quality)))
