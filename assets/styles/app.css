@@ -4818,6 +4818,10 @@ body {
   gap: 8px !important;
 }
 
+.topbar__toggle {
+  margin-left: -16px !important;
+}
+
 .panel-footer-actions {
   gap: 10px;
 }

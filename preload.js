@@ -482,10 +482,6 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
   })
 }
 
-function mergeResultToProcessed(result) {
-  return normalizeDirectResult(result)
-}
-
 async function mapWithConcurrency(items, concurrency, iteratee) {
   const list = Array.isArray(items) ? items : []
   if (!list.length) return []
@@ -2248,7 +2244,7 @@ function createProcessedOutput(asset, result, payload) {
 
 async function createMergeOutput(outputPath, payload) {
   const stat = fs.statSync(outputPath)
-  return mergeResultToProcessed({
+  return normalizeDirectResult({
     assetId: payload.assets[0]?.id || payload.toolId,
     name: path.basename(outputPath),
     outputPath,
