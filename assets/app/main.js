@@ -1006,120 +1006,6 @@ function shouldSetManualCropRatioAction(action) {
   return action === 'set-manual-crop-ratio'
 }
 
-function getConfiguredToolSummary(tool) {
-  return describeToolConfig(tool.id, getState().configs[tool.id])
-}
-
-function maybeHandleSaveActions(action, target) {
-  if (shouldUseSingleSaveAction(action)) {
-    void saveAssetResult(target.dataset.assetId)
-    return true
-  }
-  if (shouldUseBulkSaveAction(action)) {
-    void saveAllCurrentResults()
-    return true
-  }
-  return false
-}
-
-function maybeHandlePreviewAction(action, target) {
-  if (!shouldPreviewAssetAction(action)) return false
-  const tool = TOOL_MAP[getState().activeTool]
-  const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
-  if (!asset) {
-    notify({ type: 'error', message: '未找到要预览的图片。' })
-    return true
-  }
-  if (tool && isPreviewableTool(tool.id)) {
-    void previewAsset(asset.id)
-    return true
-  }
-  if (tool) {
-    notifyPreviewUnavailable(tool, asset)
-  }
-  return true
-}
-
-function maybeHandleProcessAction(action) {
-  if (!shouldProcessCurrentAction(action)) return false
-  void processCurrentTool()
-  return true
-}
-
-function maybeHandlePresetAction(action, target) {
-  if (!shouldHandlePresetAction(action)) return false
-  const toolId = target.dataset.toolId
-  void savePreset(toolId, getState().configs[toolId]).then(() => {
-    notify({ type: 'success', message: `已保存 ${toolId} 预设。` })
-  })
-  return true
-}
-
-function maybeHandleOpenInputActions(action) {
-  if (shouldOpenFileInputAction(action)) {
-    fileInput.click()
-    return true
-  }
-  if (shouldOpenFolderInputAction(action)) {
-    folderInput.click()
-    return true
-  }
-  return false
-}
-
-function maybeHandleBasicAssetActions(action, target) {
-  if (shouldRemoveAssetAction(action)) {
-    removeAsset(target.dataset.assetId)
-    return true
-  }
-  if (shouldMoveAssetAction(action)) {
-    moveAsset(target.dataset.assetId, target.dataset.direction)
-    return true
-  }
-  return false
-}
-
-function maybeHandleToolActions(action, target, event) {
-  if (shouldActivateToolAction(action)) {
-    setActiveTool(target.dataset.toolId)
-    return true
-  }
-  if (shouldDragRotateAction(action)) {
-    beginRotateDrag(event, target)
-    return true
-  }
-  return false
-}
-
-function maybeHandleConfigActions(action, target) {
-  if (action === 'set-config' && target.dataset.toolId === 'crop' && target.dataset.key === 'ratio') {
-    const ratio = parseValue(target.dataset.value)
-    updateConfig('crop', { ratio, useCustomRatio: ratio === 'Custom' })
-    closeConfigSelect(target)
-    return true
-  }
-  if (shouldSetConfigAction(action)) {
-    updateConfig(target.dataset.toolId, { [target.dataset.key]: parseValue(target.dataset.value) })
-    closeConfigSelect(target)
-    return true
-  }
-  if (shouldApplyResizePresetAction(action)) {
-    updateConfig('resize', {
-      width: target.dataset.width,
-      height: target.dataset.height,
-    })
-    return true
-  }
-  if (shouldSetManualCropRatioAction(action)) {
-    updateConfig('manual-crop', {
-      ratio: target.dataset.label,
-      ratioValue: target.dataset.value,
-    })
-    return true
-  }
-  return false
-}
-
 function closeConfigSelect(target) {
   const shell = target?.closest?.('.select-shell')
   if (!shell) return
@@ -1153,13 +1039,6 @@ function getDestinationSummaryMessage() {
 
 function notifyDestinationSummary() {
   notify({ type: 'info', message: getDestinationSummaryMessage() })
-}
-
-function maybeHandleOpenSettingsAction(action) {
-  if (action !== 'open-settings') return false
-  notifyDestinationSummary()
-  openSettingsDialog()
-  return true
 }
 
 function hasStagedOutput(asset) {
@@ -1211,22 +1090,6 @@ function shouldUsePreviewSummary(asset) {
 
 function getSavableBulkItems() {
   return getBulkSaveItems().filter((item) => !!item?.stagedPath)
-}
-
-function maybeShowPreviewSummary(asset) {
-  if (shouldUsePreviewSummary(asset)) {
-    notify({ type: 'info', message: getPreviewMessage(asset) })
-    return true
-  }
-  return false
-}
-
-function maybeWarnNoActionableSaveItems() {
-  if (!getSavableBulkItems().length) {
-    notifyNoPreviewToSave()
-    return true
-  }
-  return false
 }
 
 function getPreviewOutputPath(asset) {
