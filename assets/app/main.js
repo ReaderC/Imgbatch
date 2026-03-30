@@ -1080,10 +1080,6 @@ function getConfiguredToolSummary(tool) {
   return describeToolConfig(tool.id, getState().configs[tool.id])
 }
 
-function getDefaultSavePathLabel() {
-  return getState().settings.defaultSavePath || '未设置'
-}
-
 function maybeHandleSaveActions(action, target) {
   if (shouldUseSingleSaveAction(action)) {
     void saveAssetResult(target.dataset.assetId)
@@ -1303,10 +1299,6 @@ function getSelectionSummary(assets) {
   return `${getProcessedAssetCount(assets)} 张`
 }
 
-function createProcessMessage(tool, assets) {
-  return `${normalizeToolLabel(tool)} · ${getSelectionSummary(assets)} · ${getConfiguredToolSummary(tool)}`
-}
-
 function getPreviewStatus(asset) {
   return asset?.previewStatus || 'idle'
 }
@@ -1367,24 +1359,12 @@ function getSettingsPromptTitle() {
   return '默认保存路径'
 }
 
-function openSettingsPrompt() {
-  return window.prompt(getSettingsPromptTitle(), getSettingsPromptDefaultValue())
-}
-
-function getPreviewSummary(asset) {
-  return getPreviewMessage(asset)
-}
-
 function maybeShowPreviewSummary(asset) {
   if (shouldUsePreviewSummary(asset)) {
-    notify({ type: 'info', message: getPreviewSummary(asset) })
+    notify({ type: 'info', message: getPreviewMessage(asset) })
     return true
   }
   return false
-}
-
-function getSettingsSavedMessage(settings) {
-  return createSettingsSuccessMessage(settings)
 }
 
 function maybeWarnNoActionableSaveItems() {
@@ -1430,10 +1410,6 @@ function maybeHandleExistingPreview(asset) {
   if (!shouldUsePreviewSummary(asset)) return false
   notifyPreviewNotification(asset)
   return true
-}
-
-function canUsePromptApi() {
-  return typeof window?.prompt === 'function'
 }
 
 function getToolProcessingSummary(tool, assets) {
