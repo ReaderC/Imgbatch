@@ -438,14 +438,15 @@ async function openSavedOutput(assetId) {
     notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
     return
   }
-  const ok = await revealPath(targetPath)
-  if (!ok) {
-    notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
-  }
+  await revealTargetPath(targetPath)
 }
 
 async function openResultPath(targetPath) {
   if (!targetPath) return
+  await revealTargetPath(targetPath)
+}
+
+async function revealTargetPath(targetPath) {
   const ok = await revealPath(targetPath)
   if (!ok) {
     notify({ type: 'error', message: `打开结果目录失败：${targetPath}` })
@@ -1934,11 +1935,7 @@ async function pickInputsFromHost(kind) {
     await handleImport(paths)
   }
 
-  await showMainWindow()
-  window.setTimeout(() => {
-    void showMainWindow()
-    window.focus?.()
-  }, 120)
+  restoreMainWindowAfterDialog()
 }
 
 async function pickWatermarkImageFromHost() {
@@ -1959,7 +1956,11 @@ async function pickWatermarkImageFromHost() {
     updateConfig('watermark', { imagePath })
   }
 
-  await showMainWindow()
+  restoreMainWindowAfterDialog()
+}
+
+function restoreMainWindowAfterDialog() {
+  void showMainWindow()
   window.setTimeout(() => {
     void showMainWindow()
     window.focus?.()
