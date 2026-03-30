@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
 import { buildStagedItems, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -16,6 +16,7 @@ watermarkFileInput.multiple = false
 const DRAG_CONTEXT = {
   rotateDial: null,
   manualCrop: null,
+  queueSort: null,
 }
 let resultMarqueeFrame = 0
 let activeTooltipTarget = null
@@ -1779,18 +1780,89 @@ function attachGlobalEvents() {
     if (activeTooltipTarget) queueResultMarqueeSync()
   })
 
+  document.addEventListener('dragstart', (event) => {
+    const item = event.target.closest('.queue-item--sortable[data-asset-id]')
+    if (!item) return
+    beginQueueSortDrag(item, event)
+  })
+
+  document.addEventListener('dragend', () => {
+    endQueueSortDrag()
+  })
+
   document.addEventListener('dragover', (event) => {
+    const queueDropTarget = getQueueSortDropTarget(event)
+    if (DRAG_CONTEXT.queueSort && queueDropTarget) {
+      event.preventDefault()
+      updateQueueSortDropIndicator(queueDropTarget, event.clientY)
+      return
+    }
     if (!canImportFromEvent(event)) return
     if (!getDropSurface(event)) return
     event.preventDefault()
   })
 
   document.addEventListener('drop', async (event) => {
+    const queueDropTarget = getQueueSortDropTarget(event)
+    if (DRAG_CONTEXT.queueSort && queueDropTarget) {
+      event.preventDefault()
+      finishQueueSortDrop(queueDropTarget, event.clientY)
+      return
+    }
     if (!canImportFromEvent(event)) return
     if (!getDropSurface(event)) return
     event.preventDefault()
     await handleImport(extractDroppedItems(event))
   })
+}
+
+function getQueueSortDropTarget(event) {
+  return event.target.closest('.queue-item--sortable[data-asset-id]')
+}
+
+function clearQueueSortIndicators() {
+  document.querySelectorAll('.queue-item--sortable.is-dragging, .queue-item--sortable.is-drop-before, .queue-item--sortable.is-drop-after')
+    .forEach((item) => item.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after'))
+}
+
+function beginQueueSortDrag(item, event) {
+  const tool = TOOL_MAP[getState().activeTool]
+  if (tool?.mode !== 'sort') return
+  DRAG_CONTEXT.queueSort = { assetId: item.dataset.assetId }
+  clearQueueSortIndicators()
+  item.classList.add('is-dragging')
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', item.dataset.assetId || '')
+  }
+}
+
+function updateQueueSortDropIndicator(item, clientY) {
+  clearQueueSortIndicators()
+  if (!DRAG_CONTEXT.queueSort || item.dataset.assetId === DRAG_CONTEXT.queueSort.assetId) {
+    item.classList.add('is-dragging')
+    return
+  }
+  const rect = item.getBoundingClientRect()
+  const placement = clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+  item.classList.add(placement === 'after' ? 'is-drop-after' : 'is-drop-before')
+}
+
+function finishQueueSortDrop(item, clientY) {
+  const drag = DRAG_CONTEXT.queueSort
+  if (!drag) return
+  const targetAssetId = item.dataset.assetId
+  if (targetAssetId && targetAssetId !== drag.assetId) {
+    const rect = item.getBoundingClientRect()
+    const placement = clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+    moveAssetToTarget(drag.assetId, targetAssetId, placement)
+  }
+  endQueueSortDrag()
+}
+
+function endQueueSortDrag() {
+  DRAG_CONTEXT.queueSort = null
+  clearQueueSortIndicators()
 }
 
 async function handleImport(items) {

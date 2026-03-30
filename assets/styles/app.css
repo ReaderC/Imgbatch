@@ -3364,6 +3364,22 @@ body {
   align-items: center;
 }
 
+.queue-item--sortable {
+  user-select: none;
+}
+
+.queue-item--sortable.is-dragging {
+  opacity: 0.62;
+}
+
+.queue-item--sortable.is-drop-before {
+  box-shadow: inset 0 3px 0 var(--primary);
+}
+
+.queue-item--sortable.is-drop-after {
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+
 .queue-item__content {
   min-width: 0;
 }

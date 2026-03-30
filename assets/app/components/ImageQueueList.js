@@ -43,8 +43,11 @@ export function renderImageQueue(state) {
 }
 
 function renderQueueItem(asset, tool, state, index, total) {
+  const sortableAttrs = tool.mode === 'sort'
+    ? ` data-asset-id="${asset.id}" draggable="true"`
+    : ''
   return `
-    <article class="queue-item">
+    <article class="queue-item${tool.mode === 'sort' ? ' queue-item--sortable' : ''}"${sortableAttrs}>
       <div class="queue-item__thumb">
         <img src="${asset.thumbnailUrl}" alt="${escapeHtml(asset.name)}" />
       </div>
@@ -72,7 +75,7 @@ function renderQueueItem(asset, tool, state, index, total) {
           <button class="icon-button" data-action="move-asset" data-direction="down" data-asset-id="${asset.id}" ${index === total - 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">keyboard_arrow_down</span>
           </button>
-          <span class="material-symbols-outlined queue-item__drag">drag_indicator</span>
+          <span class="material-symbols-outlined queue-item__drag" title="拖动排序">drag_indicator</span>
         ` : renderPrimaryAction(asset, tool)}
         <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" title="移除">
           <span class="material-symbols-outlined">close</span>

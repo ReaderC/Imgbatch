@@ -191,6 +191,21 @@ export function moveAsset(assetId, direction) {
   emit()
 }
 
+export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') {
+  if (!assetId || !targetAssetId || assetId === targetAssetId) return
+  const fromIndex = state.assets.findIndex((item) => item.id === assetId)
+  const targetIndex = state.assets.findIndex((item) => item.id === targetAssetId)
+  if (fromIndex === -1 || targetIndex === -1) return
+
+  const next = [...state.assets]
+  const [moved] = next.splice(fromIndex, 1)
+  const adjustedTargetIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
+  const insertIndex = placement === 'after' ? adjustedTargetIndex + 1 : adjustedTargetIndex
+  next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, moved)
+  state.assets = next
+  emit()
+}
+
 export function pushNotification(notification) {
   const item = { id: crypto.randomUUID(), ...notification }
   state.notifications = [...state.notifications, item].slice(-4)
