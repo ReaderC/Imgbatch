@@ -1275,7 +1275,7 @@ function attachGlobalEvents() {
 
   document.addEventListener('pointerdown', (event) => {
     const previewBody = event.target.closest('.preview-modal__body--compare, .preview-modal__body--split')
-    if (previewBody) {
+    if (previewBody && event.button === 2) {
       beginPreviewComparePan(event, previewBody)
       return
     }
