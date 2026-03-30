@@ -2334,7 +2334,7 @@ async function executeLocalTool(payload) {
     startedAt,
   })
 
-  const { processed, failed } = ['merge-image', 'merge-pdf', 'merge-gif'].includes(payload.toolId)
+  const { processed, failed } = isMergeTool(payload.toolId)
     ? await executeMergeTool(payload, sharpLib)
     : await executeSingleAssetTool(payload, sharpLib)
   const elapsedMs = Date.now() - startedAt
