@@ -1294,6 +1294,7 @@ function normalizeFsPath(value, fallback = '') {
 
 function resolveExistingResultPath(item = {}) {
   const candidates = [
+    item.resultPath,
     item.savedOutputPath,
     item.outputPath,
     item.stagedOutputPath,

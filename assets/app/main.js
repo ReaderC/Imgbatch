@@ -308,13 +308,13 @@ function confirmDeleteSelectedPreset() {
 }
 
 function confirmReplaceAssetOriginal(assetId) {
-  const asset = getState().assets.find((item) => item.id === assetId)
-  if (!asset) return
-  const resultPath = getResultPathForReplacement(assetId)
-  if (!resultPath) {
+  const entry = getReplaceEntry(assetId)
+  if (!entry) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
   }
+  const asset = getState().assets.find((item) => item.id === assetId)
+  if (!asset) return
   openConfirmDialog({
     title: '替换原图',
     subtitle: asset.name,
@@ -326,15 +326,15 @@ function confirmReplaceAssetOriginal(assetId) {
 }
 
 function confirmReplaceCurrentOriginals() {
-  const assets = getState().assets.filter((item) => getResultPathForReplacement(item.id) && item.sourcePath)
-  if (!assets.length) {
+  const entries = getReplaceEntries()
+  if (!entries.length) {
     notify({ type: 'info', message: '当前没有可替换的处理结果。' })
     return
   }
   openConfirmDialog({
     title: '批量替换原图',
-    subtitle: `共 ${assets.length} 张`,
-    message: `确认用处理结果覆盖 ${assets.length} 张原图吗？此操作不可撤销。`,
+    subtitle: `共 ${entries.length} 张`,
+    message: `确认用处理结果覆盖 ${entries.length} 张原图吗？此操作不可撤销。`,
     confirmLabel: '确认替换',
     confirmAction: 'confirm-replace-current-originals',
   })
@@ -463,19 +463,6 @@ function notifyActionResult(result, fallbackMessage) {
   })
 }
 
-function getReplacePayload(asset, resultPath) {
-  const sourcePath = normalizeAssetPath(asset?.sourcePath)
-  const outputPath = normalizeAssetPath(resultPath)
-  return {
-    assetId: asset.id,
-    name: asset.name,
-    sourcePath,
-    savedOutputPath: outputPath,
-    outputPath: normalizeAssetPath(asset?.outputPath),
-    stagedOutputPath: normalizeAssetPath(asset?.stagedOutputPath),
-  }
-}
-
 function getResultPathForReplacement(assetId) {
   const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
   const resultViewPath = normalizeAssetPath(resultItem?.outputPath)
@@ -492,6 +479,29 @@ function getResultPathForReplacement(assetId) {
 
 function normalizeAssetPath(value = '') {
   return String(value || '').replaceAll('\\', '/').trim()
+}
+
+function getReplaceEntry(assetId) {
+  const asset = getState().assets.find((item) => item.id === assetId)
+  if (!asset?.sourcePath) return null
+  const resultPath = getResultPathForReplacement(assetId)
+  if (!resultPath) return null
+  return {
+    assetId: asset.id,
+    name: asset.name,
+    sourcePath: normalizeAssetPath(asset.sourcePath),
+    resultPath,
+    // Keep legacy fields so old result states still have a fallback chain in preload.
+    savedOutputPath: normalizeAssetPath(asset.savedOutputPath),
+    outputPath: normalizeAssetPath(asset.outputPath),
+    stagedOutputPath: normalizeAssetPath(asset.stagedOutputPath),
+  }
+}
+
+function getReplaceEntries() {
+  return getState().assets
+    .map((item) => getReplaceEntry(item.id))
+    .filter(Boolean)
 }
 
 function clearAssetsResultState(assetIds) {
@@ -728,15 +738,13 @@ function injectResultToolbar() {
 }
 
 async function replaceAssetOriginal(assetId) {
-  const asset = getState().assets.find((item) => item.id === assetId)
-  if (!asset) return
-  const resultPath = getResultPathForReplacement(assetId)
-  if (!resultPath) {
+  const entry = getReplaceEntry(assetId)
+  if (!entry) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
   }
   try {
-    const result = await runBusyAction(() => replaceOriginals([getReplacePayload(asset, resultPath)]))
+    const result = await runBusyAction(() => replaceOriginals([entry]))
     if (result?.processed?.length) {
       handleResultReplaceCompletion(result.processed)
     }
@@ -760,15 +768,13 @@ async function openCurrentResultsDirectory() {
 }
 
 async function replaceCurrentOriginals() {
-  const assets = getState().assets
-    .map((item) => ({ asset: item, resultPath: getResultPathForReplacement(item.id) }))
-    .filter((entry) => entry.resultPath && entry.asset.sourcePath)
-  if (!assets.length) {
+  const entries = getReplaceEntries()
+  if (!entries.length) {
     notify({ type: 'info', message: '当前没有可替换的处理结果。' })
     return
   }
   try {
-    const result = await runBusyAction(() => replaceOriginals(assets.map(({ asset, resultPath }) => getReplacePayload(asset, resultPath))))
+    const result = await runBusyAction(() => replaceOriginals(entries))
     if (result?.processed?.length) {
       handleResultReplaceCompletion(result.processed)
     }
