@@ -379,7 +379,7 @@ async function saveAssetResult(assetId) {
     const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
-      handleResultSaveCompletion()
+      refreshResultView()
     }
     notifyActionResult(result, '保存失败。')
   } catch (error) {
@@ -399,7 +399,7 @@ async function saveAllCurrentResults() {
     const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, getCurrentDestinationPath()))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
-      handleResultSaveCompletion()
+      refreshResultView()
     }
     notifyActionResult(result, '批量保存失败。')
   } catch (error) {
@@ -585,23 +585,6 @@ function refreshResultView() {
   })
 }
 
-function syncResultUiAfterSave() {
-  refreshResultView()
-}
-
-function syncResultUiAfterReplace(assetIds = []) {
-  clearAssetsResultState(assetIds)
-  refreshResultView()
-}
-
-function handleResultSaveCompletion() {
-  syncResultUiAfterSave()
-}
-
-function handleResultReplaceCompletion(processed) {
-  syncResultUiAfterReplace((processed || []).map((item) => item.assetId).filter(Boolean))
-}
-
 function updateColorPreview(toolId, key, value) {
   updateConfig(toolId, { [key]: value })
 }
@@ -744,7 +727,8 @@ async function replaceAssetOriginal(assetId) {
   try {
     const result = await runBusyAction(() => replaceOriginals([entry]))
     if (result?.processed?.length) {
-      handleResultReplaceCompletion(result.processed)
+      clearAssetsResultState(result.processed.map((item) => item.assetId).filter(Boolean))
+      refreshResultView()
     }
     notifyActionResult(result, '替换原图失败。')
   } catch (error) {
@@ -774,7 +758,8 @@ async function replaceCurrentOriginals() {
   try {
     const result = await runBusyAction(() => replaceOriginals(entries))
     if (result?.processed?.length) {
-      handleResultReplaceCompletion(result.processed)
+      clearAssetsResultState(result.processed.map((item) => item.assetId).filter(Boolean))
+      refreshResultView()
     }
     notifyActionResult(result, '替换原图失败。')
   } catch (error) {
