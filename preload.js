@@ -409,7 +409,11 @@ async function savePreviewResult(baseDestinationPath, runFolderName, stagedItem)
     fs.copyFileSync(sourcePath, targetPath)
   }
 
-  return readOutputMeta(targetPath)
+  return createOutputMeta(targetPath, {
+    size: stagedItem?.outputSizeBytes,
+    width: stagedItem?.width,
+    height: stagedItem?.height,
+  }, stagedItem)
 }
 
 function normalizePreviewResult(item = {}, payload) {
@@ -2122,6 +2126,9 @@ function buildStagedItemsFromAssets(assets = []) {
       name: asset.name,
       stagedPath: asset.stagedOutputPath,
       outputName: asset.stagedOutputName || path.basename(asset.stagedOutputPath),
+      outputSizeBytes: asset.stagedSizeBytes || 0,
+      width: asset.stagedWidth || 0,
+      height: asset.stagedHeight || 0,
       runId: asset.runId || '',
       runFolderName: asset.runFolderName || '',
       toolId: asset.stagedToolId || '',
