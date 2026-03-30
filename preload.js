@@ -417,15 +417,6 @@ async function savePreviewResult(baseDestinationPath, runFolderName, stagedItem)
   }, stagedItem)
 }
 
-function normalizeDirectResult(item = {}) {
-  return {
-    ...item,
-    mode: 'direct',
-    previewStatus: 'saved',
-    savedOutputPath: item.outputPath || '',
-  }
-}
-
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
@@ -457,16 +448,19 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
     ? createOutputMeta(outputPath, result, result)
     : null) || await readOutputMeta(outputPath, sharpLib)
-  return normalizeDirectResult({
+  return {
     assetId: asset.id,
     name: asset.name,
+    mode: 'direct',
+    previewStatus: 'saved',
     outputPath,
     outputName: meta.outputName,
     outputSizeBytes: typeof result === 'object' && result.outputSizeBytes ? result.outputSizeBytes : meta.outputSizeBytes,
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
-  })
+    savedOutputPath: outputPath || '',
+  }
 }
 
 async function mapWithConcurrency(items, concurrency, iteratee) {
@@ -2136,15 +2130,18 @@ async function executeSaveFlow(payload) {
   for (const item of payload.stagedItems) {
     try {
       const saved = await savePreviewResult(payload.destinationPath, payload.runFolderName, item)
-      processed.push(normalizeDirectResult({
+      processed.push({
         assetId: item.assetId,
         name: item.name,
+        mode: 'direct',
+        previewStatus: 'saved',
         outputPath: saved.outputPath,
         outputName: saved.outputName,
         outputSizeBytes: saved.outputSizeBytes,
         width: saved.width,
         height: saved.height,
-      }))
+        savedOutputPath: saved.outputPath || '',
+      })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '保存失败' })
     }
@@ -2192,15 +2189,18 @@ async function executeMergeTool(payload, sharpLib) {
     const result = await mergeHandler(sharpLib, payload)
     const outputPath = typeof result === 'string' ? result : result.outputPath
     const outputName = path.basename(outputPath)
-    processed.push(normalizeDirectResult({
+    processed.push({
       assetId: payload.assets[0]?.id || payload.toolId,
       name: outputName,
+      mode: 'direct',
+      previewStatus: 'saved',
       outputPath,
       outputName,
       outputSizeBytes: Number(result?.outputSizeBytes) || 0,
       width: 0,
       height: 0,
-    }))
+      savedOutputPath: outputPath || '',
+    })
   } catch (error) {
     failed.push({ assetId: payload.toolId, name: payload.toolLabel, error: error?.message || '处理失败' })
   }
