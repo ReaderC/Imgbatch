@@ -171,7 +171,7 @@ function getToolSummary(toolId, state, asset) {
   }
   if (toolId === 'merge-pdf') return `页面 ${config.pageSize} · 边距 ${config.margin}`
   if (toolId === 'merge-image') {
-    const outputFormat = String(config.outputFormat || 'PNG')
+    const outputFormat = String(config.outputFormat || 'JPEG')
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px · ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' · 小图原尺寸' : ''}`
   }

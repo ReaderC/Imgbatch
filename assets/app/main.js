@@ -2662,7 +2662,7 @@ function describeToolConfig(toolId, config) {
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
-    const outputFormat = String(config.outputFormat || 'PNG')
+    const outputFormat = String(config.outputFormat || 'JPEG')
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
   }

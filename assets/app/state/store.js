@@ -38,7 +38,7 @@ const state = {
     rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
     flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original' },
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
-    'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'PNG', quality: 90 },
+    'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'JPEG', quality: 90 },
     'merge-gif': { width: 1080, height: 1080, interval: 0.5, background: '#ffffff', loop: true },
     'manual-crop': { ratio: '16:9 电影', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, hudCollapsed: true, lastCompletedCropSeed: null },
   },

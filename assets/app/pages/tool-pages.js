@@ -377,7 +377,7 @@ function renderMergePdfConfig(config) {
 }
 
 function renderMergeImageConfig(config) {
-  const outputFormat = String(config.outputFormat || 'PNG')
+  const outputFormat = String(config.outputFormat || 'JPEG')
   const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
   const qualityHint = qualitySupported ? '质量越低，输出体积通常越小。' : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
@@ -391,9 +391,15 @@ function renderMergeImageConfig(config) {
     `)}
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
     ${renderFieldGrid(`
-      ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'PNG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
+      ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
       ${renderRangeField({ label: '输出质量', toolId: 'merge-image', key: 'quality', min: 1, max: 100, value: config.quality || 90, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
     `)}
+    <label class="setting-row setting-row--stack">
+      <span class="setting-row__header">
+        <span class="setting-row__label"></span>
+      </span>
+      <span class="setting-row__hint setting-row__hint--compression">JPEG 体积更小，适合照片；WebP 通常更省空间；PNG 清晰无损，但体积通常更大。</span>
+    </label>
     ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
   `)

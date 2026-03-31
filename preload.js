@@ -71,7 +71,7 @@ function summarizeConfig(toolId, config = {}) {
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
-    const outputFormat = String(config.outputFormat || 'PNG')
+    const outputFormat = String(config.outputFormat || 'JPEG')
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' / 小图原尺寸' : ''}`
   }
@@ -637,7 +637,7 @@ function normalizeRunConfig(toolId, config = {}) {
       background: sanitizeText(config.background, '#ffffff'),
       align: pickOption(String(config.align || ''), ['start', 'center'], 'start'),
       preventUpscale: Boolean(config.preventUpscale),
-      outputFormat: pickOption(String(config.outputFormat || ''), ['PNG', 'JPEG', 'WebP'], 'PNG'),
+      outputFormat: pickOption(String(config.outputFormat || ''), ['PNG', 'JPEG', 'WebP'], 'JPEG'),
       quality: Math.max(1, Math.min(100, toInteger(config.quality, 90))),
     }
   }
