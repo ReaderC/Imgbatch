@@ -1063,8 +1063,10 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const warning = chosenBuffer.length > targetBytes
     ? `未达到目标体积 ${config.targetSizeKb} KB，已输出当前可达到的最小结果 ${Math.max(1, Math.round(chosenBuffer.length / 1024))} KB。`
     : ''
+  if (originalSizeBytes && chosenBuffer.length >= originalSizeBytes) {
+    throw new Error('压缩结果未小于原图，已跳过该文件')
+  }
   fs.writeFileSync(outputPath, chosenBuffer)
-  ensureCompressedOutputIsSmaller(chosenBuffer.length)
   return {
     outputPath,
     outputName: path.basename(outputPath),
