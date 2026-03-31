@@ -1026,6 +1026,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
   const targetBytes = config.targetSizeKb * 1024
   const maxQuality = 90
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
 
   const ensureCompressedOutputIsSmaller = (outputSizeBytes) => {
     if (!originalSizeBytes || outputSizeBytes < originalSizeBytes) return
@@ -1035,6 +1036,10 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 
   if (config.mode === 'target' && originalSizeBytes && targetBytes >= originalSizeBytes) {
     throw new Error('目标大小未小于原图，已跳过该文件')
+  }
+
+  if (config.mode !== 'target' && sourceFormat === format && Math.round(config.quality) >= 100) {
+    return copyAssetToOutput(asset, outputPath)
   }
 
   if (config.mode !== 'target' || !TARGET_COMPRESSION_FORMATS.has(format)) {
