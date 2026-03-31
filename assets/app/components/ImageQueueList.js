@@ -54,6 +54,7 @@ export function renderImageQueue(state) {
 }
 
 function renderQueueItem(asset, tool, state, index, total) {
+  const assetFormat = getAssetFormatLabel(asset)
   const sortableAttrs = tool.mode === 'sort'
     ? ` data-asset-id="${asset.id}" draggable="true"`
     : ''
@@ -67,7 +68,7 @@ function renderQueueItem(asset, tool, state, index, total) {
         <div class="queue-item__subline queue-item__subline--meta">
           <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
           <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
-          <span class="queue-pill">${asset.ext.toUpperCase()}</span>
+          <span class="queue-pill">${assetFormat}</span>
         </div>
         <div class="queue-item__subline queue-item__subline--summary">
           <span class="queue-summary-text">${getToolSummary(tool.id, state, asset)}</span>
@@ -97,8 +98,9 @@ function renderQueueItem(asset, tool, state, index, total) {
 }
 
 function renderCompactQueueTicker(asset, tool, state) {
+  const assetFormat = getAssetFormatLabel(asset)
   const text = [
-    asset.ext.toUpperCase(),
+    assetFormat,
     getToolSummary(tool.id, state, asset),
     formatBytes(asset.sizeBytes),
     `${asset.width || '—'} × ${asset.height || '—'}`,
@@ -112,6 +114,14 @@ function renderCompactQueueTicker(asset, tool, state) {
       </div>
     </div>
   `
+}
+
+function getAssetFormatLabel(asset) {
+  const format = String(asset?.inputFormat || asset?.ext || '').trim().toLowerCase()
+  if (!format) return '—'
+  if (format === 'jpg') return 'JPEG'
+  if (format === 'tif') return 'TIFF'
+  return format.toUpperCase()
 }
 
 function renderPrimaryAction(asset, tool) {

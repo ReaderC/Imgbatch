@@ -500,6 +500,7 @@ function clearAssetsResultState(processedItems) {
         sourcePath: nextSourcePath || asset.sourcePath,
         name: nextName,
         ext: nextExt,
+        inputFormat: nextExt,
         thumbnailUrl: nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl,
         previewStatus: 'idle',
         previewUrl: '',

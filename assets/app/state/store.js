@@ -220,8 +220,11 @@ export function dismissNotification(id) {
 }
 
 function createAssetState(asset) {
+  const normalizedFormat = normalizeAssetFormat(asset?.inputFormat || asset?.ext)
   return {
     ...asset,
+    ext: normalizedFormat || asset.ext || '',
+    inputFormat: normalizedFormat || '',
     status: asset.status || 'idle',
     outputPath: asset.outputPath || '',
     error: asset.error || '',
@@ -248,6 +251,13 @@ function markAssetPreviewStale(asset, toolId) {
     ...asset,
     previewStatus: 'stale',
   }
+}
+
+function normalizeAssetFormat(value) {
+  const format = String(value || '').trim().toLowerCase()
+  if (format === 'jpg') return 'jpeg'
+  if (format === 'tif') return 'tiff'
+  return format
 }
 
 function applyProcessedAsset(asset, processed, result) {
