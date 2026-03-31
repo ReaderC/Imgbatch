@@ -1135,7 +1135,8 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   if (shouldProbeSourceFormat) {
     try {
       sourceInput = fs.readFileSync(asset.sourcePath)
-      const metadata = await sharpLib(sourceInput).metadata()
+      const metadata = asset.inputMetadata || await sharpLib(sourceInput).metadata()
+      if (metadata && !asset.inputMetadata) asset.inputMetadata = metadata
       sourceFormat = normalizeImageFormatName(metadata?.format) || sourceFormat
     } catch {
       sourceFormat = normalizeImageFormatName(asset.inputFormat)
@@ -1498,41 +1499,37 @@ function removeEmptyDirectoryIfPossible(targetPath) {
   }
 }
 
-function replaceOriginalWithSaved(item = {}) {
-  const sourcePath = resolveExistingResultPath(item)
-  const originalSourcePath = normalizeFsPath(item.sourcePath)
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
-    throw new Error('处理结果不存在，无法替换原图')
-  }
-  if (!originalSourcePath) {
-    throw new Error('原图不存在，无法替换')
-  }
-  const originalParsedPath = path.parse(originalSourcePath)
-  const resultExtension = path.extname(sourcePath) || originalParsedPath.ext
-  const targetPath = path.join(originalParsedPath.dir, `${originalParsedPath.name}${resultExtension}`)
-  overwriteFile(sourcePath, targetPath)
-  if (path.resolve(originalSourcePath) !== path.resolve(targetPath) && fs.existsSync(originalSourcePath)) {
-    fs.unlinkSync(originalSourcePath)
-  }
-  if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
-    fs.unlinkSync(sourcePath)
-    removeEmptyDirectoryIfPossible(sourcePath)
-  }
-  return {
-    assetId: item.assetId,
-    name: item.name,
-    outputPath: '',
-    savedOutputPath: '',
-    sourcePath: targetPath,
-  }
-}
-
 async function replaceOriginals(items = []) {
   const processed = []
   const failed = []
   for (const item of items) {
     try {
-      processed.push(replaceOriginalWithSaved(item))
+      const sourcePath = resolveExistingResultPath(item)
+      const originalSourcePath = normalizeFsPath(item.sourcePath)
+      if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('处理结果不存在，无法替换原图')
+      }
+      if (!originalSourcePath) {
+        throw new Error('原图不存在，无法替换')
+      }
+      const originalParsedPath = path.parse(originalSourcePath)
+      const resultExtension = path.extname(sourcePath) || originalParsedPath.ext
+      const targetPath = path.join(originalParsedPath.dir, `${originalParsedPath.name}${resultExtension}`)
+      overwriteFile(sourcePath, targetPath)
+      if (path.resolve(originalSourcePath) !== path.resolve(targetPath) && fs.existsSync(originalSourcePath)) {
+        fs.unlinkSync(originalSourcePath)
+      }
+      if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
+        fs.unlinkSync(sourcePath)
+        removeEmptyDirectoryIfPossible(sourcePath)
+      }
+      processed.push({
+        assetId: item.assetId,
+        name: item.name,
+        outputPath: '',
+        savedOutputPath: '',
+        sourcePath: targetPath,
+      })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
     }
