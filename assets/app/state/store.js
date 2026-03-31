@@ -313,8 +313,10 @@ function buildResultView(result, assets = []) {
   const processed = Array.isArray(result?.processed) ? result.processed : []
   const failed = Array.isArray(result?.failed) ? result.failed : []
   const assetMap = new Map((assets || []).map((asset) => [asset.id, asset]))
-  const items = processed
-    .map((item) => buildResultViewItem(item, assetMap.get(item.assetId)))
+  const isMergedOutput = ['merge-pdf', 'merge-image', 'merge-gif'].includes(result?.toolId)
+  const items = (isMergedOutput
+    ? processed.map((item) => buildMergedResultViewItem(item, assets))
+    : processed.map((item) => buildResultViewItem(item, assetMap.get(item.assetId))))
     .filter((item) => item.outputPath)
 
   return {
@@ -347,6 +349,41 @@ function buildResultViewItem(processed, asset) {
       sizeBytes: asset?.sizeBytes || 0,
       width: asset?.width || 0,
       height: asset?.height || 0,
+    },
+    result: {
+      name: resultName,
+      sizeBytes: resultSizeBytes,
+      width: resultWidth,
+      height: resultHeight,
+    },
+    summary: processed?.summary || '',
+  }
+}
+
+function buildMergedResultViewItem(processed, assets = []) {
+  const sourceAssets = Array.isArray(assets) ? assets : []
+  const sourceName = processed?.name || processed?.outputName || (sourceAssets[0]?.name || '')
+  const resultName = processed?.outputName || getPathFileName(processed?.savedOutputPath || processed?.outputPath || processed?.stagedPath) || sourceName
+  const resultWidth = processed?.width || 0
+  const resultHeight = processed?.height || 0
+  const resultSizeBytes = processed?.outputSizeBytes || 0
+  const outputPath = processed?.savedOutputPath || processed?.outputPath || processed?.stagedPath || ''
+  const sourceSizeBytes = sourceAssets.reduce((sum, asset) => sum + Math.max(0, Number(asset?.sizeBytes) || 0), 0)
+  const sourceCount = sourceAssets.length
+
+  return {
+    assetId: processed?.assetId || sourceAssets[0]?.id || '',
+    name: sourceName,
+    beforeUrl: sourceAssets[0]?.thumbnailUrl || '',
+    afterUrl: processed?.previewUrl || processed?.outputPath || processed?.savedOutputPath || processed?.stagedPath || '',
+    outputPath,
+    source: {
+      name: sourceName,
+      sizeBytes: sourceSizeBytes,
+      width: 0,
+      height: 0,
+      dimensionsText: sourceCount ? `共 ${sourceCount} 张输入` : '-',
+      isAggregate: true,
     },
     result: {
       name: resultName,

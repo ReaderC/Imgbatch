@@ -246,7 +246,7 @@ function renderResultWorkspace(state) {
               ${renderResultStrip(
                 '原',
                 formatBytes(item.source?.sizeBytes || 0),
-                formatDimensions(item.source?.width, item.source?.height),
+                item.source?.dimensionsText || formatDimensions(item.source?.width, item.source?.height),
               )}
               ${renderResultStrip(
                 '后',
@@ -257,12 +257,14 @@ function renderResultWorkspace(state) {
                 ),
                 formatResultStat(
                   formatDimensions(item.result?.width, item.result?.height),
-                  formatDimensionDelta(
-                    item.source?.width || 0,
-                    item.source?.height || 0,
-                    item.result?.width || 0,
-                    item.result?.height || 0,
-                  ),
+                  item.source?.isAggregate
+                    ? ''
+                    : formatDimensionDelta(
+                      item.source?.width || 0,
+                      item.source?.height || 0,
+                      item.result?.width || 0,
+                      item.result?.height || 0,
+                    ),
                 ),
               )}
             </div>
