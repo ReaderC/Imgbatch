@@ -9,6 +9,17 @@ const MERGE_PREVIEW_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
 const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const SETTINGS_TOOL_ID = 'settings'
+const WATERMARK_POSITION_LABELS = {
+  'top-left': '左上',
+  'top-center': '上方居中',
+  'top-right': '右上',
+  'middle-left': '左侧居中',
+  center: '正中',
+  'middle-right': '右侧居中',
+  'bottom-left': '左下',
+  'bottom-center': '下方居中',
+  'bottom-right': '右下',
+}
 
 const app = document.getElementById('app')
 const fileInput = createFileInput({ directory: false })
@@ -2640,7 +2651,7 @@ function describeToolConfig(toolId, config) {
     const height = typeof config.height === 'object' ? `${config.height.value}${config.height.unit}` : config.height
     return `尺寸 ${width} × ${height}`
   }
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position}`
   if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
   if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`

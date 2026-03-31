@@ -38,6 +38,17 @@ const WATERMARK_POSITIONS = [
   'middle-left', 'center', 'middle-right',
   'bottom-left', 'bottom-center', 'bottom-right',
 ]
+const WATERMARK_POSITION_LABELS = {
+  'top-left': '左上',
+  'top-center': '上方居中',
+  'top-right': '右上',
+  'middle-left': '左侧居中',
+  center: '正中',
+  'middle-right': '右侧居中',
+  'bottom-left': '左下',
+  'bottom-center': '下方居中',
+  'bottom-right': '右下',
+}
 const CROP_RATIOS = [
   ['Original', '原始比例'],
   ['1:1', '1:1'],
@@ -251,7 +262,7 @@ function renderWatermarkConfig(config) {
         <div class="card-label" style="margin-bottom:6px;">锚点位置</div>
         <div class="position-grid">
           ${WATERMARK_POSITIONS.map((position) => `
-            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${position}">
+            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${WATERMARK_POSITION_LABELS[position] || position}">
               <span></span>
             </button>
           `).join('')}

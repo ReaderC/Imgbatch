@@ -1,6 +1,17 @@
 import { TOOL_MAP } from '../config/tools.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const WATERMARK_POSITION_LABELS = {
+  'top-left': '左上',
+  'top-center': '上方居中',
+  'top-right': '右上',
+  'middle-left': '左侧居中',
+  center: '正中',
+  'middle-right': '右侧居中',
+  'bottom-left': '左下',
+  'bottom-center': '下方居中',
+  'bottom-right': '右下',
+}
 
 export function renderImageQueue(state) {
   const tool = TOOL_MAP[state.activeTool]
@@ -149,7 +160,7 @@ function getToolSummary(toolId, state, asset) {
   if (toolId === 'compression') return getCompressionEstimateSummary(config, asset)
   if (toolId === 'format') return `输出格式 ${config.targetFormat}${config.mode === 'quality' ? ` · 质量 ${config.quality}%` : ' · 仅转换'}`
   if (toolId === 'resize') return `目标尺寸 ${normalizeResizeValue(config.width)} × ${normalizeResizeValue(config.height)}`
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文字' : '图片'}水印 · ${config.position} · ${config.opacity}%`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文字' : '图片'}水印 · ${WATERMARK_POSITION_LABELS[config.position] || config.position} · ${config.opacity}%`
   if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, 'px')} · ${config.keepTransparency ? '透明背景' : config.background}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px · ${config.opacity}%`
   if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} · ${config.width}×${config.height}`
