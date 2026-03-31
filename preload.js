@@ -299,16 +299,6 @@ function getAppSettings() {
   return hostApi.dbStorage?.getItem?.(SETTINGS_STORAGE_KEY) || {}
 }
 
-function createPreviewSignature(toolId, config) {
-  return JSON.stringify({ toolId, config })
-}
-
-function toPublicFileUrl(filePath) {
-  const normalized = String(filePath).replace(/\\/g, '/')
-  const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
-  return encodeURI(`file://${prefixed}`)
-}
-
 async function readOutputMeta(outputPath, sharpLib = null) {
   const stat = fs.statSync(outputPath)
   let width = 0
@@ -402,7 +392,9 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
     ? createOutputMeta(stagedPath, result, result)
     : null) || await readOutputMeta(stagedPath, sharpLib)
-  const previewUrl = toPublicFileUrl(stagedPath)
+  const normalizedPreviewPath = String(stagedPath).replace(/\\/g, '/')
+  const prefixedPreviewPath = normalizedPreviewPath.startsWith('/') ? normalizedPreviewPath : `/${normalizedPreviewPath}`
+  const previewUrl = encodeURI(`file://${prefixedPreviewPath}`)
   const cacheBustedPreviewUrl = previewUrl && payload.runId ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}` : previewUrl
   return {
     assetId: asset.id,
@@ -416,7 +408,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
-    saveSignature: createPreviewSignature(payload.toolId, payload.config),
+    saveSignature: JSON.stringify({ toolId: payload.toolId, config: payload.config }),
     runId: payload.runId,
     runFolderName: payload.runFolderName,
     savedOutputPath: '',
@@ -874,10 +866,6 @@ function getSharp() {
 function ensureDirectory(targetPath) {
   if (!targetPath) return
   fs.mkdirSync(targetPath, { recursive: true })
-}
-
-function isProcessableAsset(asset) {
-  return asset.sourcePath && SHARP_INPUT_EXTENSIONS.has(asset.ext)
 }
 
 function mapOutputFormat(toolId, asset, config) {
@@ -2198,7 +2186,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
       cancelled = true
       return { processed: null, failed: null, cancelled: true }
     }
-    if (!isProcessableAsset(asset)) {
+    if (!(asset.sourcePath && SHARP_INPUT_EXTENSIONS.has(asset.ext))) {
       failedCount += 1
       emitAssetProgress()
       return {
