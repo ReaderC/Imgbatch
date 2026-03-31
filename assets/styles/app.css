@@ -3419,6 +3419,8 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 44px);
   gap: 8px;
+  width: max-content;
+  margin-inline: auto;
 }
 
 .position-dot {
