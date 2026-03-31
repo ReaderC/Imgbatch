@@ -1816,6 +1816,11 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'set-range-value') {
+      syncRangeValueInput(target)
+      return
+    }
+
     if (action === 'set-config-input') {
       const toolId = target.dataset.toolId
       const key = target.dataset.key
@@ -1877,6 +1882,11 @@ function attachGlobalEvents() {
 
     if (action === 'set-config-range') {
       commitRangeControl(target)
+      return
+    }
+
+    if (action === 'set-range-value') {
+      commitRangeValueInput(target)
       return
     }
 
@@ -2333,16 +2343,41 @@ function getToastColor(type) {
 
 function syncRangeControl(target) {
   const value = parseValue(target.value)
-  const suffix = target.dataset.valueSuffix || ''
   const wrapper = target.closest('.setting-row')
   const valueNode = wrapper?.querySelector('[data-range-value]')
-  if (valueNode) valueNode.textContent = `${value}${suffix}`
+  if (valueNode) valueNode.value = value
   target.style.setProperty('--range-progress', `${getRangeProgress(value, target.min, target.max)}%`)
 }
 
 function commitRangeControl(target) {
   syncRangeControl(target)
   updateConfig(target.dataset.toolId, { [target.dataset.key]: parseValue(target.value) })
+}
+
+function syncRangeValueInput(target) {
+  const wrapper = target.closest('.setting-row')
+  const rangeInput = wrapper?.querySelector('.range-input')
+  if (!rangeInput) return
+  const min = Number(rangeInput.min)
+  const max = Number(rangeInput.max)
+  const raw = Number(target.value)
+  const value = Number.isFinite(raw) ? Math.max(min, Math.min(max, raw)) : min
+  rangeInput.value = String(value)
+  rangeInput.style.setProperty('--range-progress', `${getRangeProgress(value, rangeInput.min, rangeInput.max)}%`)
+}
+
+function commitRangeValueInput(target) {
+  const wrapper = target.closest('.setting-row')
+  const rangeInput = wrapper?.querySelector('.range-input')
+  if (!rangeInput) return
+  const min = Number(rangeInput.min)
+  const max = Number(rangeInput.max)
+  const raw = Number(target.value)
+  const value = Number.isFinite(raw) ? Math.max(min, Math.min(max, raw)) : Number(rangeInput.value || min)
+  target.value = String(value)
+  rangeInput.value = String(value)
+  rangeInput.style.setProperty('--range-progress', `${getRangeProgress(value, rangeInput.min, rangeInput.max)}%`)
+  updateConfig(target.dataset.toolId, { [target.dataset.key]: value })
 }
 
 function beginRotateDrag(event, target) {

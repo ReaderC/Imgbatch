@@ -2660,6 +2660,38 @@ body {
   font-size: 18px;
   font-weight: 800;
   color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.setting-row__value-input {
+  width: 72px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: right;
+  appearance: textfield;
+}
+
+.setting-row__value-input::-webkit-outer-spin-button,
+.setting-row__value-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.setting-row__value-input:focus {
+  outline: none;
+}
+
+.setting-row__value-suffix {
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
 }
 
 .setting-row__hint {
