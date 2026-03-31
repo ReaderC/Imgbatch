@@ -9,7 +9,7 @@ const IMAGE_EXTENSIONS = new Set([
 ])
 const TRANSPARENT_BG = { r: 0, g: 0, b: 0, alpha: 0 }
 const OPAQUE_WHITE_BG = { r: 255, g: 255, b: 255, alpha: 1 }
-const SHARP_INPUT_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif', 'bmp'])
+const SHARP_INPUT_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif', 'bmp', 'ico'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
@@ -1132,8 +1132,18 @@ function createTransformerFromInput(sharpLib, input, ext = '') {
   return sharpLib(sharpInput, { animated: normalizedExt === 'gif' })
 }
 
+function getCachedDecodedFallbackInput(asset) {
+  const normalizedExt = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
+  if (!isFallbackDecodedInputFormat(normalizedExt)) return null
+  if (asset?.decodedFallbackInput) return asset.decodedFallbackInput
+  const decoded = createNativeImagePngBuffer(asset?.sourcePath)
+  if (decoded) asset.decodedFallbackInput = decoded
+  return decoded
+}
+
 function createTransformer(sharpLib, asset) {
-  return createTransformerFromInput(sharpLib, asset.sourcePath, asset.inputFormat || asset.ext)
+  const fallbackInput = getCachedDecodedFallbackInput(asset)
+  return createTransformerFromInput(sharpLib, fallbackInput || asset.sourcePath, fallbackInput ? 'png' : (asset.inputFormat || asset.ext))
 }
 
 function withOutputFormat(transformer, format, quality) {
@@ -2033,7 +2043,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
     if (canCopyOriginal) {
       return copyAssetToOutput(asset, outputPath)
     }
-    const info = await withOutputFormat(sharpLib(asset.sourcePath)
+    const info = await withOutputFormat(createTransformer(sharpLib, asset)
       .resize({
         width: fitWidth,
         height: fitHeight,
@@ -2072,7 +2082,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
         height: sourceHeight,
       }
     }
-    const data = await sharpLib(asset.sourcePath)
+    const data = await createTransformer(sharpLib, asset)
       .resize({
         width: fitWidth,
         height: fitHeight,
@@ -2236,13 +2246,13 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
       prepared.requiresSlicing = prepared.scaledHeight > prepared.drawableHeight
       if (prepared.requiresSlicing) {
-        prepared.scaledBuffer = await sharpLib(imageBytes)
+        prepared.scaledBuffer = await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat)
           .resize({ width: prepared.scaledWidth, fit: 'fill' })
           .png()
           .toBuffer()
       }
     } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
-      prepared.embeddedBytes = await sharpLib(imageBytes).jpeg().toBuffer()
+      prepared.embeddedBytes = await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat).jpeg().toBuffer()
       prepared.embeddedKind = 'jpg'
     }
 
@@ -2330,7 +2340,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     const scaledBuffer = prepared.scaledBuffer
-      || await sharpLib(imageBytes)
+      || await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat)
         .resize({ width: scaledWidth, fit: 'fill' })
         .png()
         .toBuffer()
@@ -2390,7 +2400,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
   const prepareFrame = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const data = await sharpLib(asset.sourcePath)
+    const data = await createTransformer(sharpLib, asset)
       .resize(frameResizeOptions)
       .ensureAlpha()
       .raw()
