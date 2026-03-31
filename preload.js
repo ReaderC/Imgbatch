@@ -1790,23 +1790,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
-  const resolvePreparedImageSize = (sourceWidth, sourceHeight) => {
-    const width = Math.max(1, Number(sourceWidth) || 1)
-    const height = Math.max(1, Number(sourceHeight) || 1)
-    const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
-    if (isVertical) {
-      const scale = preventUpscale ? Math.min(1, dominantSize / width) : (dominantSize / width)
-      return {
-        width: Math.max(1, Math.round(width * scale)),
-        height: Math.max(1, Math.round(height * scale)),
-      }
-    }
-    const scale = preventUpscale ? Math.min(1, dominantSize / height) : (dominantSize / height)
-    return {
-      width: Math.max(1, Math.round(width * scale)),
-      height: Math.max(1, Math.round(height * scale)),
-    }
-  }
+  const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     throwIfRunCancelled(payload.runId)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
@@ -1836,11 +1820,15 @@ async function writeMergeImageAsset(sharpLib, payload) {
       })
       .png()
       .toBuffer()
-    const preparedSize = resolvePreparedImageSize(sourceWidth, sourceHeight)
+    const baseWidth = Math.max(1, sourceWidth || 1)
+    const baseHeight = Math.max(1, sourceHeight || 1)
+    const scale = isVertical
+      ? (preventUpscale ? Math.min(1, dominantSize / baseWidth) : (dominantSize / baseWidth))
+      : (preventUpscale ? Math.min(1, dominantSize / baseHeight) : (dominantSize / baseHeight))
     return {
       input: data,
-      width: preparedSize.width,
-      height: preparedSize.height,
+      width: Math.max(1, Math.round(baseWidth * scale)),
+      height: Math.max(1, Math.round(baseHeight * scale)),
     }
   })
   throwIfRunCancelled(payload.runId)
