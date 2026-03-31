@@ -871,22 +871,6 @@ function getSharp() {
   }
 }
 
-function getPdfLib() {
-  try {
-    return require('pdf-lib')
-  } catch {
-    return null
-  }
-}
-
-function getGifEncoder() {
-  try {
-    return require('gifenc')
-  } catch {
-    return null
-  }
-}
-
 function ensureDirectory(targetPath) {
   if (!targetPath) return
   fs.mkdirSync(targetPath, { recursive: true })
@@ -1909,7 +1893,12 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
-  const pdfLib = getPdfLib()
+  let pdfLib = null
+  try {
+    pdfLib = require('pdf-lib')
+  } catch {
+    pdfLib = null
+  }
   if (!pdfLib) throw new Error('缺少 pdf-lib 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.pdf')
   const pdf = await pdfLib.PDFDocument.create()
@@ -2110,7 +2099,12 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
 async function writeMergeGifAsset(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
-  const gifenc = getGifEncoder()
+  let gifenc = null
+  try {
+    gifenc = require('gifenc')
+  } catch {
+    gifenc = null
+  }
   if (!gifenc) throw new Error('缺少 gifenc 依赖')
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
@@ -2374,20 +2368,7 @@ async function stageToolPreview(toolId, config, assets, destinationPath, mode = 
 }
 
 async function saveStagedResult(toolId, stagedItem, destinationPath) {
-  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
-  const createdAt = new Date().toISOString()
-  const stagedItems = [stagedItem]
-  return executeSaveFlow({
-    toolId,
-    toolLabel: TOOL_LABELS[toolId] || toolId,
-    destinationPath: output.destinationPath,
-    output,
-    mode: 'save',
-    stagedItems,
-    runId: stagedItem?.runId || '',
-    runFolderName: stagedItem?.runFolderName || buildRunFolderName(createdAt, toolId),
-    createdAt,
-  })
+  return saveAllStagedResults(toolId, [stagedItem], destinationPath)
 }
 
 async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
