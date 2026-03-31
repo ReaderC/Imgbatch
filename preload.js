@@ -2704,15 +2704,35 @@ const toolsApi = {
   },
 
   async readImageMeta(filePaths = []) {
-    return filePaths.map((filePath, index) => {
+    const sharpLib = getSharp()
+    return Promise.all(filePaths.map(async (filePath, index) => {
       const stat = fs.statSync(filePath)
-      const image = nativeImage.createFromPath(filePath)
-      const { width, height } = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+      let width = 0
+      let height = 0
+      let inputFormat = ''
+      if (sharpLib) {
+        try {
+          const metadata = await sharpLib(filePath).metadata()
+          width = Number(metadata?.width) || 0
+          height = Number(metadata?.height) || 0
+          inputFormat = normalizeImageFormatName(metadata?.format)
+        } catch {
+          inputFormat = ''
+        }
+      }
+      if (!(width > 0 && height > 0)) {
+        const image = nativeImage.createFromPath(filePath)
+        const size = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+        width = width || size.width
+        height = height || size.height
+      }
+      const ext = inputFormat || path.extname(filePath).replace('.', '').toLowerCase()
       return {
         id: `asset-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
         sourcePath: filePath,
         name: path.basename(filePath),
-        ext: path.extname(filePath).replace('.', '').toLowerCase(),
+        ext,
+        inputFormat: ext,
         sizeBytes: stat.size,
         width,
         height,
@@ -2723,7 +2743,7 @@ const toolsApi = {
         selected: false,
         overrides: {},
       }
-    })
+    }))
   },
 
   pathToFileUrl(filePath) {
