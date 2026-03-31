@@ -903,7 +903,25 @@ function mapOutputFormat(toolId, asset, config) {
 function normalizeImageFormatName(format) {
   const normalized = String(format || '').trim().toLowerCase()
   if (normalized === 'jpg') return 'jpeg'
+  if (normalized === 'tif') return 'tiff'
   return normalized
+}
+
+function isFallbackDecodedInputFormat(format) {
+  const normalized = normalizeImageFormatName(format)
+  return normalized === 'bmp' || normalized === 'ico'
+}
+
+function createNativeImagePngBuffer(input) {
+  try {
+    const image = Buffer.isBuffer(input)
+      ? nativeImage.createFromBuffer(input)
+      : nativeImage.createFromPath(String(input || ''))
+    if (!image || image.isEmpty()) return null
+    return image.toPNG()
+  } catch {
+    return null
+  }
 }
 
 async function getAssetInputFormat(sharpLib, asset) {
@@ -941,6 +959,18 @@ async function getAssetMetadata(sharpLib, asset) {
     if (detectedFormat && !asset.inputFormat) asset.inputFormat = detectedFormat
     return metadata
   } catch {
+    if (isFallbackDecodedInputFormat(asset?.inputFormat || asset?.ext)) {
+      try {
+        const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
+        if (decodedInput) {
+          const metadata = await sharpLib(decodedInput).metadata()
+          asset.inputMetadata = metadata
+          return metadata
+        }
+      } catch {
+        // Fall through to null when fallback probing also fails.
+      }
+    }
     return null
   }
 }
@@ -956,7 +986,11 @@ function getOutputName(asset, toolId, format) {
 }
 
 function createTransformerFromInput(sharpLib, input, ext = '') {
-  return sharpLib(input, { animated: String(ext).toLowerCase() === 'gif' })
+  const normalizedExt = normalizeImageFormatName(ext)
+  const sharpInput = isFallbackDecodedInputFormat(normalizedExt)
+    ? createNativeImagePngBuffer(input) || input
+    : input
+  return sharpLib(sharpInput, { animated: normalizedExt === 'gif' })
 }
 
 function createTransformer(sharpLib, asset) {
