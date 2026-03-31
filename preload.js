@@ -938,6 +938,51 @@ function createNativeImagePngBuffer(input) {
   return image ? image.toPNG() : null
 }
 
+function decodeBmpBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 54) return null
+  if (buffer[0] !== 0x42 || buffer[1] !== 0x4d) return null
+  const pixelOffset = buffer.readUInt32LE(10)
+  const dibSize = buffer.readUInt32LE(14)
+  if (dibSize < 40 || buffer.length < 14 + dibSize) return null
+  const width = buffer.readInt32LE(18)
+  const rawHeight = buffer.readInt32LE(22)
+  const planes = buffer.readUInt16LE(26)
+  const bitsPerPixel = buffer.readUInt16LE(28)
+  const compression = buffer.readUInt32LE(30)
+  if (planes !== 1 || width <= 0 || rawHeight === 0) return null
+  if (compression !== 0) return null
+  if (bitsPerPixel !== 24 && bitsPerPixel !== 32) return null
+
+  const height = Math.abs(rawHeight)
+  const topDown = rawHeight < 0
+  const bytesPerPixel = bitsPerPixel / 8
+  const rowStride = Math.floor(((bitsPerPixel * width + 31) / 32)) * 4
+  const requiredSize = pixelOffset + rowStride * height
+  if (buffer.length < requiredSize) return null
+
+  const data = Buffer.alloc(width * height * 4)
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = topDown ? y : (height - 1 - y)
+    const sourceRowOffset = pixelOffset + sourceY * rowStride
+    const targetRowOffset = y * width * 4
+    for (let x = 0; x < width; x += 1) {
+      const sourceOffset = sourceRowOffset + x * bytesPerPixel
+      const targetOffset = targetRowOffset + x * 4
+      data[targetOffset] = buffer[sourceOffset + 2] || 0
+      data[targetOffset + 1] = buffer[sourceOffset + 1] || 0
+      data[targetOffset + 2] = buffer[sourceOffset] || 0
+      data[targetOffset + 3] = bitsPerPixel === 32 ? (buffer[sourceOffset + 3] ?? 255) : 255
+    }
+  }
+
+  return {
+    data,
+    width,
+    height,
+    channels: 4,
+  }
+}
+
 function detectImageFormatFromBuffer(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 4) return ''
   if (buffer[0] === 0x42 && buffer[1] === 0x4d) return 'bmp'
@@ -1021,6 +1066,25 @@ async function getAssetMetadata(sharpLib, asset) {
     if (detectedFormat && !asset.inputFormat) asset.inputFormat = detectedFormat
     return metadata
   } catch {
+    if (normalizeImageFormatName(asset?.inputFormat || asset?.ext) === 'bmp') {
+      try {
+        const decoded = decodeBmpBuffer(fs.readFileSync(asset.sourcePath))
+        if (decoded) {
+          const metadata = {
+            format: 'bmp',
+            width: decoded.width,
+            height: decoded.height,
+            channels: decoded.channels,
+            hasAlpha: decoded.channels === 4,
+          }
+          asset.inputMetadata = metadata
+          asset.inputFormat = 'bmp'
+          return metadata
+        }
+      } catch {
+        // Fall through to native-image fallback.
+      }
+    }
     if (isFallbackDecodedInputFormat(asset?.inputFormat || asset?.ext)) {
       try {
         const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
@@ -1049,6 +1113,19 @@ function getOutputName(asset, toolId, format) {
 
 function createTransformerFromInput(sharpLib, input, ext = '') {
   const normalizedExt = normalizeImageFormatName(ext)
+  if (normalizedExt === 'bmp') {
+    const sourceBuffer = Buffer.isBuffer(input) ? input : fs.readFileSync(String(input || ''))
+    const decoded = decodeBmpBuffer(sourceBuffer)
+    if (decoded) {
+      return sharpLib(decoded.data, {
+        raw: {
+          width: decoded.width,
+          height: decoded.height,
+          channels: decoded.channels,
+        },
+      })
+    }
+  }
   const sharpInput = isFallbackDecodedInputFormat(normalizedExt)
     ? createNativeImagePngBuffer(input) || input
     : input
@@ -2849,6 +2926,17 @@ const toolsApi = {
       }
       if (!inputFormat) {
         inputFormat = detectImageFormatFromFile(filePath)
+      }
+      if (!(width > 0 && height > 0) && inputFormat === 'bmp') {
+        try {
+          const decoded = decodeBmpBuffer(fs.readFileSync(filePath))
+          if (decoded) {
+            width = decoded.width
+            height = decoded.height
+          }
+        } catch {
+          // Fall through to nativeImage size probing.
+        }
       }
       if (!(width > 0 && height > 0)) {
         const image = createNativeImageFromInput(filePath)
