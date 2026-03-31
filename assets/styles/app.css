@@ -970,6 +970,25 @@ body {
   flex-shrink: 0;
 }
 
+.topbar__meta > .primary-button {
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4956B4 0%, #7F8CFF 100%);
+  box-shadow: 0 12px 24px rgba(73, 86, 180, 0.22);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+}
+
+.topbar__meta > .primary-button:hover {
+  background: linear-gradient(135deg, #4250ab 0%, #7481f5 100%);
+}
+
+.topbar__meta > .primary-button:active {
+  background: linear-gradient(135deg, #39479a 0%, #6975e5 100%);
+}
+
 .rotate-card {
   gap: 8px;
   padding: 4px 0 2px;
@@ -3565,6 +3584,42 @@ body {
 .queue-empty-actions .secondary-button {
   width: 100%;
   justify-content: center;
+}
+
+.queue-empty-actions .primary-button,
+.queue-empty-actions .secondary-button {
+  min-height: 48px;
+  border-radius: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+}
+
+.queue-empty-actions .primary-button {
+  background: linear-gradient(135deg, #4956B4 0%, #7F8CFF 100%);
+  box-shadow: 0 14px 28px rgba(73, 86, 180, 0.18);
+}
+
+.queue-empty-actions .primary-button:hover {
+  background: linear-gradient(135deg, #4250ab 0%, #7481f5 100%);
+}
+
+.queue-empty-actions .primary-button:active {
+  background: linear-gradient(135deg, #39479a 0%, #6975e5 100%);
+}
+
+.queue-empty-actions .secondary-button {
+  background: rgba(73, 86, 180, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(73, 86, 180, 0.14);
+}
+
+.queue-empty-actions .secondary-button:hover {
+  background: rgba(73, 86, 180, 0.14);
+}
+
+.queue-empty-actions .secondary-button:active {
+  background: rgba(73, 86, 180, 0.18);
 }
 
 .queue-item {
