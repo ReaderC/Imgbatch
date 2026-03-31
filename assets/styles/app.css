@@ -299,6 +299,12 @@ body {
   gap: 4px;
   overflow: auto;
   padding-right: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar__nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-item {
@@ -4167,6 +4173,8 @@ body {
     gap: 6px;
     overflow: auto;
     padding-right: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
   .nav-item {
