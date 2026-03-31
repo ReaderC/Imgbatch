@@ -346,17 +346,8 @@ function confirmReplaceCurrentOriginals() {
   })
 }
 
-function isPreviewSaveTool(toolId) {
-  return PREVIEW_SAVE_TOOLS.has(toolId)
-}
-
 function isPreviewableTool(toolId) {
   return PREVIEWABLE_TOOLS.has(toolId)
-}
-
-function getCurrentDestinationPath() {
-  const state = getState()
-  return state.destinationPath || state.settings.defaultSavePath || ''
 }
 
 async function saveAssetResult(assetId) {
@@ -378,7 +369,8 @@ async function saveAssetResult(assetId) {
   }
 
   try {
-    const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, getCurrentDestinationPath()))
+    const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
+    const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
       refreshResultView()
@@ -398,7 +390,8 @@ async function saveAllCurrentResults() {
   }
 
   try {
-    const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, getCurrentDestinationPath()))
+    const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
+    const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
       refreshResultView()
@@ -865,7 +858,7 @@ function getToolRunner(toolId, previewMode = '') {
       ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only')
       : runTool
   }
-  return isPreviewSaveTool(toolId)
+  return PREVIEW_SAVE_TOOLS.has(toolId)
     ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save')
     : runTool
 }
@@ -881,7 +874,8 @@ function shouldReusePreviewResult(toolId, asset) {
 
 async function previewWithRunner(tool, asset) {
   const state = getState()
-  const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], getCurrentDestinationPath())
+  const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
+  const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], destinationPath)
   if (result?.processed?.length || result?.failed?.length) {
     applyRunResult(result)
   }
@@ -899,7 +893,7 @@ async function previewWithRunner(tool, asset) {
           stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
           stagedWidth: processed.width || asset.stagedWidth || 0,
           stagedHeight: processed.height || asset.stagedHeight || 0,
-          previewStatus: processed.previewStatus || (isPreviewSaveTool(tool.id) ? 'previewed' : 'saved'),
+          previewStatus: processed.previewStatus || (PREVIEW_SAVE_TOOLS.has(tool.id) ? 'previewed' : 'saved'),
           stagedToolId: tool.id,
           savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
           outputPath: processed.outputPath || asset.outputPath || '',
@@ -908,7 +902,7 @@ async function previewWithRunner(tool, asset) {
   if (!openPreviewModal(previewedAsset, tool.id)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
   }
-  if (isPreviewableTool(tool.id) && !isPreviewSaveTool(tool.id)) {
+  if (isPreviewableTool(tool.id) && !PREVIEW_SAVE_TOOLS.has(tool.id)) {
     notify({ type: 'success', message: `${tool.label} 预览已生成。` })
   }
 }
@@ -2149,7 +2143,8 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
   try {
     const assets = getAssetsForTool(tool.id, state.assets)
     const runner = getToolRunner(tool.id)
-    const result = await runBusyAction(() => runner(tool.id, state.configs[tool.id], assets, getCurrentDestinationPath()))
+    const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
+    const result = await runBusyAction(() => runner(tool.id, state.configs[tool.id], assets, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
     }
@@ -2157,7 +2152,7 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
     if (result?.ok || result?.partial) {
       notify({
         type: result.partial ? 'info' : 'success',
-        message: result?.message || (isPreviewSaveTool(tool.id) ? `已生成 ${tool.label} 结果，确认后可保存。` : `已触发 ${tool.label} 批处理。`),
+        message: result?.message || (PREVIEW_SAVE_TOOLS.has(tool.id) ? `已生成 ${tool.label} 结果，确认后可保存。` : `已触发 ${tool.label} 批处理。`),
       })
       const compressionWarning = getCompressionOversizeWarning(result, tool)
       if (compressionWarning) {
