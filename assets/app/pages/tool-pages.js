@@ -213,7 +213,7 @@ function renderResizeConfig(config) {
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
       <div class="preset-row">
-        ${RESIZE_PRESETS.map((preset) => `<button class="secondary-button secondary-button--compact" data-action="apply-resize-preset" data-width="${preset.width}" data-height="${preset.height}">${preset.label}</button>`).join('')}
+        ${RESIZE_PRESETS.map((preset) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="apply-resize-preset" data-width="${preset.width}" data-height="${preset.height}">${preset.label}</button>`).join('')}
       </div>
     </div>
   `)
@@ -334,7 +334,7 @@ function renderRotateConfig(config) {
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用角度</div>
       <div class="preset-row">
-        ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
+        ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
