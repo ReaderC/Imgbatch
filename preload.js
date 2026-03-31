@@ -885,8 +885,16 @@ function normalizeImageFormatName(format) {
 async function getAssetInputFormat(sharpLib, asset) {
   const cachedFormat = normalizeImageFormatName(asset?.inputFormat)
   if (cachedFormat) return cachedFormat
+  const cachedMetadata = asset?.inputMetadata
+  const cachedMetadataFormat = normalizeImageFormatName(cachedMetadata?.format)
+  if (cachedMetadataFormat) {
+    asset.inputFormat = cachedMetadataFormat
+    return cachedMetadataFormat
+  }
+  let metadata = null
   try {
-    const metadata = await sharpLib(asset.sourcePath).metadata()
+    metadata = await sharpLib(asset.sourcePath).metadata()
+    asset.inputMetadata = metadata
     const detectedFormat = normalizeImageFormatName(metadata?.format)
     if (detectedFormat) {
       asset.inputFormat = detectedFormat
@@ -898,6 +906,19 @@ async function getAssetInputFormat(sharpLib, asset) {
   const fallbackFormat = normalizeImageFormatName(asset?.ext)
   if (fallbackFormat) asset.inputFormat = fallbackFormat
   return fallbackFormat
+}
+
+async function getAssetMetadata(sharpLib, asset) {
+  if (asset?.inputMetadata) return asset.inputMetadata
+  try {
+    const metadata = await sharpLib(asset.sourcePath).metadata()
+    asset.inputMetadata = metadata
+    const detectedFormat = normalizeImageFormatName(metadata?.format)
+    if (detectedFormat && !asset.inputFormat) asset.inputFormat = detectedFormat
+    return metadata
+  } catch {
+    return null
+  }
 }
 
 function isAlphaCapableFormat(format) {
@@ -1659,7 +1680,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
     : mapOutputFormat('corners', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'corners', outputFormat))
   const baseTransformer = createTransformer(sharpLib, asset)
-  const metadata = asset.width && asset.height ? null : await baseTransformer.clone().metadata()
+  const metadata = asset.width && asset.height ? null : await getAssetMetadata(sharpLib, asset)
   const width = asset.width || metadata?.width || 1
   const height = asset.height || metadata?.height || 1
   const maxRadius = Math.min(width, height) / 2
@@ -1831,7 +1852,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
-      const metadata = await createTransformer(sharpLib, asset).metadata()
+      const metadata = await getAssetMetadata(sharpLib, asset)
       sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }
@@ -1996,7 +2017,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
     if (autoPaginateFixedPage) {
       if (!(sourceWidth > 0 && sourceHeight > 0)) {
-        const metadata = await sharpLib(imageBytes).metadata()
+        const metadata = await getAssetMetadata(sharpLib, asset)
         sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
         sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
         prepared.sourceWidth = sourceWidth
