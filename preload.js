@@ -9,7 +9,7 @@ const IMAGE_EXTENSIONS = new Set([
 ])
 const TRANSPARENT_BG = { r: 0, g: 0, b: 0, alpha: 0 }
 const OPAQUE_WHITE_BG = { r: 255, g: 255, b: 255, alpha: 1 }
-const SHARP_INPUT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
+const SHARP_INPUT_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif', 'bmp'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
@@ -871,7 +871,7 @@ function mapOutputFormat(toolId, asset, config) {
     return SHARP_OUTPUT_FORMATS.has(requested) ? requested : 'jpeg'
   }
 
-  const original = String(asset.ext || '').toLowerCase()
+  const original = String(asset?.inputFormat || asset?.ext || '').toLowerCase()
   if (original === 'jpg') return 'jpeg'
   return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
 }
@@ -880,6 +880,24 @@ function normalizeImageFormatName(format) {
   const normalized = String(format || '').trim().toLowerCase()
   if (normalized === 'jpg') return 'jpeg'
   return normalized
+}
+
+async function getAssetInputFormat(sharpLib, asset) {
+  const cachedFormat = normalizeImageFormatName(asset?.inputFormat)
+  if (cachedFormat) return cachedFormat
+  try {
+    const metadata = await sharpLib(asset.sourcePath).metadata()
+    const detectedFormat = normalizeImageFormatName(metadata?.format)
+    if (detectedFormat) {
+      asset.inputFormat = detectedFormat
+      return detectedFormat
+    }
+  } catch {
+    // Fall back to the filename extension if metadata probing fails.
+  }
+  const fallbackFormat = normalizeImageFormatName(asset?.ext)
+  if (fallbackFormat) asset.inputFormat = fallbackFormat
+  return fallbackFormat
 }
 
 function isAlphaCapableFormat(format) {
@@ -897,7 +915,7 @@ function createTransformerFromInput(sharpLib, input, ext = '') {
 }
 
 function createTransformer(sharpLib, asset) {
-  return createTransformerFromInput(sharpLib, asset.sourcePath, asset.ext)
+  return createTransformerFromInput(sharpLib, asset.sourcePath, asset.inputFormat || asset.ext)
 }
 
 function withOutputFormat(transformer, format, quality) {
@@ -981,6 +999,7 @@ function createIcoBuffer(pngBuffer, width, height) {
 }
 
 async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('compression', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
@@ -1015,7 +1034,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(maxQuality, Math.round(quality)))
     if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
-    const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, sourceInput, asset.ext), format, normalizedQuality).toBuffer()
+    const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, sourceInput, asset.inputFormat), format, normalizedQuality).toBuffer()
     cache.set(normalizedQuality, buffer)
     return buffer
   }
@@ -1084,12 +1103,13 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('format', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
-  let sourceFormat = normalizeImageFormatName(asset.ext)
+  let sourceFormat = normalizeImageFormatName(asset.inputFormat)
   let sourceInput = null
   const shouldProbeSourceFormat = config.mode !== 'quality'
-    && (sourceFormat === format || !SHARP_INPUT_EXTENSIONS.has(String(asset.ext || '').toLowerCase()))
+    && (sourceFormat === format || !SHARP_INPUT_FORMATS.has(sourceFormat))
 
   if (shouldProbeSourceFormat) {
     try {
@@ -1097,7 +1117,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
       const metadata = await sharpLib(sourceInput).metadata()
       sourceFormat = normalizeImageFormatName(metadata?.format) || sourceFormat
     } catch {
-      sourceFormat = normalizeImageFormatName(asset.ext)
+      sourceFormat = normalizeImageFormatName(asset.inputFormat)
       sourceInput = null
     }
   }
@@ -1125,11 +1145,12 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
@@ -1458,14 +1479,20 @@ function removeEmptyDirectoryIfPossible(targetPath) {
 
 function replaceOriginalWithSaved(item = {}) {
   const sourcePath = resolveExistingResultPath(item)
-  const targetPath = normalizeFsPath(item.sourcePath)
+  const originalSourcePath = normalizeFsPath(item.sourcePath)
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     throw new Error('处理结果不存在，无法替换原图')
   }
-  if (!targetPath) {
+  if (!originalSourcePath) {
     throw new Error('原图不存在，无法替换')
   }
+  const originalParsedPath = path.parse(originalSourcePath)
+  const resultExtension = path.extname(sourcePath) || originalParsedPath.ext
+  const targetPath = path.join(originalParsedPath.dir, `${originalParsedPath.name}${resultExtension}`)
   overwriteFile(sourcePath, targetPath)
+  if (path.resolve(originalSourcePath) !== path.resolve(targetPath) && fs.existsSync(originalSourcePath)) {
+    fs.unlinkSync(originalSourcePath)
+  }
   if (path.resolve(sourcePath) !== path.resolve(targetPath) && fs.existsSync(sourcePath)) {
     fs.unlinkSync(sourcePath)
     removeEmptyDirectoryIfPossible(sourcePath)
@@ -1512,9 +1539,10 @@ function revealResultDirectoryIfNeeded(result) {
 }
 
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('watermark', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const watermarkOpacity = Number(config.opacity) || 0
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
@@ -1532,9 +1560,10 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
 
   if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
@@ -1576,12 +1605,13 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const requestedOutputFormat = String(config.outputFormat || '').toLowerCase()
   const format = !requestedOutputFormat || requestedOutputFormat === 'keep original'
     ? mapOutputFormat('flip', asset, config)
     : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
 
   if (sourceFormat === format && hasNoFlipTransform) {
@@ -1622,7 +1652,8 @@ function buildRoundedRectSvg(width, height, radius, fill) {
 }
 
 async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const outputFormat = config.keepTransparency
     ? (isAlphaCapableFormat(sourceFormat) ? sourceFormat : 'png')
     : mapOutputFormat('corners', asset, config)
@@ -1662,9 +1693,10 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('padding', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
   if (noPadding && sourceFormat === format) {
@@ -1718,10 +1750,11 @@ function normalizeCropBox(asset, config) {
 }
 
 async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop') {
+  asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('crop', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
   const box = normalizeCropBox(asset, config)
-  const sourceFormat = normalizeImageFormatName(asset.ext)
+  const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
@@ -1762,7 +1795,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const fitHeight = isVertical ? undefined : payload.config.pageWidth
   if (payload.assets.length === 1) {
     const asset = payload.assets[0]
-    const sourceFormat = normalizeImageFormatName(asset.ext)
+    asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
+    const sourceFormat = normalizeImageFormatName(asset.inputFormat)
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && Number(asset.width) <= payload.config.pageWidth) || Number(asset.width) === payload.config.pageWidth)
       : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
@@ -1793,6 +1827,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     throwIfRunCancelled(payload.runId)
+    asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
@@ -1932,6 +1967,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   }
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
+    asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
     const imageBytes = fs.readFileSync(asset.sourcePath)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
@@ -1944,7 +1980,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
       imageBytes,
-      sourceFormat: String(asset.ext || '').toLowerCase(),
+      sourceFormat: normalizeImageFormatName(asset.inputFormat || asset.ext),
       sourceWidth,
       sourceHeight,
       margin,
@@ -2206,12 +2242,13 @@ async function executeSingleAssetTool(payload, sharpLib) {
       cancelled = true
       return { processed: null, failed: null, cancelled: true }
     }
-    if (!(asset.sourcePath && SHARP_INPUT_EXTENSIONS.has(asset.ext))) {
+    const inputFormat = asset.sourcePath ? await getAssetInputFormat(sharpLib, asset) : ''
+    if (!(asset.sourcePath && SHARP_INPUT_FORMATS.has(inputFormat))) {
       failedCount += 1
       emitAssetProgress()
       return {
         processed: null,
-        failed: { assetId: asset.id, name: asset.name, error: `暂不支持处理 ${asset.ext || 'unknown'} 格式` },
+        failed: { assetId: asset.id, name: asset.name, error: `暂不支持处理 ${inputFormat || asset.ext || 'unknown'} 格式` },
       }
     }
 
