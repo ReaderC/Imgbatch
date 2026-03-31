@@ -498,9 +498,12 @@ function clearAssetsResultState(processedItems) {
       return {
         ...asset,
         sourcePath: nextSourcePath || asset.sourcePath,
-        name: nextName,
-        ext: nextExt,
-        inputFormat: nextExt,
+        name: replaced?.name || nextName,
+        ext: replaced?.inputFormat || nextExt,
+        inputFormat: replaced?.inputFormat || nextExt,
+        sizeBytes: Number(replaced?.sizeBytes) || asset.sizeBytes,
+        width: Number(replaced?.width) || asset.width,
+        height: Number(replaced?.height) || asset.height,
         thumbnailUrl: replaced?.thumbnailUrl || (nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl),
         previewStatus: 'idle',
         previewUrl: '',
@@ -645,6 +648,7 @@ async function replaceAssetOriginal(assetId) {
     if (result?.processed?.length) {
       clearAssetsResultState(result.processed)
       refreshResultView()
+      notify({ type: 'info', message: '图片列表已更新为替换后的文件信息。' })
     }
     notifyActionResult(result, '替换原图失败。')
   } catch (error) {
@@ -683,6 +687,7 @@ async function replaceCurrentOriginals() {
     if (result?.processed?.length) {
       clearAssetsResultState(result.processed)
       refreshResultView()
+      notify({ type: 'info', message: '图片列表已更新为替换后的文件信息。' })
     }
     notifyActionResult(result, '替换原图失败。')
   } catch (error) {

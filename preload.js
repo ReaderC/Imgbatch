@@ -1747,6 +1747,7 @@ function removeEmptyDirectoryIfPossible(targetPath) {
 async function replaceOriginals(items = []) {
   const processed = []
   const failed = []
+  const sharpLib = getSharp()
   for (const item of items) {
     try {
       const sourcePath = resolveExistingResultPath(item)
@@ -1768,12 +1769,32 @@ async function replaceOriginals(items = []) {
         fs.unlinkSync(sourcePath)
         removeEmptyDirectoryIfPossible(sourcePath)
       }
+      const stat = fs.statSync(targetPath)
+      let width = 0
+      let height = 0
+      if (sharpLib) {
+        try {
+          const metadata = await getAssetMetadata(sharpLib, {
+            sourcePath: targetPath,
+            inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
+            ext: resultExtension.replace('.', ''),
+          })
+          width = Number(metadata?.width) || 0
+          height = Number(metadata?.height) || 0
+        } catch {
+          width = 0
+          height = 0
+        }
+      }
       processed.push({
         assetId: item.assetId,
-        name: item.name,
+        name: path.basename(targetPath),
         outputPath: '',
         savedOutputPath: '',
         sourcePath: targetPath,
+        sizeBytes: Number(stat.size) || 0,
+        width,
+        height,
         inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
         thumbnailUrl: createAssetDisplayUrl(targetPath, resultExtension.replace('.', '')),
       })
