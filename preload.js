@@ -343,6 +343,30 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
   }
 }
 
+function createAssetDisplayUrl(filePath, inputFormat = '') {
+  const format = normalizeImageFormatName(inputFormat)
+  if (format === 'bmp' || format === 'ico') {
+    try {
+      const image = nativeImage.createFromPath(filePath)
+      if (!image.isEmpty()) {
+        const size = image.getSize()
+        const maxDimension = Math.max(size.width || 0, size.height || 0)
+        const previewImage = maxDimension > 2048
+          ? image.resize({
+              width: size.width >= size.height ? 2048 : undefined,
+              height: size.height > size.width ? 2048 : undefined,
+              quality: 'good',
+            })
+          : image
+        return previewImage.toDataURL()
+      }
+    } catch {}
+  }
+  const normalized = String(filePath).replace(/\\/g, '/')
+  const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
+  return encodeURI(`file://${prefixed}`)
+}
+
 function copyAssetToOutput(asset, outputPath, sourceInput = null, fallback = asset) {
   if (sourceInput) fs.writeFileSync(outputPath, sourceInput)
   else fs.copyFileSync(asset.sourcePath, outputPath)
@@ -1534,6 +1558,8 @@ async function replaceOriginals(items = []) {
         outputPath: '',
         savedOutputPath: '',
         sourcePath: targetPath,
+        inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
+        thumbnailUrl: createAssetDisplayUrl(targetPath, resultExtension.replace('.', '')),
       })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
@@ -2747,25 +2773,7 @@ const toolsApi = {
   },
 
   createAssetDisplayUrl(filePath, inputFormat = '') {
-    const format = normalizeImageFormatName(inputFormat)
-    if (format === 'bmp' || format === 'ico') {
-      try {
-        const image = nativeImage.createFromPath(filePath)
-        if (!image.isEmpty()) {
-          const size = image.getSize()
-          const maxDimension = Math.max(size.width || 0, size.height || 0)
-          const previewImage = maxDimension > 2048
-            ? image.resize({
-                width: size.width >= size.height ? 2048 : undefined,
-                height: size.height > size.width ? 2048 : undefined,
-                quality: 'good',
-              })
-            : image
-          return previewImage.toDataURL()
-        }
-      } catch {}
-    }
-    return this.pathToFileUrl(filePath)
+    return createAssetDisplayUrl(filePath, inputFormat)
   },
 
   pathToFileUrl(filePath) {
