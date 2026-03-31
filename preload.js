@@ -1952,7 +1952,6 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       sourceWidth,
       sourceHeight,
       margin,
-      pageSize: fixedPageSize || PDF_PAGE_SIZES.A4,
       drawableWidth: 0,
       drawableHeight: 0,
       scaledWidth: 0,
@@ -2032,8 +2031,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     const pageSize = fixedPageSize
-    const drawableWidth = prepared.drawableWidth || Math.max(1, pageSize[0] - margin * 2)
-    const drawableHeight = prepared.drawableHeight || Math.max(1, pageSize[1] - margin * 2)
+    const drawableWidth = prepared.drawableWidth || fixedDrawableWidth
+    const drawableHeight = prepared.drawableHeight || fixedDrawableHeight
 
     if (!payload.config.autoPaginate) {
       const pageImage = await ensureEmbedded()
@@ -2051,8 +2050,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       continue
     }
 
-    const scaledWidth = prepared.scaledWidth || Math.max(1, Math.round(drawableWidth))
-    const pageSliceHeight = prepared.pageSliceHeight || Math.max(1, Math.round(drawableHeight))
+    const scaledWidth = prepared.scaledWidth || drawableWidth
+    const pageSliceHeight = prepared.pageSliceHeight || drawableHeight
     const scaledHeight = prepared.scaledHeight || Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
 
     if (scaledHeight <= drawableHeight) {
