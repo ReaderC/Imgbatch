@@ -381,12 +381,6 @@ function estimateCompressionQuality(originalSizeBytes, targetBytes) {
   return Math.max(1, Math.min(90, estimated))
 }
 
-function resolveSaveTargetPath(baseDestinationPath, runFolderName, outputName) {
-  const finalDirectory = path.join(baseDestinationPath, runFolderName)
-  ensureDirectory(finalDirectory)
-  return path.join(finalDirectory, outputName)
-}
-
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
@@ -738,15 +732,10 @@ async function waitForLaunchValue(timeoutMs = 160) {
   })
 }
 
-function consumePendingLaunchValues() {
-  if (!pendingLaunchValues.length) return []
-  return pendingLaunchValues.splice(0, pendingLaunchValues.length)
-}
-
 async function flushLaunchSubscribers() {
   if (!launchSubscribers.size || !pendingLaunchValues.length) return
 
-  const values = consumePendingLaunchValues()
+  const values = pendingLaunchValues.splice(0, pendingLaunchValues.length)
   for (const subscriber of launchSubscribers) {
     try {
       await subscriber(values)
@@ -2297,7 +2286,9 @@ async function executeSaveFlow(payload) {
       if (!sourcePath || !fs.existsSync(sourcePath)) {
         throw new Error('预览结果不存在，无法保存')
       }
-      const targetPath = resolveSaveTargetPath(payload.destinationPath, payload.runFolderName, item.outputName || path.basename(sourcePath))
+      const finalDirectory = path.join(payload.destinationPath, payload.runFolderName)
+      ensureDirectory(finalDirectory)
+      const targetPath = path.join(finalDirectory, item.outputName || path.basename(sourcePath))
       if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
         fs.copyFileSync(sourcePath, targetPath)
       }
@@ -2674,7 +2665,7 @@ const toolsApi = {
     installLaunchHooks()
     await waitForLaunchValue()
 
-    const pendingValues = consumePendingLaunchValues()
+    const pendingValues = pendingLaunchValues.splice(0, pendingLaunchValues.length)
     const pendingAssets = await this.resolveLaunchInputs(pendingValues)
     if (pendingAssets.length) return pendingAssets
 
