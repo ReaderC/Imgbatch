@@ -340,14 +340,26 @@ function renderRotateConfig(config) {
         <div class="rotate-dial__ring"></div>
         <div class="rotate-dial__guide"></div>
         <div class="rotate-dial__disc"></div>
-        <div class="rotate-dial__value">${signedAngle}°</div>
+        <div class="rotate-dial__value">
+          <input
+            class="rotate-dial__value-input"
+            type="number"
+            inputmode="numeric"
+            min="-360"
+            max="360"
+            step="1"
+            data-action="set-config-input"
+            data-tool-id="rotate"
+            data-key="angle"
+            value="${signedAngle}"
+            aria-label="输入旋转角度"
+          />
+          <span class="rotate-dial__value-unit">°</span>
+        </div>
         <button class="rotate-dial__knob" data-action="drag-rotate" data-tool-id="rotate" style="left:${knobX}px;top:${knobY}px;" aria-label="拖动旋转角度"></button>
       </div>
       <div class="rotate-card__summary">当前角度 ${signedAngle}°</div>
     </div>
-    ${renderFieldGrid(`
-      ${renderInputField({ label: '精确角度', toolId: 'rotate', key: 'angle', type: 'number', value: signedAngle, min: -360, max: 360 })}
-    `)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用角度</div>
       <div class="preset-row">

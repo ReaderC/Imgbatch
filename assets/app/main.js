@@ -1819,9 +1819,7 @@ function attachGlobalEvents() {
     if (action === 'set-config-input') {
       const toolId = target.dataset.toolId
       const key = target.dataset.key
-      const value = target.dataset.unitMode
-        ? normalizeMeasureToggleValue(target.value, target.dataset.unitMode)
-        : parseValue(target.value)
+      const value = normalizeConfigInputValue(toolId, key, target.value, target.dataset.unitMode)
       getState().configs[toolId] = { ...getState().configs[toolId], [key]: value }
 
       if (toolId === 'crop' && key === 'ratio') {
@@ -1904,9 +1902,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'set-config-input' || action === 'set-config-select') {
-      const value = target.dataset.unitMode
-        ? normalizeMeasureToggleValue(target.value, target.dataset.unitMode)
-        : parseValue(target.value)
+      const value = normalizeConfigInputValue(target.dataset.toolId, target.dataset.key, target.value, target.dataset.unitMode)
       updateConfig(target.dataset.toolId, { [target.dataset.key]: value })
     }
   })
@@ -2582,6 +2578,16 @@ function parseValue(value) {
     return Number(value)
   }
   return value
+}
+
+function normalizeConfigInputValue(toolId, key, value, unitMode = '') {
+  const parsed = unitMode ? normalizeMeasureToggleValue(value, unitMode) : parseValue(value)
+  if (toolId === 'rotate' && key === 'angle') {
+    const numeric = Number(parsed)
+    if (!Number.isFinite(numeric)) return 0
+    return Math.max(-360, Math.min(360, Math.round(numeric)))
+  }
+  return parsed
 }
 
 function getNumericInputValue(value) {
