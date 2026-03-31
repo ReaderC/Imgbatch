@@ -5014,7 +5014,7 @@ body {
   max-height: calc(100vh - 48px);
   overflow: auto;
   padding: 28px;
-  border-radius: 28px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 28px 64px rgba(27, 31, 51, 0.22);
 }
@@ -5053,6 +5053,26 @@ body {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+.app-modal__footer .secondary-button {
+  background: rgba(73, 86, 180, 0.1) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(73, 86, 180, 0.12);
+  border-radius: 12px !important;
+  box-shadow: none;
+}
+
+.app-modal__footer .secondary-button:hover {
+  background: rgba(73, 86, 180, 0.16) !important;
+}
+
+.app-modal__footer .secondary-button:active {
+  background: rgba(73, 86, 180, 0.2) !important;
+}
+
+.app-modal__footer .primary-button {
+  border-radius: 12px !important;
 }
 
 .workspace--settings {
