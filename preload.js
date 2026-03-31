@@ -1983,7 +1983,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.scaledWidth = fixedDrawableWidth
       prepared.pageSliceHeight = fixedDrawableHeight
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
-      if (prepared.scaledHeight > prepared.drawableHeight) {
+      prepared.requiresSlicing = prepared.scaledHeight > prepared.drawableHeight
+      if (prepared.requiresSlicing) {
         prepared.scaledBuffer = await sharpLib(imageBytes)
           .resize({ width: prepared.scaledWidth, fit: 'fill' })
           .png()
@@ -2062,7 +2063,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     const pageSliceHeight = prepared.pageSliceHeight || drawableHeight
     const scaledHeight = prepared.scaledHeight || Math.max(1, Math.round(sourceHeight * (scaledWidth / sourceWidth)))
 
-    if (scaledHeight <= drawableHeight) {
+    if (prepared.requiresSlicing === false || scaledHeight <= drawableHeight) {
       const pageImage = await ensureEmbedded()
       const width = scaledWidth
       const height = scaledHeight
