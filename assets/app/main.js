@@ -483,14 +483,24 @@ function getReplaceEntries() {
     .filter(Boolean)
 }
 
-function clearAssetsResultState(assetIds) {
-  const ids = new Set(assetIds)
+function clearAssetsResultState(processedItems) {
+  const processedList = Array.isArray(processedItems) ? processedItems : []
+  const ids = new Set(processedList.map((item) => item?.assetId).filter(Boolean))
+  const replacementMap = new Map(processedList.map((item) => [item.assetId, item]))
   const state = getState()
   setState({
     assets: state.assets.map((asset) => {
       if (!ids.has(asset.id)) return asset
+      const replaced = replacementMap.get(asset.id)
+      const nextSourcePath = String(replaced?.sourcePath || asset.sourcePath || '')
+      const nextName = nextSourcePath ? nextSourcePath.replaceAll('\\', '/').split('/').pop() || asset.name : asset.name
+      const nextExt = nextName.includes('.') ? nextName.split('.').pop().toLowerCase() : asset.ext
       return {
         ...asset,
+        sourcePath: nextSourcePath || asset.sourcePath,
+        name: nextName,
+        ext: nextExt,
+        thumbnailUrl: nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl,
         previewStatus: 'idle',
         previewUrl: '',
         stagedOutputPath: '',
@@ -632,7 +642,7 @@ async function replaceAssetOriginal(assetId) {
   try {
     const result = await runBusyAction(() => replaceOriginals([entry]))
     if (result?.processed?.length) {
-      clearAssetsResultState(result.processed.map((item) => item.assetId).filter(Boolean))
+      clearAssetsResultState(result.processed)
       refreshResultView()
     }
     notifyActionResult(result, '替换原图失败。')
@@ -670,7 +680,7 @@ async function replaceCurrentOriginals() {
   try {
     const result = await runBusyAction(() => replaceOriginals(entries))
     if (result?.processed?.length) {
-      clearAssetsResultState(result.processed.map((item) => item.assetId).filter(Boolean))
+      clearAssetsResultState(result.processed)
       refreshResultView()
     }
     notifyActionResult(result, '替换原图失败。')
