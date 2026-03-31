@@ -1249,17 +1249,17 @@ async function createImageWatermarkBuffer(sharpLib, asset, config) {
   const isDataUrl = imagePath.startsWith('data:image/')
   const imageSourceKey = isDataUrl ? imagePath : path.resolve(imagePath)
 
-  if (!isDataUrl && !fs.existsSync(imageSourceKey)) {
-    throw new Error('图片水印文件不存在')
+  let imageInput = WATERMARK_IMAGE_CACHE.get(imageSourceKey) || null
+  if (!imageInput) {
+    try {
+      imageInput = isDataUrl
+        ? Buffer.from(imagePath.slice(imagePath.indexOf(',') + 1), 'base64')
+        : fs.readFileSync(imageSourceKey)
+    } catch {
+      throw new Error('图片水印文件不存在')
+    }
+    WATERMARK_IMAGE_CACHE.set(imageSourceKey, imageInput)
   }
-
-  const imageInput = WATERMARK_IMAGE_CACHE.get(imageSourceKey) || (() => {
-    const buffer = isDataUrl
-      ? Buffer.from(imagePath.slice(imagePath.indexOf(',') + 1), 'base64')
-      : fs.readFileSync(imageSourceKey)
-    WATERMARK_IMAGE_CACHE.set(imageSourceKey, buffer)
-    return buffer
-  })()
 
   const renderScale = getWatermarkRenderScale(asset)
   const baseWidth = Math.max(asset.width || 1920, 1)
