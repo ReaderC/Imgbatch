@@ -912,16 +912,30 @@ function isFallbackDecodedInputFormat(format) {
   return normalized === 'bmp' || normalized === 'ico'
 }
 
-function createNativeImagePngBuffer(input) {
+function createNativeImageFromInput(input) {
   try {
-    const image = Buffer.isBuffer(input)
-      ? nativeImage.createFromBuffer(input)
-      : nativeImage.createFromPath(String(input || ''))
-    if (!image || image.isEmpty()) return null
-    return image.toPNG()
+    if (Buffer.isBuffer(input)) {
+      const image = nativeImage.createFromBuffer(input)
+      return image && !image.isEmpty() ? image : null
+    }
+    if (typeof input === 'string' && input) {
+      try {
+        const sourceBuffer = fs.readFileSync(input)
+        const image = nativeImage.createFromBuffer(sourceBuffer)
+        if (image && !image.isEmpty()) return image
+      } catch {}
+      const image = nativeImage.createFromPath(String(input))
+      return image && !image.isEmpty() ? image : null
+    }
+    return null
   } catch {
     return null
   }
+}
+
+function createNativeImagePngBuffer(input) {
+  const image = createNativeImageFromInput(input)
+  return image ? image.toPNG() : null
 }
 
 function detectImageFormatFromBuffer(buffer) {
@@ -2837,8 +2851,8 @@ const toolsApi = {
         inputFormat = detectImageFormatFromFile(filePath)
       }
       if (!(width > 0 && height > 0)) {
-        const image = nativeImage.createFromPath(filePath)
-        const size = image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
+        const image = createNativeImageFromInput(filePath)
+        const size = !image || image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
         width = width || size.width
         height = height || size.height
       }
