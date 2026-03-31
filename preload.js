@@ -2256,24 +2256,27 @@ function buildStagedItemsFromAssets(assets = []) {
     }))
 }
 
-function createFallbackFailure(payload, message) {
-  return {
-    ok: false,
-    partial: false,
-    ...payload,
-    processed: [],
-    failed: [{ assetId: payload.toolId, name: payload.toolLabel, error: message }],
-    message,
-  }
-}
-
 async function executeSaveFlow(payload) {
   if (!payload.stagedItems?.length) {
-    return revealResultDirectoryIfNeeded(createFallbackFailure(payload, '没有可保存的预览结果。'))
+    return revealResultDirectoryIfNeeded({
+      ok: false,
+      partial: false,
+      ...payload,
+      processed: [],
+      failed: [{ assetId: payload.toolId, name: payload.toolLabel, error: '没有可保存的预览结果。' }],
+      message: '没有可保存的预览结果。',
+    })
   }
 
   if (!payload.destinationPath) {
-    return revealResultDirectoryIfNeeded(createFallbackFailure(payload, '无法解析保存目录。'))
+    return revealResultDirectoryIfNeeded({
+      ok: false,
+      partial: false,
+      ...payload,
+      processed: [],
+      failed: [{ assetId: payload.toolId, name: payload.toolLabel, error: '无法解析保存目录。' }],
+      message: '无法解析保存目录。',
+    })
   }
 
   ensureDirectory(payload.destinationPath)
