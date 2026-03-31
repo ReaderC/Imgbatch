@@ -4825,6 +4825,25 @@ body {
 
 .workspace--result .result-page__open {
   justify-self: auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(73, 86, 180, 0.14);
+  background: rgba(73, 86, 180, 0.08);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.workspace--result .result-page__open:hover {
+  background: rgba(73, 86, 180, 0.14);
+}
+
+.workspace--result .result-page__open:active {
+  background: rgba(73, 86, 180, 0.18);
 }
 
 /* Final manual-crop portrait-fit override */
@@ -4869,6 +4888,41 @@ body {
 .result-toolbar .secondary-button,
 .result-toolbar .primary-button {
   flex: 0 0 auto !important;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.result-toolbar .secondary-button {
+  background: rgba(73, 86, 180, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(73, 86, 180, 0.14);
+  box-shadow: none;
+}
+
+.result-toolbar .secondary-button:hover {
+  background: rgba(73, 86, 180, 0.14);
+}
+
+.result-toolbar .secondary-button:active {
+  background: rgba(73, 86, 180, 0.18);
+}
+
+.result-toolbar .primary-button {
+  background: linear-gradient(135deg, #4956B4 0%, #7F8CFF 100%);
+  box-shadow: 0 14px 28px rgba(73, 86, 180, 0.18);
+}
+
+.result-toolbar .primary-button:hover {
+  background: linear-gradient(135deg, #4250ab 0%, #7481f5 100%);
+}
+
+.result-toolbar .primary-button:active {
+  background: linear-gradient(135deg, #39479a 0%, #6975e5 100%);
 }
 
 @media (max-width: 1100px) {
