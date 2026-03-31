@@ -3549,7 +3549,9 @@ body {
   flex: 0 0 auto;
   position: sticky;
   bottom: 0;
-  padding-top: 8px;
+  padding-top: 4px;
+  padding-bottom: 0;
+  margin-top: auto;
   background: #F0F4F8;
 }
 
@@ -3558,8 +3560,8 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 18px;
+  padding: 6px 10px;
+  border-radius: 14px;
   background: var(--surface-container-lowest);
   box-shadow: var(--shadow-float);
 }
