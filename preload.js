@@ -1812,7 +1812,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
-      const metadata = await sharpLib(asset.sourcePath).metadata()
+      const metadata = await createTransformer(sharpLib, asset).metadata()
       sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }

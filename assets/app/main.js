@@ -1026,6 +1026,9 @@ function showTooltip(target) {
   if (target?.closest?.('.nav-item') && !document.querySelector('.app-shell')?.classList.contains('app-shell--sidebar-collapsed')) {
     return
   }
+  if (target?.dataset?.tooltipOverflow === 'true' && target.scrollWidth <= target.clientWidth + 1) {
+    return
+  }
   activeTooltipTarget = target
   const tooltip = ensureTooltipElement()
   tooltip.textContent = text

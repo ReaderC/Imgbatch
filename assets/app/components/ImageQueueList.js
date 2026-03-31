@@ -63,7 +63,7 @@ function renderQueueItem(asset, tool, state, index, total) {
         <img src="${asset.thumbnailUrl}" alt="${escapeHtml(asset.name)}" />
       </div>
       <div class="queue-item__content">
-        <p class="queue-item__name" title="${escapeHtml(asset.name)}">${escapeHtml(asset.name)}</p>
+        <p class="queue-item__name" title="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
         <div class="queue-item__subline queue-item__subline--meta">
           <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
           <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
