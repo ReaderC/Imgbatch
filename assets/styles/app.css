@@ -4903,6 +4903,40 @@ body {
   gap: 10px;
 }
 
+.settings-page__action {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px !important;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.settings-page__action--secondary {
+  background: rgba(113, 85, 124, 0.12) !important;
+  color: var(--tertiary) !important;
+}
+
+.settings-page__action--secondary:hover {
+  background: rgba(113, 85, 124, 0.18) !important;
+}
+
+.settings-page__action--secondary:active {
+  background: rgba(113, 85, 124, 0.24) !important;
+}
+
+.settings-page__action--primary {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+
+.settings-page__action--primary:hover {
+  background: #3f4ba0 !important;
+}
+
+.settings-page__action--primary:active {
+  background: #36418d !important;
+}
+
 .settings-panel,
 .preset-form,
 .preset-picker {

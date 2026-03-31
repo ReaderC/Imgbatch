@@ -60,7 +60,7 @@ function renderSettingsWorkspace(dialog) {
           <h2 class="hero-title">设置</h2>
           <div class="queue-subtitle">配置默认图片保存位置与基础偏好</div>
         </div>
-        <button class="secondary-button" data-action="close-settings-modal">返回</button>
+        <button class="secondary-button settings-page__action settings-page__action--secondary" data-action="close-settings-modal">返回</button>
       </div>
       <div class="settings-page__content">
         <div class="settings-panel">
@@ -114,8 +114,8 @@ function renderSettingsWorkspace(dialog) {
           </div>
         </div>
         <div class="settings-page__actions">
-          <button type="button" class="secondary-button" data-action="close-settings-modal">取消</button>
-          <button type="button" class="primary-button" data-action="save-settings-dialog">保存设置</button>
+          <button type="button" class="secondary-button settings-page__action settings-page__action--secondary" data-action="close-settings-modal">取消</button>
+          <button type="button" class="primary-button settings-page__action settings-page__action--primary" data-action="save-settings-dialog">保存设置</button>
         </div>
       </div>
     </section>
