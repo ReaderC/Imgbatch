@@ -526,23 +526,6 @@ function buildSettingsPayload(settings = {}) {
   }
 }
 
-function createSavePayload(toolId, stagedItems = [], destinationPath) {
-  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
-  const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
-  const firstItem = normalizedItems[0] || {}
-  return {
-    toolId,
-    toolLabel: TOOL_LABELS[toolId] || toolId,
-    destinationPath: output.destinationPath,
-    output,
-    mode: 'save',
-    stagedItems: normalizedItems,
-    runId: firstItem.runId || '',
-    runFolderName: firstItem.runFolderName || buildRunFolderName(new Date().toISOString(), toolId),
-    createdAt: new Date().toISOString(),
-  }
-}
-
 function normalizeRunConfig(toolId, config = {}) {
   if (toolId === 'compression') {
     return {
@@ -723,15 +706,11 @@ function getHostApi() {
   return globalThis.ztools || {}
 }
 
-function resolveLaunchWaiters() {
-  for (const waiter of launchWaiters) waiter()
-  launchWaiters.clear()
-}
-
 function enqueueLaunchValue(value) {
   if (value == null) return
   pendingLaunchValues.push(value)
-  resolveLaunchWaiters()
+  for (const waiter of launchWaiters) waiter()
+  launchWaiters.clear()
   void flushLaunchSubscribers()
 }
 
@@ -2395,11 +2374,38 @@ async function stageToolPreview(toolId, config, assets, destinationPath, mode = 
 }
 
 async function saveStagedResult(toolId, stagedItem, destinationPath) {
-  return executeSaveFlow(createSavePayload(toolId, [stagedItem], destinationPath))
+  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
+  const createdAt = new Date().toISOString()
+  const stagedItems = [stagedItem]
+  return executeSaveFlow({
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    destinationPath: output.destinationPath,
+    output,
+    mode: 'save',
+    stagedItems,
+    runId: stagedItem?.runId || '',
+    runFolderName: stagedItem?.runFolderName || buildRunFolderName(createdAt, toolId),
+    createdAt,
+  })
 }
 
 async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
-  return executeSaveFlow(createSavePayload(toolId, stagedItems, destinationPath))
+  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
+  const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
+  const firstItem = normalizedItems[0] || {}
+  const createdAt = new Date().toISOString()
+  return executeSaveFlow({
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    destinationPath: output.destinationPath,
+    output,
+    mode: 'save',
+    stagedItems: normalizedItems,
+    runId: firstItem.runId || '',
+    runFolderName: firstItem.runFolderName || buildRunFolderName(createdAt, toolId),
+    createdAt,
+  })
 }
 
 function loadSettings() {
