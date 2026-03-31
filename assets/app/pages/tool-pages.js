@@ -2,6 +2,7 @@
 
 const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO']
 const FLIP_OUTPUT_OPTIONS = [['Keep Original', '保持原格式'], ...FORMAT_OPTIONS]
+const MERGE_IMAGE_OUTPUT_OPTIONS = ['PNG', 'JPEG', 'WebP']
 const COLOR_PROFILE_OPTIONS = [
   ['srgb', 'sRGB'],
   ['p3', 'Display P3'],
@@ -376,6 +377,9 @@ function renderMergePdfConfig(config) {
 }
 
 function renderMergeImageConfig(config) {
+  const outputFormat = String(config.outputFormat || 'PNG')
+  const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+  const qualityHint = qualitySupported ? '质量越低，输出体积通常越小。' : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
     ${renderSegmented('merge-image', 'direction', config.direction, [
       ['vertical', '纵向'],
@@ -386,6 +390,10 @@ function renderMergeImageConfig(config) {
       ${renderInputField({ label: '图片间距', toolId: 'merge-image', key: 'spacing', type: 'number', value: config.spacing, min: 0 })}
     `)}
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
+    ${renderFieldGrid(`
+      ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'PNG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
+      ${renderRangeField({ label: '输出质量', toolId: 'merge-image', key: 'quality', min: 1, max: 100, value: config.quality || 90, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
+    `)}
     ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
   `)

@@ -170,7 +170,11 @@ function getToolSummary(toolId, state, asset) {
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `页面 ${config.pageSize} · 边距 ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px${config.preventUpscale ? ' · 小图原尺寸' : ''}`
+  if (toolId === 'merge-image') {
+    const outputFormat = String(config.outputFormat || 'PNG')
+    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px · ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' · 小图原尺寸' : ''}`
+  }
   if (toolId === 'merge-gif') return `${config.width}×${config.height} · ${config.interval}s`
   return '待处理'
 }

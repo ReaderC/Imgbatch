@@ -2661,7 +2661,11 @@ function describeToolConfig(toolId, config) {
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px`
+  if (toolId === 'merge-image') {
+    const outputFormat = String(config.outputFormat || 'PNG')
+    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
+  }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'

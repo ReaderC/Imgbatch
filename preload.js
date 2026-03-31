@@ -70,7 +70,11 @@ function summarizeConfig(toolId, config = {}) {
     return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
-  if (toolId === 'merge-image') return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px${config.preventUpscale ? ' / 小图原尺寸' : ''}`
+  if (toolId === 'merge-image') {
+    const outputFormat = String(config.outputFormat || 'PNG')
+    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' / 小图原尺寸' : ''}`
+  }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'
@@ -633,6 +637,8 @@ function normalizeRunConfig(toolId, config = {}) {
       background: sanitizeText(config.background, '#ffffff'),
       align: pickOption(String(config.align || ''), ['start', 'center'], 'start'),
       preventUpscale: Boolean(config.preventUpscale),
+      outputFormat: pickOption(String(config.outputFormat || ''), ['PNG', 'JPEG', 'WebP'], 'PNG'),
+      quality: Math.max(1, Math.min(100, toInteger(config.quality, 90))),
     }
   }
 
@@ -1744,8 +1750,10 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
 
 async function writeMergeImageAsset(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
-  const format = 'png'
-  const outputPath = path.join(payload.destinationPath, `merged-image.${format}`)
+  const format = mapOutputFormat('format', null, { targetFormat: payload.config.outputFormat })
+  const quality = Math.max(1, Math.min(100, Number(payload.config.quality) || 90))
+  const outputExtension = format === 'jpeg' ? 'jpg' : format
+  const outputPath = path.join(payload.destinationPath, `merged-image.${outputExtension}`)
   const background = hexToRgbaObject(payload.config.background, 1)
   const isVertical = payload.config.direction === 'vertical'
   const isCentered = payload.config.align === 'center'
@@ -1758,18 +1766,17 @@ async function writeMergeImageAsset(sharpLib, payload) {
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && Number(asset.width) <= payload.config.pageWidth) || Number(asset.width) === payload.config.pageWidth)
       : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
-    if (sourceFormat === format && keepsOriginalSize) {
+    if (format === 'png' && sourceFormat === format && keepsOriginalSize) {
       return copyAssetToOutput(asset, outputPath)
     }
-    const info = await sharpLib(asset.sourcePath)
+    const info = await withOutputFormat(sharpLib(asset.sourcePath)
       .resize({
         width: fitWidth,
         height: fitHeight,
         fit: 'contain',
         background,
         withoutEnlargement: preventUpscale,
-      })
-      .png()
+      }), format, quality)
       .toFile(outputPath)
     return {
       outputPath,
@@ -1875,14 +1882,14 @@ async function writeMergeImageAsset(sharpLib, payload) {
     return composite
   })
 
-  const info = await sharpLib({
+  const info = await withOutputFormat(sharpLib({
     create: {
       width: totalWidth,
       height: totalHeight,
       channels: 4,
       background,
     },
-  }).composite(composites).png().toFile(outputPath)
+  }).composite(composites), format, quality).toFile(outputPath)
   throwIfRunCancelled(payload.runId)
 
   return {
@@ -1945,9 +1952,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           ? Math.round((sourceWidth || 1) * 0.06)
           : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
-      asset,
       imageBytes,
-      fixedPageSize,
       sourceFormat: String(asset.ext || '').toLowerCase(),
       sourceWidth,
       sourceHeight,
@@ -1995,7 +2000,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
   for (const prepared of preparedAssets) {
     throwIfRunCancelled(payload.runId)
-    const { asset, imageBytes, fixedPageSize } = prepared
+    const { imageBytes } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
     let sourceHeight = prepared.sourceHeight
