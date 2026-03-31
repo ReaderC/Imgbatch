@@ -1170,6 +1170,13 @@ function createTransformer(sharpLib, asset) {
 function withOutputFormat(transformer, format, quality) {
   if (format === 'jpeg') return transformer.jpeg({ quality, mozjpeg: true })
   if (format === 'png') {
+    if (quality >= 100) {
+      return transformer.png({
+        compressionLevel: 9,
+        palette: false,
+        effort: 10,
+      })
+    }
     const compressionLevel = Math.max(0, Math.min(9, Math.round((100 - quality) / 11)))
     return transformer.png({
       compressionLevel,
@@ -2680,10 +2687,6 @@ async function stageToolPreview(toolId, config, assets, destinationPath, mode = 
   })
 }
 
-async function saveStagedResult(toolId, stagedItem, destinationPath) {
-  return saveAllStagedResults(toolId, [stagedItem], destinationPath)
-}
-
 async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
   const output = resolveDestinationPath(destinationPath, [], getAppSettings())
   const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
@@ -3148,7 +3151,7 @@ const toolsApi = {
   },
 
   async saveStagedResult(toolId, stagedItem, destinationPath) {
-    return saveStagedResult(toolId, stagedItem, destinationPath)
+    return saveAllStagedResults(toolId, [stagedItem], destinationPath)
   },
 
   async saveAllStagedResults(toolId, stagedItems, destinationPath) {
