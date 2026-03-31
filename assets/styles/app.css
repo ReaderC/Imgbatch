@@ -1464,6 +1464,22 @@ body {
   grid-template-columns: minmax(96px, 116px) minmax(0, 1fr);
 }
 
+.workspace-stage__inner .setting-row--range .setting-row__header {
+  display: grid;
+  grid-template-columns: minmax(96px, 116px) auto;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-stage__inner .setting-row--range .setting-row__value {
+  margin-left: 0;
+}
+
+.workspace-stage__inner .setting-row--range .range-shell {
+  grid-column: 2;
+}
+
 .workspace-stage__inner .setting-row__header {
   display: flex;
   align-items: center;
