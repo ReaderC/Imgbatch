@@ -1672,29 +1672,39 @@ function attachGlobalEvents() {
         state.assets,
         Math.min(config.currentIndex + 1, Math.max(state.assets.length - 1, 0)),
       )
+      const completedArea = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+      const lastCompletedCropSeed = isComplete
+        ? {
+            assetWidth: asset.width || 0,
+            assetHeight: asset.height || 0,
+            ratioValue: config.ratioValue || '16:9',
+            area: completedArea,
+            normalizedArea: (() => {
+              const assetWidth = Math.max(1, asset.width || 1)
+              const assetHeight = Math.max(1, asset.height || 1)
+              return {
+                x: completedArea.x / assetWidth,
+                y: completedArea.y / assetHeight,
+                width: completedArea.width / assetWidth,
+                height: completedArea.height / assetHeight,
+              }
+            })(),
+          }
+        : config.lastCompletedCropSeed || null
+      const cropAreas = { ...(config.cropAreas || {}) }
+      const nextAsset = state.assets[nextIndex]
+      if (isComplete && nextAsset && !cropAreas[nextAsset.id]) {
+        cropAreas[nextAsset.id] = getInheritedManualCropArea(nextAsset, {
+          ...config,
+          lastCompletedCropSeed,
+        }) || cropAreas[nextAsset.id]
+      }
       updateConfig('manual-crop', {
         completedIds,
         skippedIds,
         currentIndex: nextIndex,
-        lastCompletedCropSeed: isComplete
-          ? {
-              assetWidth: asset.width || 0,
-              assetHeight: asset.height || 0,
-              ratioValue: config.ratioValue || '16:9',
-              area: (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9'),
-              normalizedArea: (() => {
-                const area = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
-                const assetWidth = Math.max(1, asset.width || 1)
-                const assetHeight = Math.max(1, asset.height || 1)
-                return {
-                  x: area.x / assetWidth,
-                  y: area.y / assetHeight,
-                  width: area.width / assetWidth,
-                  height: area.height / assetHeight,
-                }
-              })(),
-            }
-          : config.lastCompletedCropSeed || null,
+        cropAreas,
+        lastCompletedCropSeed,
       })
       notify({ type: 'success', message: isComplete ? '已记录当前裁剪项。' : '已跳过当前图片。' })
       return
@@ -2355,6 +2365,7 @@ function getManualCropArea(asset, config) {
 
 function getInheritedManualCropArea(asset, config) {
   const seed = config?.lastCompletedCropSeed
+  if (!seed) return null
   if (String(seed.ratioValue || '') !== String(config?.ratioValue || '16:9')) return null
   if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
     return { ...seed.area }

@@ -149,6 +149,7 @@ function resolveCropArea(asset, config) {
 
 function getInheritedCropArea(asset, config) {
   const seed = config.lastCompletedCropSeed
+  if (!seed) return null
   if (String(seed.ratioValue || '') !== String(config.ratioValue || currentRatioValue(config))) return null
   if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
     return { ...seed.area }
