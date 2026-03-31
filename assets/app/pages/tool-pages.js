@@ -410,7 +410,7 @@ function renderMergeGifConfig(config) {
     ${renderFieldGrid(`
       ${renderInputField({ label: '宽度', toolId: 'merge-gif', key: 'width', type: 'number', value: config.width, min: 1 })}
       ${renderInputField({ label: '高度', toolId: 'merge-gif', key: 'height', type: 'number', value: config.height, min: 1 })}
-      ${renderInputField({ label: '间隔秒数', toolId: 'merge-gif', key: 'interval', type: 'number', value: config.interval, min: 0.1, step: 0.1 })}
+      ${renderInputField({ label: '间隔毫秒', toolId: 'merge-gif', key: 'interval', type: 'number', value: config.interval, min: 10, step: 10 })}
     `)}
     ${renderToggleRow('循环播放', '', 'merge-gif', 'loop', config.loop)}
     ${renderColorField({ label: '背景色', toolId: 'merge-gif', key: 'background', value: config.background || '#FFFFFF' })}

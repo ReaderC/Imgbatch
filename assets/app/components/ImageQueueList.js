@@ -185,7 +185,7 @@ function getToolSummary(toolId, state, asset) {
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px · ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' · 小图原尺寸' : ''}`
   }
-  if (toolId === 'merge-gif') return `${config.width}×${config.height} · ${config.interval}s`
+  if (toolId === 'merge-gif') return `${config.width}×${config.height} · ${config.interval}ms`
   return '待处理'
 }
 

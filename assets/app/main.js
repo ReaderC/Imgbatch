@@ -2651,7 +2651,7 @@ function getToolInputValidationMessage(toolId, config = {}) {
   if (toolId === 'merge-gif') {
     if (!isPositiveInputValue(config.width)) return 'GIF 宽度必须大于 0 后才能开始处理。'
     if (!isPositiveInputValue(config.height)) return 'GIF 高度必须大于 0 后才能开始处理。'
-    return isPositiveInputValue(config.interval) ? '' : '间隔秒数必须大于 0 后才能开始处理。'
+    return isPositiveInputValue(config.interval) ? '' : '间隔毫秒必须大于 0 后才能开始处理。'
   }
 
   return ''
@@ -2680,7 +2680,7 @@ function describeToolConfig(toolId, config) {
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
   }
-  if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
+  if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'
 }

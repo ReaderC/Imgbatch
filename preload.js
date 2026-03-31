@@ -75,7 +75,7 @@ function summarizeConfig(toolId, config = {}) {
     const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' / 小图原尺寸' : ''}`
   }
-  if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}s`
+  if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
   return '待处理'
 }
@@ -670,7 +670,7 @@ function normalizeRunConfig(toolId, config = {}) {
     return {
       width: Math.max(1, toInteger(config.width, 1080)),
       height: Math.max(1, toInteger(config.height, 1080)),
-      interval: Math.max(0.01, toNumber(config.interval, 0.5)),
+      interval: Math.max(10, toNumber(config.interval, 500)),
       background: sanitizeText(config.background, '#ffffff'),
       loop: config.loop !== false,
     }
