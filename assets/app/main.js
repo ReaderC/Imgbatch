@@ -421,6 +421,22 @@ async function openResultPath(targetPath) {
   }
 }
 
+function getDistinctSourceDirectories() {
+  return Array.from(new Set(
+    getState().assets
+      .map((asset) => String(asset?.sourcePath || '').trim())
+      .filter(Boolean)
+      .map((sourcePath) => sourcePath.replaceAll('\\', '/').replace(/\/[^/]+$/, '').replaceAll('/', '\\'))
+      .filter(Boolean),
+  ))
+}
+
+async function openSourceDirectories(paths = []) {
+  for (const targetPath of paths) {
+    await openResultPath(targetPath)
+  }
+}
+
 async function runBusyAction(task) {
   setState({ isProcessing: true, cancelRequested: false })
   try {
@@ -662,6 +678,24 @@ async function openCurrentResultsDirectory() {
     const visible = !!getState().resultView?.items?.length
     if (visible) closePreviewModal()
     if (visible) return
+    const sourceDirectories = getDistinctSourceDirectories()
+    if (!sourceDirectories.length) {
+      notify({ type: 'info', message: '当前没有可打开的结果目录。' })
+      return
+    }
+    if (sourceDirectories.length > 5) {
+      openConfirmDialog({
+        title: '打开原图目录',
+        subtitle: `共 ${sourceDirectories.length} 个目录`,
+        message: `当前结果已替换回原图。要继续打开这 ${sourceDirectories.length} 个原图目录吗？`,
+        confirmLabel: '继续打开',
+        confirmAction: 'confirm-open-source-directories',
+        paths: sourceDirectories,
+      })
+      return
+    }
+    await openSourceDirectories(sourceDirectories)
+    return
   }
   const asset = getState().assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item))
   if (!asset) {
@@ -1588,6 +1622,13 @@ function attachGlobalEvents() {
     if (action === 'confirm-replace-current-originals') {
       closeConfirmDialog()
       await replaceCurrentOriginals()
+      return
+    }
+
+    if (action === 'confirm-open-source-directories') {
+      const paths = Array.isArray(getState().confirmDialog?.paths) ? getState().confirmDialog.paths : []
+      closeConfirmDialog()
+      if (paths.length) await openSourceDirectories(paths)
       return
     }
 
