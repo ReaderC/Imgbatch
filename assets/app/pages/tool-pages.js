@@ -304,18 +304,23 @@ function renderPaddingConfig(config) {
 }
 
 function renderCropConfig(config) {
+  const mode = config.mode === 'size' ? 'size' : 'ratio'
   const isCustom = config.ratio === 'Custom' || config.useCustomRatio
   return renderSettingsSection(`
-    ${renderSelectField({ label: '裁剪比例', toolId: 'crop', key: 'ratio', value: config.ratio, options: CROP_RATIOS })}
+    ${renderSegmented('crop', 'mode', mode, [
+      ['ratio', '按比例'],
+      ['size', '按尺寸'],
+    ])}
+    ${renderSelectField({ label: '裁剪比例', toolId: 'crop', key: 'ratio', value: config.ratio, options: CROP_RATIOS, disabled: mode !== 'ratio' })}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '自定义比例 X', toolId: 'crop', key: 'customRatioX', type: 'number', value: config.customRatioX, min: 1, disabled: !isCustom })}
-      ${renderInputField({ label: '自定义比例 Y', toolId: 'crop', key: 'customRatioY', type: 'number', value: config.customRatioY, min: 1, disabled: !isCustom })}
+      ${renderInputField({ label: '自定义比例 X', toolId: 'crop', key: 'customRatioX', type: 'number', value: config.customRatioX, min: 1, disabled: mode !== 'ratio' || !isCustom })}
+      ${renderInputField({ label: '自定义比例 Y', toolId: 'crop', key: 'customRatioY', type: 'number', value: config.customRatioY, min: 1, disabled: mode !== 'ratio' || !isCustom })}
     `)}
     ${renderFieldGrid(`
       ${renderInputField({ label: '起始 X', toolId: 'crop', key: 'x', type: 'number', value: config.x, min: 0 })}
       ${renderInputField({ label: '起始 Y', toolId: 'crop', key: 'y', type: 'number', value: config.y, min: 0 })}
-      ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1 })}
-      ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1 })}
+      ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1, disabled: mode !== 'size' })}
+      ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1, disabled: mode !== 'size' })}
     `)}
   `)
 }
@@ -474,16 +479,16 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', place
   `
 }
 
-function renderSelectField({ label, toolId, key, value, options }) {
+function renderSelectField({ label, toolId, key, value, options, disabled = false }) {
   const normalizedOptions = options.map((option) => Array.isArray(option) ? option : [option, option])
   const activeOption = normalizedOptions.find((option) => option[0] === value) || normalizedOptions[0] || ['', '']
   return `
-    <label class="setting-row setting-row--stack">
+    <label class="setting-row setting-row--stack ${disabled ? 'is-disabled' : ''}">
       <span class="setting-row__header">
         <span class="setting-row__label">${label}</span>
       </span>
       <div class="select-shell">
-        <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false">
+        <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false" ${disabled ? 'disabled' : ''}>
           <span class="select-shell__text">${escapeAttribute(activeOption[1])}</span>
           <span class="material-symbols-outlined select-shell__icon">expand_more</span>
         </button>

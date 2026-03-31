@@ -67,7 +67,7 @@ function summarizeConfig(toolId, config = {}) {
     return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`}`
   }
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
-  if (toolId === 'crop') return `裁剪 ${config.ratio}`
+  if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height}` : `裁剪 ${config.ratio}`
   if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
@@ -611,9 +611,11 @@ function normalizeRunConfig(toolId, config = {}) {
   if (toolId === 'crop') {
     const customRatioX = Math.max(1, toInteger(config.customRatioX, 16))
     const customRatioY = Math.max(1, toInteger(config.customRatioY, 9))
+    const mode = config.mode === 'size' ? 'size' : 'ratio'
     const useCustomRatio = Boolean(config.useCustomRatio) || config.ratio === 'Custom'
 
     return {
+      mode,
       ratio: useCustomRatio ? `${customRatioX}:${customRatioY}` : sanitizeText(config.ratio, '16:9'),
       useCustomRatio,
       customRatio: {
@@ -2004,6 +2006,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
 function normalizeCropBox(asset, config) {
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
+  const mode = config.mode === 'size' ? 'size' : 'ratio'
   let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
   let height = Math.min(assetHeight, Math.max(1, toInteger(config.area?.height, assetHeight)))
   let left = Math.max(0, toInteger(config.area?.x, 0))
@@ -2012,7 +2015,7 @@ function normalizeCropBox(asset, config) {
   if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
   if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
 
-  if (config.ratio !== 'Original') {
+  if (mode === 'ratio' && config.ratio !== 'Original') {
     const [ratioX, ratioY] = String(config.ratio).split(':').map((item) => Number.parseFloat(item))
     if (Number.isFinite(ratioX) && Number.isFinite(ratioY) && ratioX > 0 && ratioY > 0) {
       const targetRatio = ratioX / ratioY

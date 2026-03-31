@@ -2680,12 +2680,14 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'crop') {
-    if (config.ratio === 'Custom' || config.useCustomRatio) {
+    if ((config.mode || 'ratio') === 'ratio' && (config.ratio === 'Custom' || config.useCustomRatio)) {
       if (!isPositiveInputValue(config.customRatioX)) return '自定义比例宽度必须大于 0。'
       if (!isPositiveInputValue(config.customRatioY)) return '自定义比例高度必须大于 0。'
     }
-    if (!isPositiveInputValue(config.width)) return '裁剪宽度必须大于 0 后才能开始处理。'
-    if (!isPositiveInputValue(config.height)) return '裁剪高度必须大于 0 后才能开始处理。'
+    if ((config.mode || 'ratio') === 'size') {
+      if (!isPositiveInputValue(config.width)) return '裁剪宽度必须大于 0 后才能开始处理。'
+      if (!isPositiveInputValue(config.height)) return '裁剪高度必须大于 0 后才能开始处理。'
+    }
     return ''
   }
 
@@ -2714,7 +2716,10 @@ function describeToolConfig(toolId, config) {
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position}`
   if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
-  if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
+  if (toolId === 'crop') {
+    if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height}`
+    return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
+  }
   if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
