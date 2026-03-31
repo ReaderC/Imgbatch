@@ -5334,6 +5334,15 @@ body {
 }
 
 .app-modal__footer [data-action='delete-selected-preset'] {
-  background: rgba(190, 55, 55, 0.1);
-  color: #b23a3a;
+  background: rgba(190, 55, 55, 0.1) !important;
+  color: #b23a3a !important;
+  border: 1px solid rgba(190, 55, 55, 0.18) !important;
+}
+
+.app-modal__footer [data-action='delete-selected-preset']:hover {
+  background: rgba(190, 55, 55, 0.16) !important;
+}
+
+.app-modal__footer [data-action='delete-selected-preset']:active {
+  background: rgba(190, 55, 55, 0.2) !important;
 }
