@@ -2132,6 +2132,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval * 100))
   const repeat = payload.config.loop ? 0 : -1
+  const frameWriteOptions = { delay, repeat }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
@@ -2155,8 +2156,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
     throwIfRunCancelled(payload.runId)
     encoder.writeFrame(frame.index, frameWidth, frameHeight, {
       palette: frame.palette,
-      delay,
-      repeat,
+      ...frameWriteOptions,
     })
   }
 
