@@ -2217,6 +2217,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
       imageBytes,
+      sourcePath: asset.sourcePath,
       sourceFormat: normalizeImageFormatName(asset.inputFormat || asset.ext),
       sourceWidth,
       sourceHeight,
@@ -2246,13 +2247,13 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
       prepared.requiresSlicing = prepared.scaledHeight > prepared.drawableHeight
       if (prepared.requiresSlicing) {
-        prepared.scaledBuffer = await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat)
+        prepared.scaledBuffer = await createTransformer(sharpLib, asset)
           .resize({ width: prepared.scaledWidth, fit: 'fill' })
           .png()
           .toBuffer()
       }
     } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
-      prepared.embeddedBytes = await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat).jpeg().toBuffer()
+      prepared.embeddedBytes = await createTransformer(sharpLib, asset).jpeg().toBuffer()
       prepared.embeddedKind = 'jpg'
     }
 
@@ -2340,7 +2341,11 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     const scaledBuffer = prepared.scaledBuffer
-      || await createTransformerFromInput(sharpLib, imageBytes, prepared.sourceFormat)
+      || await createTransformer(sharpLib, {
+        sourcePath: prepared.sourcePath,
+        inputFormat: prepared.sourceFormat,
+        ext: prepared.sourceFormat,
+      })
         .resize({ width: scaledWidth, fit: 'fill' })
         .png()
         .toBuffer()
