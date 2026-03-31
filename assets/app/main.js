@@ -402,16 +402,6 @@ async function saveAllCurrentResults() {
   }
 }
 
-async function openSavedOutput(assetId) {
-  const asset = getState().assets.find((item) => item.id === assetId)
-  const targetPath = asset ? (getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath) : ''
-  if (!targetPath) {
-    notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
-    return
-  }
-  await openResultPath(targetPath)
-}
-
 async function openResultPath(targetPath) {
   if (!targetPath) return
   const ok = await revealPath(targetPath)
@@ -652,7 +642,12 @@ async function openCurrentResultsDirectory() {
     notify({ type: 'info', message: '当前没有可打开的结果目录。' })
     return
   }
-  await openSavedOutput(asset.id)
+  const targetPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath || ''
+  if (!targetPath) {
+    notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
+    return
+  }
+  await openResultPath(targetPath)
 }
 
 async function replaceCurrentOriginals() {
@@ -1467,7 +1462,13 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-asset-result') {
-      await openSavedOutput(target.dataset.assetId)
+      const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
+      const targetPath = asset ? (getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath) : ''
+      if (!targetPath) {
+        notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
+        return
+      }
+      await openResultPath(targetPath)
       return
     }
 
