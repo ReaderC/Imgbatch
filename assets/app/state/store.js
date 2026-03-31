@@ -35,7 +35,7 @@ const state = {
     watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
     corners: { radius: '24px', background: '#ffffff', keepTransparency: false },
     padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100 },
-    crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: 0, y: 0, width: 1920, height: 1080 },
+    crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080 },
     rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
     flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original' },
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },

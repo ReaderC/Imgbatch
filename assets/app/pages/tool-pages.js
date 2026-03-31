@@ -317,8 +317,8 @@ function renderCropConfig(config) {
       ${renderInputField({ label: '自定义比例 Y', toolId: 'crop', key: 'customRatioY', type: 'number', value: config.customRatioY, min: 1, disabled: mode !== 'ratio' || !isCustom })}
     `)}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '起始 X', toolId: 'crop', key: 'x', type: 'number', value: config.x, min: 0 })}
-      ${renderInputField({ label: '起始 Y', toolId: 'crop', key: 'y', type: 'number', value: config.y, min: 0 })}
+      ${renderInputField({ label: '开始位置-距离左边', toolId: 'crop', key: 'x', value: getMeasureInputValue(config.x, '0'), unitMode: getMeasureUnit(config.x, 'px') })}
+      ${renderInputField({ label: '开始位置-距离顶部', toolId: 'crop', key: 'y', value: getMeasureInputValue(config.y, '0'), unitMode: getMeasureUnit(config.y, 'px') })}
       ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1, disabled: mode !== 'size' })}
       ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1, disabled: mode !== 'size' })}
     `)}
@@ -460,6 +460,7 @@ function renderInputField({ label, toolId, key, type = 'text', value = '', place
           data-action="set-config-input"
           data-tool-id="${toolId}"
           data-key="${key}"
+          ${hasUnitSwitch ? `data-unit-mode="${unitMode}"` : ''}
           value="${escapeAttribute(value)}"
           ${placeholder ? `placeholder="${escapeAttribute(placeholder)}"` : ''}
           ${min !== undefined ? `min="${min}"` : ''}

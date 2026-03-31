@@ -1819,7 +1819,9 @@ function attachGlobalEvents() {
     if (action === 'set-config-input') {
       const toolId = target.dataset.toolId
       const key = target.dataset.key
-      const value = parseValue(target.value)
+      const value = target.dataset.unitMode
+        ? normalizeMeasureToggleValue(target.value, target.dataset.unitMode)
+        : parseValue(target.value)
       getState().configs[toolId] = { ...getState().configs[toolId], [key]: value }
 
       if (toolId === 'crop' && key === 'ratio') {
@@ -1902,7 +1904,10 @@ function attachGlobalEvents() {
     }
 
     if (action === 'set-config-input' || action === 'set-config-select') {
-      updateConfig(target.dataset.toolId, { [target.dataset.key]: parseValue(target.value) })
+      const value = target.dataset.unitMode
+        ? normalizeMeasureToggleValue(target.value, target.dataset.unitMode)
+        : parseValue(target.value)
+      updateConfig(target.dataset.toolId, { [target.dataset.key]: value })
     }
   })
 
@@ -2680,6 +2685,8 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'crop') {
+    if (!isNonNegativeInputValue(config.x)) return '开始位置-距离左边不能小于 0。'
+    if (!isNonNegativeInputValue(config.y)) return '开始位置-距离顶部不能小于 0。'
     if ((config.mode || 'ratio') === 'ratio' && (config.ratio === 'Custom' || config.useCustomRatio)) {
       if (!isPositiveInputValue(config.customRatioX)) return '自定义比例宽度必须大于 0。'
       if (!isPositiveInputValue(config.customRatioY)) return '自定义比例高度必须大于 0。'

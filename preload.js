@@ -95,6 +95,13 @@ function toInteger(value, fallback = 0) {
   return Math.round(toNumber(value, fallback))
 }
 
+function resolveMeasureOffset(value, total, fallback = 0) {
+  if (typeof value === 'string' && value.trim().endsWith('%')) {
+    return Math.round(total * (toNumber(value, fallback) / 100))
+  }
+  return toInteger(value, fallback)
+}
+
 function clampNumber(value, min, max, fallback = min) {
   const numeric = toNumber(value, fallback)
   return Math.min(max, Math.max(min, numeric))
@@ -623,8 +630,8 @@ function normalizeRunConfig(toolId, config = {}) {
         y: customRatioY,
       },
       area: {
-        x: Math.max(0, toInteger(config.x, 0)),
-        y: Math.max(0, toInteger(config.y, 0)),
+        x: typeof config.x === 'string' ? config.x : `${Math.max(0, toInteger(config.x, 0))}px`,
+        y: typeof config.y === 'string' ? config.y : `${Math.max(0, toInteger(config.y, 0))}px`,
         width: Math.max(1, toInteger(config.width, 1920)),
         height: Math.max(1, toInteger(config.height, 1080)),
       },
@@ -2009,8 +2016,8 @@ function normalizeCropBox(asset, config) {
   const mode = config.mode === 'size' ? 'size' : 'ratio'
   let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
   let height = Math.min(assetHeight, Math.max(1, toInteger(config.area?.height, assetHeight)))
-  let left = Math.max(0, toInteger(config.area?.x, 0))
-  let top = Math.max(0, toInteger(config.area?.y, 0))
+  let left = Math.max(0, resolveMeasureOffset(config.area?.x, assetWidth, 0))
+  let top = Math.max(0, resolveMeasureOffset(config.area?.y, assetHeight, 0))
 
   if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
   if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
