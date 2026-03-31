@@ -924,6 +924,49 @@ function createNativeImagePngBuffer(input) {
   }
 }
 
+function detectImageFormatFromBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return ''
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) return 'bmp'
+  if (buffer[0] === 0x00 && buffer[1] === 0x00 && buffer[2] === 0x01 && buffer[3] === 0x00) return 'ico'
+  if (buffer.length >= 8
+    && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) return 'png'
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpeg'
+  if (buffer.length >= 6) {
+    const gifHeader = buffer.subarray(0, 6).toString('ascii')
+    if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') return 'gif'
+  }
+  if (buffer.length >= 12
+    && buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'webp'
+  if (buffer.length >= 4) {
+    const littleTiff = buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2a && buffer[3] === 0x00
+    const bigTiff = buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a
+    if (littleTiff || bigTiff) return 'tiff'
+  }
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.subarray(8, 12).toString('ascii')
+    if (brand === 'avif' || brand === 'avis') return 'avif'
+    if (brand === 'heic' || brand === 'heix' || brand === 'hevc' || brand === 'hevx') return 'heif'
+  }
+  return ''
+}
+
+function detectImageFormatFromFile(filePath) {
+  try {
+    const fd = fs.openSync(filePath, 'r')
+    try {
+      const header = Buffer.alloc(32)
+      const bytesRead = fs.readSync(fd, header, 0, header.length, 0)
+      return normalizeImageFormatName(detectImageFormatFromBuffer(header.subarray(0, bytesRead)))
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return ''
+  }
+}
+
 async function getAssetInputFormat(sharpLib, asset) {
   const cachedFormat = normalizeImageFormatName(asset?.inputFormat)
   if (cachedFormat) return cachedFormat
@@ -944,6 +987,11 @@ async function getAssetInputFormat(sharpLib, asset) {
     }
   } catch {
     // Fall back to the filename extension if metadata probing fails.
+  }
+  const headerFormat = detectImageFormatFromFile(asset?.sourcePath)
+  if (headerFormat) {
+    asset.inputFormat = headerFormat
+    return headerFormat
   }
   const fallbackFormat = normalizeImageFormatName(asset?.ext)
   if (fallbackFormat) asset.inputFormat = fallbackFormat
@@ -1114,11 +1162,16 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
 
   const sourceInput = fs.readFileSync(asset.sourcePath)
+  const decodedCompressionInput = isFallbackDecodedInputFormat(sourceFormat)
+    ? createNativeImagePngBuffer(asset.sourcePath)
+    : null
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(maxQuality, Math.round(quality)))
     if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
-    const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, sourceInput, asset.inputFormat), format, normalizedQuality).toBuffer()
+    const transformerInput = decodedCompressionInput || sourceInput
+    const transformerExt = decodedCompressionInput ? 'png' : asset.inputFormat
+    const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, transformerInput, transformerExt), format, normalizedQuality).toBuffer()
     cache.set(normalizedQuality, buffer)
     return buffer
   }
@@ -2779,6 +2832,9 @@ const toolsApi = {
         } catch {
           inputFormat = ''
         }
+      }
+      if (!inputFormat) {
+        inputFormat = detectImageFormatFromFile(filePath)
       }
       if (!(width > 0 && height > 0)) {
         const image = nativeImage.createFromPath(filePath)
