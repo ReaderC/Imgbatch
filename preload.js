@@ -1912,6 +1912,15 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     ? null
     : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
   const autoPaginateFixedPage = payload.config.autoPaginate && Boolean(fixedPageSize)
+  const fixedMargin = fixedPageSize
+    ? (payload.config.margin === 'none'
+      ? 0
+      : payload.config.margin === 'wide'
+        ? Math.round(fixedPageSize[0] * 0.08)
+        : payload.config.margin === 'normal'
+          ? Math.round(fixedPageSize[0] * 0.06)
+          : Math.round(fixedPageSize[0] * 0.04))
+    : null
   const paintPdfPageBackground = (page, pageSize) => {
     page.drawRectangle({
       x: 0,
@@ -1926,14 +1935,13 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     const imageBytes = fs.readFileSync(asset.sourcePath)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
-    const marginBaseWidth = fixedPageSize?.[0] || sourceWidth || 1
-    const margin = payload.config.margin === 'none'
+    const margin = fixedMargin ?? (payload.config.margin === 'none'
       ? 0
       : payload.config.margin === 'wide'
-        ? Math.round(marginBaseWidth * 0.08)
+        ? Math.round((sourceWidth || 1) * 0.08)
         : payload.config.margin === 'normal'
-          ? Math.round(marginBaseWidth * 0.06)
-          : Math.round(marginBaseWidth * 0.04)
+          ? Math.round((sourceWidth || 1) * 0.06)
+          : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
       asset,
       imageBytes,
