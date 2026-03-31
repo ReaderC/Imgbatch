@@ -2736,7 +2736,7 @@ const toolsApi = {
         sizeBytes: stat.size,
         width,
         height,
-        thumbnailUrl: this.pathToFileUrl(filePath),
+        thumbnailUrl: this.createAssetDisplayUrl(filePath, ext),
         status: 'idle',
         outputPath: '',
         error: '',
@@ -2744,6 +2744,28 @@ const toolsApi = {
         overrides: {},
       }
     }))
+  },
+
+  createAssetDisplayUrl(filePath, inputFormat = '') {
+    const format = normalizeImageFormatName(inputFormat)
+    if (format === 'bmp' || format === 'ico') {
+      try {
+        const image = nativeImage.createFromPath(filePath)
+        if (!image.isEmpty()) {
+          const size = image.getSize()
+          const maxDimension = Math.max(size.width || 0, size.height || 0)
+          const previewImage = maxDimension > 2048
+            ? image.resize({
+                width: size.width >= size.height ? 2048 : undefined,
+                height: size.height > size.width ? 2048 : undefined,
+                quality: 'good',
+              })
+            : image
+          return previewImage.toDataURL()
+        }
+      } catch {}
+    }
+    return this.pathToFileUrl(filePath)
   },
 
   pathToFileUrl(filePath) {
