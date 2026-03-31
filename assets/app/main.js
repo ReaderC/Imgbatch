@@ -1676,6 +1676,14 @@ function attachGlobalEvents() {
         completedIds,
         skippedIds,
         currentIndex: nextIndex,
+        lastCompletedCropSeed: isComplete
+          ? {
+              assetWidth: asset.width || 0,
+              assetHeight: asset.height || 0,
+              ratioValue: config.ratioValue || '16:9',
+              area: (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9'),
+            }
+          : config.lastCompletedCropSeed || null,
       })
       notify({ type: 'success', message: isComplete ? '已记录当前裁剪项。' : '已跳过当前图片。' })
       return
@@ -2329,7 +2337,18 @@ function endManualCropDrag() {
 }
 
 function getManualCropArea(asset, config) {
-  return (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+  return (config.cropAreas && config.cropAreas[asset.id])
+    || getInheritedManualCropArea(asset, config)
+    || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+}
+
+function getInheritedManualCropArea(asset, config) {
+  const seed = config?.lastCompletedCropSeed
+  if (!seed?.area) return null
+  if ((seed.assetWidth || 0) !== (asset.width || 0)) return null
+  if ((seed.assetHeight || 0) !== (asset.height || 0)) return null
+  if (String(seed.ratioValue || '') !== String(config?.ratioValue || '16:9')) return null
+  return { ...seed.area }
 }
 
 function createDefaultManualCropArea(asset, ratioValue) {

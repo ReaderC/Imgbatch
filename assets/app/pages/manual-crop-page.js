@@ -134,7 +134,7 @@ function resolveCropArea(asset, config) {
   const saved = config.cropAreas?.[asset.id]
   const width = Math.max(1, asset.width || 1)
   const height = Math.max(1, asset.height || 1)
-  const area = saved || getDefaultCropArea(width, height, config.ratioValue || currentRatioValue(config))
+  const area = saved || getInheritedCropArea(asset, config) || getDefaultCropArea(width, height, config.ratioValue || currentRatioValue(config))
   return {
     x: area.x,
     y: area.y,
@@ -145,6 +145,15 @@ function resolveCropArea(asset, config) {
     widthPct: (area.width / width) * 100,
     heightPct: (area.height / height) * 100,
   }
+}
+
+function getInheritedCropArea(asset, config) {
+  const seed = config.lastCompletedCropSeed
+  if (!seed?.area) return null
+  if ((seed.assetWidth || 0) !== (asset.width || 0)) return null
+  if ((seed.assetHeight || 0) !== (asset.height || 0)) return null
+  if (String(seed.ratioValue || '') !== String(config.ratioValue || currentRatioValue(config))) return null
+  return { ...seed.area }
 }
 
 function getDefaultCropArea(width, height, ratioValue) {
