@@ -1883,6 +1883,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const backgroundColor = pdfLib.rgb(background.r / 255, background.g / 255, background.b / 255)
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.heavyConcurrency, 3)))
+  const fixedPageSize = payload.config.pageSize === 'Original'
+    ? null
+    : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
+  const autoPaginateFixedPage = payload.config.autoPaginate && Boolean(fixedPageSize)
   const paintPdfPageBackground = (page, pageSize) => {
     page.drawRectangle({
       x: 0,
@@ -1895,9 +1899,6 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
     const imageBytes = fs.readFileSync(asset.sourcePath)
-    const fixedPageSize = payload.config.pageSize === 'Original'
-      ? null
-      : (PDF_PAGE_SIZES[payload.config.pageSize] || PDF_PAGE_SIZES.A4)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     const marginBaseWidth = fixedPageSize?.[0] || sourceWidth || 1
@@ -1927,7 +1928,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       embeddedKind: '',
     }
 
-    if (payload.config.autoPaginate && payload.config.pageSize !== 'Original') {
+    if (autoPaginateFixedPage) {
       if (!(sourceWidth > 0 && sourceHeight > 0)) {
         const metadata = await sharpLib(imageBytes).metadata()
         sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
@@ -1941,12 +1942,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.pageSliceHeight = Math.max(1, Math.round(prepared.drawableHeight))
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
       if (prepared.scaledHeight > prepared.drawableHeight) {
-        const scaled = await sharpLib(imageBytes)
+        prepared.scaledBuffer = await sharpLib(imageBytes)
           .resize({ width: prepared.scaledWidth, fit: 'fill' })
           .png()
-          .toBuffer({ resolveWithObject: true })
-        prepared.scaledBuffer = scaled.data
-        prepared.scaledHeight = Math.max(1, scaled.info.height || prepared.scaledHeight)
+          .toBuffer()
       }
     } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
       prepared.embeddedBytes = await sharpLib(imageBytes).jpeg().toBuffer()
@@ -1983,7 +1982,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
     const margin = prepared.margin
 
-    if (payload.config.pageSize === 'Original') {
+    if (!fixedPageSize) {
       const originalImage = await ensureEmbedded()
       const pageSize = [originalImage.width + margin * 2, originalImage.height + margin * 2]
       const page = pdf.addPage(pageSize)
@@ -1997,7 +1996,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       continue
     }
 
-    const pageSize = prepared.pageSize
+    const pageSize = fixedPageSize
     const drawableWidth = prepared.drawableWidth || Math.max(1, pageSize[0] - margin * 2)
     const drawableHeight = prepared.drawableHeight || Math.max(1, pageSize[1] - margin * 2)
 
@@ -2069,8 +2068,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   return {
     outputPath,
     outputSizeBytes: bytes.length,
-    width: frameWidth,
-    height: frameHeight,
+    width: fixedPageSize?.[0] || 0,
+    height: fixedPageSize?.[1] || 0,
   }
 }
 
