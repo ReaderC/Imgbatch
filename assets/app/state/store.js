@@ -2,6 +2,7 @@ import { DEFAULT_TOOL } from '../config/tools.js'
 
 const listeners = new Set()
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 
 const state = {
   activeTool: DEFAULT_TOOL,
@@ -142,7 +143,7 @@ export function applyRunResult(result) {
 
   const processedMap = new Map((result.processed || []).map((item) => [item.assetId, item]))
   const failedMap = new Map((result.failed || []).map((item) => [item.assetId, item]))
-  const isMergedOutput = ['merge-pdf', 'merge-image', 'merge-gif'].includes(result.toolId)
+  const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result.toolId)
 
   state.activeRun = result.runId
     ? { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
@@ -323,7 +324,7 @@ function buildResultView(result, assets = []) {
   const processed = Array.isArray(result?.processed) ? result.processed : []
   const failed = Array.isArray(result?.failed) ? result.failed : []
   const assetMap = new Map((assets || []).map((asset) => [asset.id, asset]))
-  const isMergedOutput = ['merge-pdf', 'merge-image', 'merge-gif'].includes(result?.toolId)
+  const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
   const items = (isMergedOutput
     ? processed.map((item) => buildMergedResultViewItem(item, assets))
     : processed.map((item) => buildResultViewItem(item, assetMap.get(item.assetId))))
