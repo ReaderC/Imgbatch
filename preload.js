@@ -1685,11 +1685,6 @@ async function revealPath(targetPath) {
       shell.showItemInFolder(normalizedTarget)
       return true
     }
-    const directoryEntry = path.join(resolved, '.')
-    if (typeof shell.showItemInFolder === 'function') {
-      shell.showItemInFolder(directoryEntry)
-      return true
-    }
     const error = await shell.openPath(resolved)
     return !error
   } catch {
