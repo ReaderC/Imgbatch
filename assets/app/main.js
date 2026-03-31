@@ -2381,14 +2381,16 @@ function resizeManualCropArea(context, event, asset) {
   let y = start.y
 
   if (handle === 'ml' || handle === 'mr') {
-    width = handle === 'ml' ? right - (left + dx) : start.width + dx
-    width = Math.max(40, width)
+    const desiredWidth = handle === 'ml' ? right - (left + dx) : start.width + dx
+    const maxWidth = handle === 'ml' ? right : Math.max(40, (asset.width || 1) - left)
+    width = Math.max(40, Math.min(desiredWidth, maxWidth))
     height = start.height
     x = handle === 'ml' ? right - width : left
     y = top
   } else if (handle === 'tm' || handle === 'bm') {
-    height = handle === 'tm' ? bottom - (top + dy) : start.height + dy
-    height = Math.max(40, height)
+    const desiredHeight = handle === 'tm' ? bottom - (top + dy) : start.height + dy
+    const maxHeight = handle === 'tm' ? bottom : Math.max(40, (asset.height || 1) - top)
+    height = Math.max(40, Math.min(desiredHeight, maxHeight))
     width = start.width
     y = handle === 'tm' ? bottom - height : top
     x = left
