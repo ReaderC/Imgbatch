@@ -29,6 +29,8 @@ const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
 const WATERMARK_TILED_CACHE = new Map()
+const FALLBACK_IMAGE_BUFFER_CACHE = new Map()
+const BMP_DECODE_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -935,9 +937,19 @@ function createNativeImageFromInput(input) {
   }
 }
 
+function getCachedPathValue(cache, input, factory) {
+  if (typeof input !== 'string' || !input) return factory()
+  if (cache.has(input)) return cache.get(input)
+  const value = factory()
+  if (value) cache.set(input, value)
+  return value
+}
+
 function createNativeImagePngBuffer(input) {
-  const image = createNativeImageFromInput(input)
-  return image ? image.toPNG() : null
+  return getCachedPathValue(FALLBACK_IMAGE_BUFFER_CACHE, input, () => {
+    const image = createNativeImageFromInput(input)
+    return image ? image.toPNG() : null
+  })
 }
 
 function decodeBmpBuffer(buffer) {
@@ -1070,7 +1082,10 @@ async function getAssetMetadata(sharpLib, asset) {
   } catch {
     if (normalizeImageFormatName(asset?.inputFormat || asset?.ext) === 'bmp') {
       try {
-        const decoded = decodeBmpBuffer(fs.readFileSync(asset.sourcePath))
+        const decoded = getCachedPathValue(BMP_DECODE_CACHE, asset.sourcePath, () => {
+          const sourceBuffer = fs.readFileSync(asset.sourcePath)
+          return decodeBmpBuffer(sourceBuffer)
+        })
         if (decoded) {
           const metadata = {
             format: 'bmp',
@@ -1116,8 +1131,12 @@ function getOutputName(asset, toolId, format) {
 function createTransformerFromInput(sharpLib, input, ext = '') {
   const normalizedExt = normalizeImageFormatName(ext)
   if (normalizedExt === 'bmp') {
-    const sourceBuffer = Buffer.isBuffer(input) ? input : fs.readFileSync(String(input || ''))
-    const decoded = decodeBmpBuffer(sourceBuffer)
+    const decoded = Buffer.isBuffer(input)
+      ? decodeBmpBuffer(input)
+      : getCachedPathValue(BMP_DECODE_CACHE, input, () => {
+        const sourceBuffer = fs.readFileSync(String(input || ''))
+        return decodeBmpBuffer(sourceBuffer)
+      })
     if (decoded) {
       return sharpLib(decoded.data, {
         raw: {
@@ -2946,7 +2965,10 @@ const toolsApi = {
       }
       if (!(width > 0 && height > 0) && inputFormat === 'bmp') {
         try {
-          const decoded = decodeBmpBuffer(fs.readFileSync(filePath))
+          const decoded = getCachedPathValue(BMP_DECODE_CACHE, filePath, () => {
+            const sourceBuffer = fs.readFileSync(filePath)
+            return decodeBmpBuffer(sourceBuffer)
+          })
           if (decoded) {
             width = decoded.width
             height = decoded.height
