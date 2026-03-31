@@ -1682,6 +1682,17 @@ function attachGlobalEvents() {
               assetHeight: asset.height || 0,
               ratioValue: config.ratioValue || '16:9',
               area: (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9'),
+              normalizedArea: (() => {
+                const area = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+                const assetWidth = Math.max(1, asset.width || 1)
+                const assetHeight = Math.max(1, asset.height || 1)
+                return {
+                  x: area.x / assetWidth,
+                  y: area.y / assetHeight,
+                  width: area.width / assetWidth,
+                  height: area.height / assetHeight,
+                }
+              })(),
             }
           : config.lastCompletedCropSeed || null,
       })
@@ -2344,11 +2355,19 @@ function getManualCropArea(asset, config) {
 
 function getInheritedManualCropArea(asset, config) {
   const seed = config?.lastCompletedCropSeed
-  if (!seed?.area) return null
-  if ((seed.assetWidth || 0) !== (asset.width || 0)) return null
-  if ((seed.assetHeight || 0) !== (asset.height || 0)) return null
   if (String(seed.ratioValue || '') !== String(config?.ratioValue || '16:9')) return null
-  return { ...seed.area }
+  if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
+    return { ...seed.area }
+  }
+  if (!seed?.normalizedArea) return null
+  const assetWidth = Math.max(1, asset.width || 1)
+  const assetHeight = Math.max(1, asset.height || 1)
+  return clampManualCropArea({
+    x: Math.round(seed.normalizedArea.x * assetWidth),
+    y: Math.round(seed.normalizedArea.y * assetHeight),
+    width: Math.round(seed.normalizedArea.width * assetWidth),
+    height: Math.round(seed.normalizedArea.height * assetHeight),
+  }, asset)
 }
 
 function createDefaultManualCropArea(asset, ratioValue) {

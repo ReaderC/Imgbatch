@@ -149,11 +149,30 @@ function resolveCropArea(asset, config) {
 
 function getInheritedCropArea(asset, config) {
   const seed = config.lastCompletedCropSeed
-  if (!seed?.area) return null
-  if ((seed.assetWidth || 0) !== (asset.width || 0)) return null
-  if ((seed.assetHeight || 0) !== (asset.height || 0)) return null
   if (String(seed.ratioValue || '') !== String(config.ratioValue || currentRatioValue(config))) return null
-  return { ...seed.area }
+  if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
+    return { ...seed.area }
+  }
+  if (!seed?.normalizedArea) return null
+  const width = Math.max(1, asset.width || 1)
+  const height = Math.max(1, asset.height || 1)
+  return clampCropAreaToAsset({
+    x: Math.round(seed.normalizedArea.x * width),
+    y: Math.round(seed.normalizedArea.y * height),
+    width: Math.round(seed.normalizedArea.width * width),
+    height: Math.round(seed.normalizedArea.height * height),
+  }, width, height)
+}
+
+function clampCropAreaToAsset(area, width, height) {
+  const nextWidth = Math.min(width, Math.max(40, Math.round(area.width)))
+  const nextHeight = Math.min(height, Math.max(40, Math.round(area.height)))
+  return {
+    x: Math.max(0, Math.min(width - nextWidth, Math.round(area.x))),
+    y: Math.max(0, Math.min(height - nextHeight, Math.round(area.y))),
+    width: nextWidth,
+    height: nextHeight,
+  }
 }
 
 function getDefaultCropArea(width, height, ratioValue) {
