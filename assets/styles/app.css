@@ -5268,6 +5268,24 @@ body {
   min-height: 34px !important;
 }
 
+.topbar__meta > .secondary-button,
+.queue-item__action:not(.secondary) {
+  background: rgba(73, 86, 180, 0.1) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(73, 86, 180, 0.12);
+  box-shadow: none;
+}
+
+.topbar__meta > .secondary-button:hover,
+.queue-item__action:not(.secondary):hover {
+  background: rgba(73, 86, 180, 0.16) !important;
+}
+
+.topbar__meta > .secondary-button:active,
+.queue-item__action:not(.secondary):active {
+  background: rgba(73, 86, 180, 0.2) !important;
+}
+
 .topbar__meta {
   display: flex;
   align-items: center;
