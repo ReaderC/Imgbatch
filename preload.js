@@ -2061,10 +2061,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     const scaledBuffer = prepared.scaledBuffer
-      || (await sharpLib(imageBytes)
+      || await sharpLib(imageBytes)
         .resize({ width: scaledWidth, fit: 'fill' })
         .png()
-        .toBuffer({ resolveWithObject: true })).data
+        .toBuffer()
     const scaledImage = sharpLib(scaledBuffer)
     let offsetY = 0
     while (offsetY < scaledHeight) {
