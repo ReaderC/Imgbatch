@@ -1778,10 +1778,32 @@ async function writeMergeImageAsset(sharpLib, payload) {
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
+  const resolvePreparedImageSize = (sourceWidth, sourceHeight) => {
+    const width = Math.max(1, Number(sourceWidth) || 1)
+    const height = Math.max(1, Number(sourceHeight) || 1)
+    const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
+    if (isVertical) {
+      const scale = preventUpscale ? Math.min(1, dominantSize / width) : (dominantSize / width)
+      return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale)),
+      }
+    }
+    const scale = preventUpscale ? Math.min(1, dominantSize / height) : (dominantSize / height)
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+    }
+  }
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const sourceWidth = Math.max(0, Number(asset.width) || 0)
-    const sourceHeight = Math.max(0, Number(asset.height) || 0)
+    let sourceWidth = Math.max(0, Number(asset.width) || 0)
+    let sourceHeight = Math.max(0, Number(asset.height) || 0)
+    if (!(sourceWidth > 0 && sourceHeight > 0)) {
+      const metadata = await sharpLib(asset.sourcePath).metadata()
+      sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
+      sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
+    }
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && sourceWidth <= payload.config.pageWidth) || sourceWidth === payload.config.pageWidth)
       : ((preventUpscale && sourceHeight <= payload.config.pageWidth) || sourceHeight === payload.config.pageWidth)
@@ -1792,7 +1814,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
         height: sourceHeight,
       }
     }
-    const { data, info } = await sharpLib(asset.sourcePath)
+    const data = await sharpLib(asset.sourcePath)
       .resize({
         width: fitWidth,
         height: fitHeight,
@@ -1801,11 +1823,12 @@ async function writeMergeImageAsset(sharpLib, payload) {
         withoutEnlargement: preventUpscale,
       })
       .png()
-      .toBuffer({ resolveWithObject: true })
+      .toBuffer()
+    const preparedSize = resolvePreparedImageSize(sourceWidth, sourceHeight)
     return {
       input: data,
-      width: info.width || 1,
-      height: info.height || 1,
+      width: preparedSize.width,
+      height: preparedSize.height,
     }
   })
   throwIfRunCancelled(payload.runId)
