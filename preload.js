@@ -1328,15 +1328,15 @@ async function buildWatermarkComposite(sharpLib, asset, config) {
   if (config.tiled) {
     const tiledCacheKey = overlay?.cacheKey ? `${overlay.cacheKey}|tile|${clampNumber(config.density, 20, 250, 100)}` : ''
     const cachedTiledOverlay = tiledCacheKey ? WATERMARK_TILED_CACHE.get(tiledCacheKey) : null
+    const tiledInput = cachedTiledOverlay
+      || await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay)
+    if (tiledCacheKey && !cachedTiledOverlay) {
+      WATERMARK_TILED_CACHE.set(tiledCacheKey, tiledInput)
+    }
     overlay = {
-      input: cachedTiledOverlay
-        ? cachedTiledOverlay
-        : await createTiledWatermarkBuffer(sharpLib, overlay.input, config.density, overlay),
+      input: tiledInput,
       width: 0,
       height: 0,
-    }
-    if (tiledCacheKey && !WATERMARK_TILED_CACHE.has(tiledCacheKey)) {
-      WATERMARK_TILED_CACHE.set(tiledCacheKey, overlay.input)
     }
     return {
       input: overlay.input,
