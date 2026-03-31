@@ -23,6 +23,8 @@ const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermar
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
+const MERGE_TOOL_IDS = new Set(['merge-image', 'merge-pdf', 'merge-gif'])
+const SINGLE_IMAGE_TOOL_IDS = new Set(['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop'])
 const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
@@ -2458,7 +2460,7 @@ async function executeAssetTool(sharpLib, payload, asset) {
 }
 
 function isMergeTool(toolId) {
-  return ['merge-image', 'merge-pdf', 'merge-gif'].includes(toolId)
+  return MERGE_TOOL_IDS.has(toolId)
 }
 
 async function executeSingleAssetTool(payload, sharpLib) {
@@ -3147,7 +3149,7 @@ const toolsApi = {
     const payload = createPreparedRunPayload(toolId, config, assets, destinationPath)
     const hostApi = getHostApi()
 
-    if (['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop', 'merge-image', 'merge-pdf', 'merge-gif'].includes(payload.toolId)) {
+    if (SINGLE_IMAGE_TOOL_IDS.has(payload.toolId) || MERGE_TOOL_IDS.has(payload.toolId)) {
       return executeLocalTool(payload)
     }
 
