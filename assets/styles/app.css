@@ -4950,10 +4950,10 @@ body {
 .result-toolbar .secondary-button,
 .result-toolbar .primary-button {
   flex: 0 0 auto !important;
-  min-height: 48px;
-  padding: 0 22px;
-  border-radius: 14px;
-  font-size: 13px;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
