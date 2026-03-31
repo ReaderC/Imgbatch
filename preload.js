@@ -1972,8 +1972,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       }
       prepared.drawableWidth = fixedDrawableWidth
       prepared.drawableHeight = fixedDrawableHeight
-      prepared.scaledWidth = Math.max(1, Math.round(prepared.drawableWidth))
-      prepared.pageSliceHeight = Math.max(1, Math.round(prepared.drawableHeight))
+      prepared.scaledWidth = fixedDrawableWidth
+      prepared.pageSliceHeight = fixedDrawableHeight
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
       if (prepared.scaledHeight > prepared.drawableHeight) {
         prepared.scaledBuffer = await sharpLib(imageBytes)
