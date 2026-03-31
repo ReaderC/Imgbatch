@@ -4967,16 +4967,17 @@ body {
 }
 
 .settings-page__action--secondary {
-  background: rgba(113, 85, 124, 0.12) !important;
-  color: var(--tertiary) !important;
+  background: rgba(73, 86, 180, 0.08) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(73, 86, 180, 0.14);
 }
 
 .settings-page__action--secondary:hover {
-  background: rgba(113, 85, 124, 0.18) !important;
+  background: rgba(73, 86, 180, 0.14) !important;
 }
 
 .settings-page__action--secondary:active {
-  background: rgba(113, 85, 124, 0.24) !important;
+  background: rgba(73, 86, 180, 0.18) !important;
 }
 
 .settings-page__action--primary {
