@@ -2117,10 +2117,11 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const repeat = payload.config.loop ? 0 : -1
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
+  const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
   const prepareFrame = async (asset) => {
     throwIfRunCancelled(payload.runId)
     const data = await sharpLib(asset.sourcePath)
-      .resize({ width: frameWidth, height: frameHeight, fit: 'contain', background })
+      .resize(frameResizeOptions)
       .ensureAlpha()
       .raw()
       .toBuffer()
@@ -2144,7 +2145,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
 
   encoder.finish()
   throwIfRunCancelled(payload.runId)
-  const bytes = Buffer.from(encoder.bytes())
+  const bytes = encoder.bytes()
   fs.writeFileSync(outputPath, bytes)
   return {
     outputPath,
