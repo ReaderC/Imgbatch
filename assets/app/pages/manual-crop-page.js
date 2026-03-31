@@ -157,11 +157,17 @@ function getInheritedCropArea(asset, config) {
   if (!seed?.normalizedArea) return null
   const width = Math.max(1, asset.width || 1)
   const height = Math.max(1, asset.height || 1)
+  const referenceSize = Math.max(1, Math.min(width, height))
+  const ratio = Math.max(1 / 1000, Number(seed.normalizedArea.ratio) || 1)
+  const cropWidth = Math.max(40, Math.round(Number(seed.normalizedArea.scale || 0) * referenceSize))
+  const cropHeight = Math.max(40, Math.round(cropWidth / ratio))
+  const centerX = Math.round(Number(seed.normalizedArea.centerX || 0.5) * width)
+  const centerY = Math.round(Number(seed.normalizedArea.centerY || 0.5) * height)
   return clampCropAreaToAsset({
-    x: Math.round(seed.normalizedArea.x * width),
-    y: Math.round(seed.normalizedArea.y * height),
-    width: Math.round(seed.normalizedArea.width * width),
-    height: Math.round(seed.normalizedArea.height * height),
+    x: Math.round(centerX - cropWidth / 2),
+    y: Math.round(centerY - cropHeight / 2),
+    width: cropWidth,
+    height: cropHeight,
   }, width, height)
 }
 

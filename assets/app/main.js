@@ -1673,6 +1673,9 @@ function attachGlobalEvents() {
         Math.min(config.currentIndex + 1, Math.max(state.assets.length - 1, 0)),
       )
       const completedArea = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+      const assetWidth = Math.max(1, asset.width || 1)
+      const assetHeight = Math.max(1, asset.height || 1)
+      const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
       const lastCompletedCropSeed = isComplete
         ? {
             assetWidth: asset.width || 0,
@@ -1680,13 +1683,11 @@ function attachGlobalEvents() {
             ratioValue: config.ratioValue || '16:9',
             area: completedArea,
             normalizedArea: (() => {
-              const assetWidth = Math.max(1, asset.width || 1)
-              const assetHeight = Math.max(1, asset.height || 1)
               return {
-                x: completedArea.x / assetWidth,
-                y: completedArea.y / assetHeight,
-                width: completedArea.width / assetWidth,
-                height: completedArea.height / assetHeight,
+                centerX: (completedArea.x + completedArea.width / 2) / assetWidth,
+                centerY: (completedArea.y + completedArea.height / 2) / assetHeight,
+                scale: completedArea.width / referenceSize,
+                ratio: completedArea.width / Math.max(1, completedArea.height),
               }
             })(),
           }
@@ -2373,11 +2374,17 @@ function getInheritedManualCropArea(asset, config) {
   if (!seed?.normalizedArea) return null
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
+  const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
+  const ratio = Math.max(1 / 1000, Number(seed.normalizedArea.ratio) || 1)
+  const width = Math.max(40, Math.round(Number(seed.normalizedArea.scale || 0) * referenceSize))
+  const height = Math.max(40, Math.round(width / ratio))
+  const centerX = Math.round(Number(seed.normalizedArea.centerX || 0.5) * assetWidth)
+  const centerY = Math.round(Number(seed.normalizedArea.centerY || 0.5) * assetHeight)
   return clampManualCropArea({
-    x: Math.round(seed.normalizedArea.x * assetWidth),
-    y: Math.round(seed.normalizedArea.y * assetHeight),
-    width: Math.round(seed.normalizedArea.width * assetWidth),
-    height: Math.round(seed.normalizedArea.height * assetHeight),
+    x: Math.round(centerX - width / 2),
+    y: Math.round(centerY - height / 2),
+    width,
+    height,
   }, asset)
 }
 
