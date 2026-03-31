@@ -3535,7 +3535,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 0;
   width: 100%;
   text-align: center;
   color: var(--primary);
@@ -3549,7 +3549,8 @@ body {
 }
 
 .rotate-dial__value-input {
-  width: 72px;
+  width: 54px;
+  min-width: 54px;
   padding: 0;
   border: 0;
   outline: 0;
@@ -3558,7 +3559,7 @@ body {
   font: inherit;
   font-weight: inherit;
   letter-spacing: inherit;
-  text-align: right;
+  text-align: center;
   appearance: textfield;
 }
 
