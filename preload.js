@@ -1921,6 +1921,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           ? Math.round(fixedPageSize[0] * 0.06)
           : Math.round(fixedPageSize[0] * 0.04))
     : null
+  const fixedDrawableWidth = fixedPageSize ? Math.max(1, fixedPageSize[0] - fixedMargin * 2) : 0
+  const fixedDrawableHeight = fixedPageSize ? Math.max(1, fixedPageSize[1] - fixedMargin * 2) : 0
   const paintPdfPageBackground = (page, pageSize) => {
     page.drawRectangle({
       x: 0,
@@ -1969,8 +1971,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         prepared.sourceWidth = sourceWidth
         prepared.sourceHeight = sourceHeight
       }
-      prepared.drawableWidth = Math.max(1, prepared.pageSize[0] - margin * 2)
-      prepared.drawableHeight = Math.max(1, prepared.pageSize[1] - margin * 2)
+      prepared.drawableWidth = fixedDrawableWidth
+      prepared.drawableHeight = fixedDrawableHeight
       prepared.scaledWidth = Math.max(1, Math.round(prepared.drawableWidth))
       prepared.pageSliceHeight = Math.max(1, Math.round(prepared.drawableHeight))
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
