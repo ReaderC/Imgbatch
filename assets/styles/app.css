@@ -3765,6 +3765,20 @@ body {
   flex-wrap: wrap;
 }
 
+.queue-item--sortable .queue-item__controls {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.queue-item--sortable .queue-item__controls .icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.queue-item--sortable .queue-item__drag {
+  font-size: 20px;
+}
+
 .queue-item__drag {
   color: var(--on-surface-variant);
   cursor: grab;
@@ -4079,6 +4093,19 @@ body {
     flex-wrap: nowrap;
   }
 
+  .queue-item--sortable .queue-item__controls {
+    gap: 4px;
+  }
+
+  .queue-item--sortable .queue-item__controls .icon-button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .queue-item--sortable .queue-item__drag {
+    font-size: 18px;
+  }
+
   .queue-item__action-stack {
     width: auto;
     flex-direction: column;
@@ -4168,6 +4195,19 @@ body {
     flex-wrap: nowrap;
     margin-top: 0;
     align-self: start;
+  }
+
+  .queue-item--sortable .queue-item__controls {
+    gap: 4px;
+  }
+
+  .queue-item--sortable .queue-item__controls .icon-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .queue-item--sortable .queue-item__drag {
+    font-size: 17px;
   }
 
   .queue-item__action-stack {
