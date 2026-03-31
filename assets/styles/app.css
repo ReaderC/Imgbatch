@@ -3580,6 +3580,10 @@ body {
   width: min(320px, 100%);
 }
 
+.empty-state--queue {
+  border-radius: 12px;
+}
+
 .queue-empty-actions .primary-button,
 .queue-empty-actions .secondary-button {
   width: 100%;
