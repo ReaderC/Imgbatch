@@ -3986,8 +3986,14 @@ body {
   max-height: calc(100vh - 240px);
   aspect-ratio: 4 / 3;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 24px 48px rgba(44, 51, 56, 0.18);
+}
+
+.manual-canvas__content {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .manual-canvas__image img {
@@ -3996,12 +4002,13 @@ body {
   object-fit: contain;
   user-select: none;
   pointer-events: none;
+  transform-origin: center center;
 }
 
 .manual-crop-box {
   position: absolute;
   border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.42);
+  box-shadow: none;
   cursor: move;
   touch-action: none;
 }
@@ -4096,9 +4103,9 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
   border-radius: 0;
 }
 
@@ -4725,6 +4732,9 @@ body {
   min-height: 40px !important;
   padding: 0 !important;
   justify-content: center !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .manual-footer__ratio-shell > .select-shell__value .material-symbols-outlined {
@@ -4735,6 +4745,20 @@ body {
   left: 0 !important;
   right: auto !important;
   min-width: 88px;
+}
+
+.manual-toolbar--crop .icon-button,
+.manual-toolbar--crop .manual-footer__ratio-trigger {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.manual-toolbar--crop .icon-button:hover,
+.manual-toolbar--crop .manual-footer__ratio-trigger:hover,
+.manual-toolbar--crop .icon-button.is-active {
+  background: rgba(73, 86, 180, 0.12);
+  border-color: rgba(73, 86, 180, 0.18);
 }
 
 .manual-footer__right {
@@ -5096,6 +5120,11 @@ body {
   max-width: min(72vw, 1080px);
   max-height: calc(100vh - 240px);
   aspect-ratio: auto !important;
+}
+
+.manual-canvas__content {
+  width: auto !important;
+  height: auto !important;
 }
 
 .manual-canvas__image img {

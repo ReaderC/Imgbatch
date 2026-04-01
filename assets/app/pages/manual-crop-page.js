@@ -24,6 +24,22 @@ export function renderManualCropPage(state) {
   const cropStyle = cropArea
     ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;`
     : ''
+  const previewTransforms = []
+  if (config.flipHorizontal) previewTransforms.push('scaleX(-1)')
+  if (config.flipVertical) previewTransforms.push('scaleY(-1)')
+  if (Number(config.angle)) previewTransforms.push(`rotate(${Number(config.angle)}deg)`)
+  const normalizedAngle = Math.abs(Number(config.angle) || 0) % 180
+  const previewScale = normalizedAngle === 90
+    ? Math.min(
+        Math.max(1, current?.width || 1),
+        Math.max(1, current?.height || 1),
+      ) / Math.max(
+        Math.max(1, current?.width || 1),
+        Math.max(1, current?.height || 1),
+      )
+    : 1
+  if (previewScale < 1) previewTransforms.push(`scale(${previewScale})`)
+  const previewImageStyle = previewTransforms.length ? `style="transform:${previewTransforms.join(' ')};"` : ''
   const imageStyle = current
     ? `style="aspect-ratio:${Math.max(1, current.width || 1)} / ${Math.max(1, current.height || 1)};"`
     : ''
@@ -79,21 +95,23 @@ export function renderManualCropPage(state) {
             <span class="material-symbols-outlined">navigate_before</span>
           </button>
           <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${current.width || 1}" data-asset-height="${current.height || 1}" ${imageStyle}` : ''}>
-            ${current ? `<img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" />` : `
+            ${current ? `
+              <div class="manual-canvas__content">
+                <img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" ${previewImageStyle} />
+                <div class="manual-crop-box" data-role="manual-crop-box" data-action="manual-crop-drag" style="${cropStyle}">
+                  <span class="manual-handle manual-handle--tl" data-action="manual-crop-resize" data-handle="tl"></span>
+                  <span class="manual-handle manual-handle--tr" data-action="manual-crop-resize" data-handle="tr"></span>
+                  <span class="manual-handle manual-handle--bl" data-action="manual-crop-resize" data-handle="bl"></span>
+                  <span class="manual-handle manual-handle--br" data-action="manual-crop-resize" data-handle="br"></span>
+                  <span class="manual-handle manual-handle--tm" data-action="manual-crop-resize" data-handle="tm"></span>
+                  <span class="manual-handle manual-handle--bm" data-action="manual-crop-resize" data-handle="bm"></span>
+                  <span class="manual-handle manual-handle--ml" data-action="manual-crop-resize" data-handle="ml"></span>
+                  <span class="manual-handle manual-handle--mr" data-action="manual-crop-resize" data-handle="mr"></span>
+                </div>
+              </div>
+            ` : `
               <div class="manual-canvas__empty">先导入图片，再拖动裁剪框开始裁剪</div>
             `}
-            ${current ? `
-              <div class="manual-crop-box" data-role="manual-crop-box" data-action="manual-crop-drag" style="${cropStyle}">
-                <span class="manual-handle manual-handle--tl" data-action="manual-crop-resize" data-handle="tl"></span>
-                <span class="manual-handle manual-handle--tr" data-action="manual-crop-resize" data-handle="tr"></span>
-                <span class="manual-handle manual-handle--bl" data-action="manual-crop-resize" data-handle="bl"></span>
-                <span class="manual-handle manual-handle--br" data-action="manual-crop-resize" data-handle="br"></span>
-                <span class="manual-handle manual-handle--tm" data-action="manual-crop-resize" data-handle="tm"></span>
-                <span class="manual-handle manual-handle--bm" data-action="manual-crop-resize" data-handle="bm"></span>
-                <span class="manual-handle manual-handle--ml" data-action="manual-crop-resize" data-handle="ml"></span>
-                <span class="manual-handle manual-handle--mr" data-action="manual-crop-resize" data-handle="mr"></span>
-              </div>
-            ` : ''}
           </div>
           <button class="manual-stage-nav manual-stage-nav--next" data-action="manual-crop-next" title="下一张" ${!current || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">navigate_next</span>
