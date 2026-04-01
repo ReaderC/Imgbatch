@@ -1461,7 +1461,8 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range {
-  grid-template-columns: minmax(132px, 168px) minmax(0, 1fr);
+  grid-template-columns: minmax(132px, 168px) auto minmax(120px, 1fr);
+  align-items: center;
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__label {
@@ -1480,7 +1481,7 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range .range-shell {
-  grid-column: 2;
+  grid-column: 3;
 }
 
 .workspace-stage__inner .setting-row__header {
