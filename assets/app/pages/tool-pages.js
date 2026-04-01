@@ -328,6 +328,8 @@ function renderCropConfig(config) {
 function renderRotateConfig(config) {
   const signedAngle = Number(config.angle) || 0
   const normalizedAngle = ((signedAngle % 360) + 360) % 360
+  const angleChars = Math.max(1, String(signedAngle).length)
+  const angleWidth = `${Math.max(1.1, angleChars * 0.62)}ch`
   const dialRadians = (normalizedAngle - 90) * (Math.PI / 180)
   const dialCenter = 92
   const dialRadius = 68
@@ -348,6 +350,7 @@ function renderRotateConfig(config) {
             min="-360"
             max="360"
             step="1"
+            style="width:${angleWidth};min-width:${angleWidth};"
             data-action="set-config-input"
             data-tool-id="rotate"
             data-key="angle"

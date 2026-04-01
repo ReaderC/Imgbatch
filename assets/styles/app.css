@@ -3589,8 +3589,6 @@ body {
 }
 
 .rotate-dial__value-input {
-  width: 54px;
-  min-width: 54px;
   padding: 0;
   border: 0;
   outline: 0;
