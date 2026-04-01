@@ -1,5 +1,9 @@
 # Imgbatch
 
+## 🤖 关于本项目
+
+本项目的**所有代码均由 AI（Artificial Intelligence）生成**，项目作者本人不具备相关编程知识，对代码内容不作任何技术层面的解释或保证。如果你遇到问题或有改进想法，欢迎自行修改、Fork 或提交 Issue。
+
 Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线的多种图片处理能力，适合快速处理一批图片并统一输出结果。
 
 当前版本：`0.1.0`
@@ -151,13 +155,6 @@ npm install
 
 ## 打包测试
 
-当前仓库内已经准备了一份可直接用于打包测试的目录：
+发布版本将通过 GitHub Releases 提供下载。
 
-`F:\Imgbatch\.release-test\imgbatch-0.1.0`
-
-这个目录包含插件运行所需的入口文件、资源文件和依赖目录，可直接用于本地打包验证。
-
-## 仓库
-
-- 作者：`readerc`
-- GitHub：[ReaderC/Imgbatch](https://github.com/ReaderC/Imgbatch)
+如果你想直接体验插件，请前往仓库的 Releases 页面下载对应版本的打包文件，并按 ZTools 的插件安装方式导入使用。
