@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-  <rect width="1600" height="900" fill="#f1f5f9"/>
-  <rect x="70" y="70" width="1460" height="760" rx="32" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>
-  <text x="800" y="180" font-family="Segoe UI, Arial, sans-serif" font-size="64" text-anchor="middle" fill="#0f172a">处理结果对比占位截图</text>
-  <rect x="160" y="250" width="1280" height="110" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="4"/>
-  <rect x="160" y="400" width="1280" height="110" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="4"/>
-  <rect x="160" y="550" width="1280" height="110" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="4"/>
-  <text x="800" y="745" font-family="Segoe UI, Arial, sans-serif" font-size="28" text-anchor="middle" fill="#64748b">请替换为真实结果对比页截图</text>
-</svg>

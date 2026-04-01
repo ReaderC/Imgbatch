@@ -6,17 +6,71 @@ Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线
 
 ## 界面预览
 
-### 主界面
+### 图片压缩
 
-![Imgbatch 主界面占位图](./docs/screenshots/overview-placeholder.svg)
+![Imgbatch 图片压缩](./docs/screenshots/compression.png)
+
+### 格式转换
+
+![Imgbatch 格式转换](./docs/screenshots/format.png)
+
+### 修改尺寸
+
+![Imgbatch 修改尺寸](./docs/screenshots/resize.png)
+
+### 添加水印
+
+![Imgbatch 添加水印](./docs/screenshots/watermark.png)
+
+### 添加圆角
+
+![Imgbatch 添加圆角](./docs/screenshots/corners.png)
+
+### 补边留白
+
+![Imgbatch 补边留白](./docs/screenshots/padding.png)
+
+### 裁剪
+
+![Imgbatch 裁剪](./docs/screenshots/crop.png)
+
+### 旋转
+
+![Imgbatch 旋转](./docs/screenshots/rotate.png)
+
+### 翻转
+
+![Imgbatch 翻转](./docs/screenshots/flip.png)
+
+### 合并为 PDF
+
+![Imgbatch 合并为 PDF ](./docs/screenshots/merge-pdf.png)
+
+### 合并为图片
+
+![Imgbatch 合并为图片](./docs/screenshots/merge-image.png)
+
+### 合并为 GIF
+
+![Imgbatch 合并为 GIF ](./docs/screenshots/merge-gif.png)
 
 ### 手动裁剪
 
-![Imgbatch 手动裁剪占位图](./docs/screenshots/manual-crop-placeholder.svg)
+![Imgbatch 手动裁剪](./docs/screenshots/manual-crop.png)
+
+### 预览效果
+
+![Imgbatch 预览双栏对比图](./docs/screenshots/preview1.png)
+
+![Imgbatch 预览前后对比图](./docs/screenshots/preview2.png)
+
+### 设置页
+
+![Imgbatch 设置页](./docs/screenshots/settings.png)
 
 ### 处理结果对比
 
-![Imgbatch 处理结果对比占位图](./docs/screenshots/result-placeholder.svg)
+![Imgbatch 处理结果对比](./docs/screenshots/result.png)
 
 ## 功能
 
