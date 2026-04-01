@@ -25,6 +25,11 @@ const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
 const MERGE_TOOL_IDS = new Set(['merge-image', 'merge-pdf', 'merge-gif'])
 const SINGLE_IMAGE_TOOL_IDS = new Set(['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop'])
+const MERGE_TOOL_HANDLERS = {
+  'merge-image': writeMergeImageAsset,
+  'merge-pdf': writeMergePdfAssetReal,
+  'merge-gif': writeMergeGifAsset,
+}
 const WATERMARK_IMAGE_CACHE = new Map()
 const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
@@ -1299,10 +1304,10 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     return warning ? { ...output, warning } : output
   }
 
-  const sourceInput = fs.readFileSync(asset.sourcePath)
   const decodedCompressionInput = isFallbackDecodedInputFormat(sourceFormat)
     ? createNativeImagePngBuffer(asset.sourcePath)
     : null
+  const sourceInput = decodedCompressionInput ? null : fs.readFileSync(asset.sourcePath)
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(maxQuality, Math.round(quality)))
@@ -2752,11 +2757,7 @@ async function executeMergeTool(payload, sharpLib) {
   let cancelled = false
   try {
     throwIfRunCancelled(payload.runId)
-    const mergeHandler = payload.toolId === 'merge-image'
-      ? writeMergeImageAsset
-      : payload.toolId === 'merge-pdf'
-        ? writeMergePdfAssetReal
-        : writeMergeGifAsset
+    const mergeHandler = MERGE_TOOL_HANDLERS[payload.toolId]
     const result = await mergeHandler(sharpLib, payload)
     throwIfRunCancelled(payload.runId)
     const outputPath = typeof result === 'string' ? result : result.outputPath
