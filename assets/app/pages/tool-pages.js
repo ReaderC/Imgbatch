@@ -221,6 +221,16 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
+    ${renderRangeField({
+      label: '输出质量',
+      toolId: 'resize',
+      key: 'quality',
+      min: 1,
+      max: 100,
+      value: Number(config.quality) || 100,
+      suffix: '%',
+      hint: '尺寸转换默认尽量保真。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。',
+    })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>

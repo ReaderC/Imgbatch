@@ -701,6 +701,7 @@ function normalizeRunConfig(toolId, config = {}) {
       width: normalizeMeasure(config.width, 1920, inferMeasureUnit(config.width, 'px')),
       height: normalizeMeasure(config.height, 1080, inferMeasureUnit(config.height, 'px')),
       lockAspectRatio: Boolean(config.lockAspectRatio),
+      quality: clampNumber(config.quality, 1, 100, 100),
     }
   }
 
@@ -1078,6 +1079,10 @@ function mapOutputFormat(toolId, asset, config) {
 
   const original = String(asset?.inputFormat || asset?.ext || '').toLowerCase()
   if (original === 'jpg') return 'jpeg'
+  if (toolId === 'compression') {
+    if (original === 'bmp') return 'jpeg'
+    if (original === 'ico') return 'png'
+  }
   if (CUSTOM_OUTPUT_FORMATS.has(original)) return original
   if (toolId === 'manual-crop') {
     if (config.keepOriginalFormat !== false) {
@@ -1635,6 +1640,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
+  const quality = clampNumber(config.quality, 1, 100, 100)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
@@ -1645,7 +1651,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (sourceWidth > 0 && sourceHeight > 0 && width === sourceWidth && height === sourceHeight) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, quality, outputPath, {
       width: sourceWidth,
       height: sourceHeight,
     })
@@ -1656,7 +1662,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
     height,
     fit: config.lockAspectRatio ? 'inside' : 'fill',
   })
-  return writeTransformedAsset(resized, format, 90, outputPath)
+  return writeTransformedAsset(resized, format, quality, outputPath)
 }
 
 function normalizeHexColor(value, alpha = 1) {
@@ -3365,7 +3371,9 @@ const toolsApi = {
       }
       const ext = inputFormat || path.extname(filePath).replace('.', '').toLowerCase()
       const assetId = `asset-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
-      const thumbnailUrl = createAssetDisplayUrl(filePath, ext)
+      const thumbnailUrl = ext === 'tiff'
+        ? await createAssetDisplayUrlAsync(filePath, ext, sharpLib)
+        : createAssetDisplayUrl(filePath, ext)
       queueQueueThumbnailGeneration(assetId, filePath, ext, sharpLib)
       return {
         id: assetId,
