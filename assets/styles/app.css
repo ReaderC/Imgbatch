@@ -1461,8 +1461,9 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range {
-  grid-template-columns: minmax(96px, 120px) max-content minmax(0, 1fr);
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   align-items: center;
+  gap: 4px 8px;
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__label {
@@ -1804,7 +1805,8 @@ body {
 }
 
 .workspace:not(.workspace--result) .setting-row--range {
-  grid-template-columns: minmax(96px, 120px) max-content minmax(0, 1fr);
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  gap: 4px 8px;
 }
 
 .workspace:not(.workspace--result) .setting-row--range .setting-row__value {
