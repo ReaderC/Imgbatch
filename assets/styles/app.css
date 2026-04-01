@@ -1821,7 +1821,9 @@ body {
 }
 
 .workspace:not(.workspace--result) .setting-row--range .setting-row__value-input {
-  width: 44px;
+  width: 3ch;
+  min-width: 3ch;
+  text-align: center;
 }
 
 .workspace:not(.workspace--result) .text-input,
