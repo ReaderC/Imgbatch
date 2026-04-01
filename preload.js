@@ -25,6 +25,17 @@ const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
 const MEDIUM_ASSET_TOOLS = new Set(['format', 'resize', 'padding', 'crop', 'manual-crop', 'rotate', 'flip'])
 const MERGE_TOOL_IDS = new Set(['merge-image', 'merge-pdf', 'merge-gif'])
 const SINGLE_IMAGE_TOOL_IDS = new Set(['compression', 'format', 'resize', 'watermark', 'rotate', 'flip', 'corners', 'padding', 'crop', 'manual-crop'])
+const ASSET_TOOL_HANDLERS = {
+  compression: writeCompressionAsset,
+  format: writeFormatAsset,
+  resize: writeResizeAsset,
+  watermark: writeWatermarkAsset,
+  rotate: writeRotateAsset,
+  flip: writeFlipAsset,
+  corners: writeCornersAsset,
+  padding: writePaddingAsset,
+  crop: (sharpLib, asset, config, destinationPath) => writeCropAsset(sharpLib, asset, config, destinationPath, 'crop'),
+}
 const MERGE_TOOL_HANDLERS = {
   'merge-image': writeMergeImageAsset,
   'merge-pdf': writeMergePdfAssetReal,
@@ -1055,6 +1066,12 @@ function detectImageFormatFromFile(filePath) {
 }
 
 async function getAssetInputFormat(sharpLib, asset) {
+  const sourcePath = sanitizeText(asset?.sourcePath)
+  if (!sourcePath) {
+    const fallbackFormat = normalizeImageFormatName(asset?.ext)
+    if (fallbackFormat) asset.inputFormat = fallbackFormat
+    return fallbackFormat
+  }
   const cachedFormat = normalizeImageFormatName(asset?.inputFormat)
   if (cachedFormat) return cachedFormat
   const cachedMetadata = asset?.inputMetadata
@@ -1065,7 +1082,7 @@ async function getAssetInputFormat(sharpLib, asset) {
   }
   let metadata = null
   try {
-    metadata = await sharpLib(asset.sourcePath).metadata()
+    metadata = await sharpLib(sourcePath).metadata()
     asset.inputMetadata = metadata
     const detectedFormat = normalizeImageFormatName(metadata?.format)
     if (detectedFormat) {
@@ -1075,7 +1092,7 @@ async function getAssetInputFormat(sharpLib, asset) {
   } catch {
     // Fall back to the filename extension if metadata probing fails.
   }
-  const headerFormat = detectImageFormatFromFile(asset?.sourcePath)
+  const headerFormat = detectImageFormatFromFile(sourcePath)
   if (headerFormat) {
     asset.inputFormat = headerFormat
     return headerFormat
@@ -2497,15 +2514,8 @@ async function writeMergeGifAsset(sharpLib, payload) {
 }
 
 async function executeAssetTool(sharpLib, payload, asset) {
-  if (payload.toolId === 'compression') return writeCompressionAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'format') return writeFormatAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'resize') return writeResizeAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'watermark') return writeWatermarkAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'rotate') return writeRotateAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'flip') return writeFlipAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'corners') return writeCornersAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'padding') return writePaddingAsset(sharpLib, asset, payload.config, payload.destinationPath)
-  if (payload.toolId === 'crop') return writeCropAsset(sharpLib, asset, payload.config, payload.destinationPath, 'crop')
+  const handler = ASSET_TOOL_HANDLERS[payload.toolId]
+  if (handler) return handler(sharpLib, asset, payload.config, payload.destinationPath)
   if (payload.toolId === 'manual-crop') {
     const manualArea = payload.config.cropAreas?.[asset.id]
     return writeCropAsset(sharpLib, asset, {
