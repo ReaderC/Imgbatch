@@ -3974,18 +3974,21 @@ body {
 
 .manual-canvas__stage {
   position: absolute;
-  inset: 92px 24px 24px 24px;
-  display: flex;
+  inset: 12px 24px 12px 24px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
+  gap: 18px;
 }
 
 .manual-canvas__image {
   position: relative;
-  max-width: min(72vw, 1080px);
-  max-height: calc(100vh - 240px);
-  aspect-ratio: 4 / 3;
-  border-radius: 12px;
+  aspect-ratio: var(--display-width) / var(--display-height) !important;
+  width: min(100%, calc((100dvh - 168px) * (var(--display-width) / var(--display-height))));
+  max-width: 100%;
+  max-height: calc(100dvh - 168px);
+  border-radius: 0;
   overflow: hidden;
   box-shadow: none;
 }
@@ -3995,15 +3998,20 @@ body {
   width: 100%;
   height: 100%;
   isolation: isolate;
+  overflow: hidden;
 }
 
-.manual-canvas__image img {
+.manual-canvas__preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.manual-canvas__preview-svg {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  user-select: none;
-  pointer-events: none;
-  transform-origin: center center;
+  overflow: hidden;
 }
 
 .manual-crop-box {
@@ -4130,6 +4138,8 @@ body {
 .manual-footer {
   gap: 18px;
   background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 .manual-footer__left,
@@ -4162,9 +4172,9 @@ body {
   align-items: center;
   gap: 10px;
   min-height: 40px;
-  padding: 0 10px 0 12px;
-  border-radius: 14px;
-  background: rgba(73, 86, 180, 0.08);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--primary);
   white-space: nowrap;
 }
@@ -4186,7 +4196,7 @@ body {
 }
 
 .manual-footer__left .manual-toolbar {
-  min-width: max-content;
+  min-width: auto;
 }
 
 .footer-button {
@@ -4694,8 +4704,10 @@ body {
   grid-template-rows: auto;
   gap: 16px;
   padding: 12px 24px !important;
-  background: var(--surface-container-lowest);
+  background: transparent !important;
   align-items: center;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 .manual-footer__left,
@@ -4717,35 +4729,29 @@ body {
   flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  min-width: auto;
 }
 
 .manual-footer__ratio-shell {
   width: 34px !important;
   min-width: 34px !important;
   flex: 0 0 34px !important;
+  margin-right: -2px;
   overflow: visible !important;
-}
-
-.manual-footer__ratio-shell > .select-shell__value {
-  width: 34px !important;
-  min-width: 34px !important;
-  height: 34px !important;
-  min-height: 34px !important;
-  padding: 0 !important;
-  justify-content: center !important;
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
 }
 
 .manual-footer__ratio-trigger {
   width: 34px !important;
   min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
   padding: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
-.manual-footer__ratio-shell > .select-shell__value .material-symbols-outlined {
+.manual-footer__ratio-trigger .material-symbols-outlined {
   font-size: 22px;
 }
 
@@ -4766,6 +4772,11 @@ body {
   padding: 0;
 }
 
+.manual-toolbar--crop .icon-button .material-symbols-outlined,
+.manual-toolbar--crop .manual-footer__ratio-trigger .material-symbols-outlined {
+  margin: 0;
+}
+
 .manual-toolbar--crop .icon-button:hover,
 .manual-toolbar--crop .manual-footer__ratio-trigger:hover,
 .manual-toolbar--crop .icon-button.is-active {
@@ -4776,14 +4787,6 @@ body {
 .manual-footer__right {
   display: flex;
   justify-content: flex-end;
-}
-
-.manual-canvas__stage {
-  display: grid !important;
-  grid-template-columns: 72px minmax(0, 1fr) 72px;
-  align-items: center;
-  justify-items: center;
-  gap: 18px;
 }
 
 .manual-stage-nav {
@@ -4807,6 +4810,13 @@ body {
 .manual-toolbar--crop-actions .footer-button,
 .manual-toolbar--crop-actions .primary-button {
   border-radius: 12px;
+}
+
+.manual-hud,
+.manual-hud__toggle,
+.manual-hud__compact,
+.manual-hud__content {
+  display: none !important;
 }
 
 .queue-list {
@@ -4891,6 +4901,7 @@ body {
   .manual-canvas__stage {
     grid-template-columns: 56px minmax(0, 1fr) 56px;
     gap: 10px;
+    inset: 12px 12px 12px 12px;
   }
 
   .manual-stage-nav {

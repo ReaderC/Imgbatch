@@ -14,32 +14,28 @@ export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
   const current = state.assets[config.currentIndex] || state.assets[0]
   const progress = state.processingProgress
-  const hudCollapsed = config.hudCollapsed !== false
   const completedCount = config.completedIds.length
   const skippedCount = config.skippedIds.length
   const pendingCount = Math.max(0, state.assets.length - completedCount - skippedCount)
-  const progressLabel = state.assets.length ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}` : '0 / 0'
+  const progressLabel = state.assets.length
+    ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}`
+    : '0 / 0'
   const currentRatio = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIO_OPTIONS[2]
   const cropArea = current ? resolveCropArea(current, config) : null
   const displaySize = current ? getPreviewDisplaySize(current, config) : { width: 1, height: 1 }
   const cropStyle = cropArea
     ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;`
     : ''
-  const previewTransforms = []
-  if (config.flipHorizontal) previewTransforms.push('scaleX(-1)')
-  if (config.flipVertical) previewTransforms.push('scaleY(-1)')
-  if (Number(config.angle)) previewTransforms.push(`rotate(${Number(config.angle)}deg)`)
-  const previewImageStyle = previewTransforms.length ? `style="transform:${previewTransforms.join(' ')};"` : ''
-  const imageStyle = current
-    ? `style="aspect-ratio:${displaySize.width} / ${displaySize.height};"`
+  const stageStyle = current
+    ? `style="--display-width:${displaySize.width};--display-height:${displaySize.height};"`
     : ''
+  const hasCurrent = Boolean(current)
+  const svgMarkup = hasCurrent ? getPreviewSvgMarkup(current, config, displaySize) : ''
 
   return `
     <div class="manual-shell">
       <header class="manual-header">
-        <div>
-          <h2 class="manual-title">手动裁剪</h2>
-        </div>
+        <h2 class="manual-title">手动裁剪</h2>
         <div class="manual-header__meta" data-horizontal-scroll>
           <span class="badge">${progressLabel}</span>
           <span class="badge">已标记 ${completedCount}</span>
@@ -50,44 +46,21 @@ export function renderManualCropPage(state) {
         </div>
       </header>
       <main class="manual-canvas" data-role="drop-surface" data-scroll-role="manual-canvas">
-        <div class="manual-hud ${hudCollapsed ? 'manual-hud--collapsed' : ''}">
-          <button class="manual-hud__toggle" data-action="toggle-manual-crop-hud" aria-expanded="${hudCollapsed ? 'false' : 'true'}">
-            <span class="material-symbols-outlined">${hudCollapsed ? 'chevron_right' : 'expand_more'}</span>
-            <span>${hudCollapsed ? '图片信息' : '收起信息'}</span>
-          </button>
-          ${hudCollapsed ? `
-            <div class="manual-hud__compact">
-              <span class="manual-hud__compact-text">${current ? escapeHtml(current.name) : '未选择图片'}</span>
-              <span class="manual-hud__compact-divider"></span>
-              <span class="manual-hud__compact-text">${current ? currentRatio.value : '—'}</span>
-            </div>
-          ` : `
-            <div class="manual-hud__content">
-              <div>
-                <div class="card-label">原图尺寸</div>
-                <div class="manual-hud__value">${current ? `${current.width || '—'} × ${current.height || '—'} px` : '未选择图片'}</div>
-              </div>
-              <div class="manual-hud__divider"></div>
-              <div>
-                <div class="card-label">目标比例</div>
-                <div class="manual-hud__value manual-hud__value--primary">${current ? currentRatio.value : '—'}</div>
-              </div>
-              <div class="manual-hud__divider"></div>
-              <div>
-                <div class="card-label">当前图片</div>
-                <div class="manual-hud__value manual-hud__value--name">${current ? escapeHtml(current.name) : '等待导入图片'}</div>
-              </div>
-            </div>
-          `}
-        </div>
         <div class="manual-canvas__stage">
           <button class="manual-stage-nav manual-stage-nav--prev" data-action="manual-crop-prev" title="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">navigate_before</span>
           </button>
-          <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${displaySize.width}" data-asset-height="${displaySize.height}" ${imageStyle}` : ''}>
-            ${current ? `
+          <div
+            class="manual-canvas__image"
+            ${hasCurrent
+              ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${displaySize.width}" data-asset-height="${displaySize.height}" ${stageStyle}`
+              : ''}
+          >
+            ${hasCurrent ? `
               <div class="manual-canvas__content">
-                <img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" ${previewImageStyle} />
+                <div class="manual-canvas__preview" data-role="manual-crop-preview">
+                  ${svgMarkup}
+                </div>
                 <div class="manual-crop-box" data-role="manual-crop-box" data-action="manual-crop-drag" style="${cropStyle}">
                   <span class="manual-handle manual-handle--tl" data-action="manual-crop-resize" data-handle="tl"></span>
                   <span class="manual-handle manual-handle--tr" data-action="manual-crop-resize" data-handle="tr"></span>
@@ -103,7 +76,7 @@ export function renderManualCropPage(state) {
               <div class="manual-canvas__empty">先导入图片，再拖动裁剪框开始裁剪</div>
             `}
           </div>
-          <button class="manual-stage-nav manual-stage-nav--next" data-action="manual-crop-next" title="下一张" ${!current || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
+          <button class="manual-stage-nav manual-stage-nav--next" data-action="manual-crop-next" title="下一张" ${!hasCurrent || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">navigate_next</span>
           </button>
         </div>
@@ -118,7 +91,14 @@ export function renderManualCropPage(state) {
               <span class="material-symbols-outlined">add_photo_alternate</span>
             </button>
             <div class="select-shell select-shell--up manual-footer__ratio-shell">
-              <button type="button" class="icon-button select-shell__value manual-footer__ratio-trigger" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false" title="裁剪比例：${escapeHtml(currentRatio.value)}">
+              <button
+                type="button"
+                class="icon-button manual-footer__ratio-trigger"
+                data-action="toggle-config-select"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                title="裁剪比例：${escapeHtml(currentRatio.value)}"
+              >
                 <span class="material-symbols-outlined">aspect_ratio</span>
               </button>
               <div class="select-shell__menu" role="listbox">
@@ -153,12 +133,14 @@ export function renderManualCropPage(state) {
         </div>
         <div class="manual-footer__right">
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
-            <button class="footer-button" data-action="manual-crop-skip" ${!current ? 'disabled' : ''}>跳过并下一张</button>
-            <button class="footer-button primary" data-action="manual-crop-complete" ${!current ? 'disabled' : ''}>标记并下一张</button>
-            <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${!current || state.isProcessing ? 'disabled' : ''}>
+            <button class="footer-button" data-action="manual-crop-skip" ${!hasCurrent ? 'disabled' : ''}>跳过并下一张</button>
+            <button class="footer-button primary" data-action="manual-crop-complete" ${!hasCurrent ? 'disabled' : ''}>标记并下一张</button>
+            <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${!hasCurrent || state.isProcessing ? 'disabled' : ''}>
               ${state.isProcessing
                 ? `${progress?.completed || 0}/${progress?.total || 0} 裁剪中`
-                : completedCount ? `开始裁剪 ${completedCount} 张` : '先标记图片'}
+                : completedCount
+                  ? `开始裁剪 ${completedCount} 张`
+                  : '先标记图片'}
             </button>
           </div>
         </div>
@@ -246,6 +228,43 @@ function getPreviewDisplaySize(asset, config) {
   return normalizedAngle === 90
     ? { width: height, height: width }
     : { width, height }
+}
+
+function getPreviewSvgMarkup(asset, config, displaySize) {
+  const sourceWidth = Math.max(1, Number(asset?.width) || 1)
+  const sourceHeight = Math.max(1, Number(asset?.height) || 1)
+  const matrix = getPreviewMatrix(sourceWidth, sourceHeight, config)
+  return `
+    <svg class="manual-canvas__preview-svg" viewBox="0 0 ${displaySize.width} ${displaySize.height}" preserveAspectRatio="none" aria-hidden="true">
+      <g transform="matrix(${matrix.join(' ')})">
+        <image href="${asset.thumbnailUrl}" x="0" y="0" width="${sourceWidth}" height="${sourceHeight}" preserveAspectRatio="none"></image>
+      </g>
+    </svg>
+  `
+}
+
+function getPreviewMatrix(sourceWidth, sourceHeight, config) {
+  let matrix = [1, 0, 0, 1, 0, 0]
+  if (config.flipHorizontal) matrix = composeSvgMatrix(matrix, [-1, 0, 0, 1, sourceWidth, 0])
+  if (config.flipVertical) matrix = composeSvgMatrix(matrix, [1, 0, 0, -1, 0, sourceHeight])
+  const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
+  if (normalizedAngle === 90) matrix = composeSvgMatrix(matrix, [0, 1, -1, 0, sourceHeight, 0])
+  if (normalizedAngle === 180) matrix = composeSvgMatrix(matrix, [-1, 0, 0, -1, sourceWidth, sourceHeight])
+  if (normalizedAngle === 270) matrix = composeSvgMatrix(matrix, [0, -1, 1, 0, 0, sourceWidth])
+  return matrix.map((value) => Number(value.toFixed(6)))
+}
+
+function composeSvgMatrix(first, second) {
+  const [a1, b1, c1, d1, e1, f1] = first
+  const [a2, b2, c2, d2, e2, f2] = second
+  return [
+    a2 * a1 + c2 * b1,
+    b2 * a1 + d2 * b1,
+    a2 * c1 + c2 * d1,
+    b2 * c1 + d2 * d1,
+    a2 * e1 + c2 * f1 + e2,
+    b2 * e1 + d2 * f1 + f2,
+  ]
 }
 
 function escapeHtml(value = '') {
