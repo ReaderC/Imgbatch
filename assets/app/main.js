@@ -1699,6 +1699,33 @@ function attachGlobalEvents() {
         }
       }
       updateConfig('manual-crop', nextPatch)
+      closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'manual-crop-rotate-left' || action === 'manual-crop-rotate-right') {
+      const config = getState().configs['manual-crop']
+      const step = action === 'manual-crop-rotate-left' ? -90 : 90
+      const nextAngle = (((Number(config.angle) || 0) + step + 540) % 360) - 180
+      updateConfig('manual-crop', { angle: nextAngle })
+      return
+    }
+
+    if (action === 'manual-crop-flip-horizontal') {
+      const config = getState().configs['manual-crop']
+      updateConfig('manual-crop', { flipHorizontal: !config.flipHorizontal })
+      return
+    }
+
+    if (action === 'manual-crop-flip-vertical') {
+      const config = getState().configs['manual-crop']
+      updateConfig('manual-crop', { flipVertical: !config.flipVertical })
+      return
+    }
+
+    if (action === 'toggle-manual-crop-keep-format') {
+      const config = getState().configs['manual-crop']
+      updateConfig('manual-crop', { keepOriginalFormat: !config.keepOriginalFormat })
       return
     }
 

@@ -41,7 +41,20 @@ const state = {
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'JPEG', quality: 90 },
     'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true },
-    'manual-crop': { ratio: '16:9 电影', ratioValue: '16:9', currentIndex: 0, completedIds: [], skippedIds: [], cropAreas: {}, hudCollapsed: true, lastCompletedCropSeed: null },
+    'manual-crop': {
+      ratio: '16:9 电影',
+      ratioValue: '16:9',
+      currentIndex: 0,
+      completedIds: [],
+      skippedIds: [],
+      cropAreas: {},
+      hudCollapsed: true,
+      lastCompletedCropSeed: null,
+      angle: 0,
+      flipHorizontal: false,
+      flipVertical: false,
+      keepOriginalFormat: true,
+    },
   },
 }
 

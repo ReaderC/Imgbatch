@@ -716,6 +716,10 @@ function normalizeRunConfig(toolId, config = {}) {
       completedIds: uniqueStrings(config.completedIds),
       skippedIds: uniqueStrings(config.skippedIds),
       cropAreas: config.cropAreas && typeof config.cropAreas === 'object' ? config.cropAreas : {},
+      angle: clampNumber(config.angle, -180, 180, 0),
+      flipHorizontal: Boolean(config.flipHorizontal),
+      flipVertical: Boolean(config.flipVertical),
+      keepOriginalFormat: config.keepOriginalFormat !== false,
     }
   }
 
@@ -929,6 +933,13 @@ function mapOutputFormat(toolId, asset, config) {
 
   const original = String(asset?.inputFormat || asset?.ext || '').toLowerCase()
   if (original === 'jpg') return 'jpeg'
+  if (toolId === 'manual-crop') {
+    if (config.keepOriginalFormat !== false) {
+      if (CUSTOM_OUTPUT_FORMATS.has(original)) return original
+      return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
+    }
+    return 'png'
+  }
   return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
 }
 
@@ -2084,17 +2095,22 @@ function normalizeCropBox(asset, config) {
   return { left, top, width, height }
 }
 
-async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop') {
+async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop', toolId = 'crop') {
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
-  const format = mapOutputFormat('crop', asset, config)
+  const format = mapOutputFormat(toolId, asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
   const box = normalizeCropBox(asset, config)
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
+  const angle = Math.round(Number(config.angle) || 0)
+  const hasFlipHorizontal = Boolean(config.flipHorizontal)
+  const hasFlipVertical = Boolean(config.flipVertical)
+  const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
 
   if (sourceWidth > 0 && sourceHeight > 0
     && sourceFormat === format
+    && !hasTransform
     && box.left === 0
     && box.top === 0
     && box.width === sourceWidth
@@ -2102,6 +2118,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     return copyAssetToOutput(asset, outputPath)
   }
   if (sourceWidth > 0 && sourceHeight > 0
+    && !hasTransform
     && box.left === 0
     && box.top === 0
     && box.width === sourceWidth
@@ -2112,7 +2129,14 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     })
   }
 
-  const transformed = createTransformer(sharpLib, asset).extract(box)
+  let transformed = createTransformer(sharpLib, asset).extract(box)
+  if (hasFlipHorizontal) transformed = transformed.flop()
+  if (hasFlipVertical) transformed = transformed.flip()
+  if (angle !== 0) {
+    transformed = transformed.rotate(angle, {
+      background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
+    })
+  }
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
@@ -2543,7 +2567,11 @@ async function executeAssetTool(sharpLib, payload, asset) {
     return writeCropAsset(sharpLib, asset, {
       ratio: payload.config.ratioValue || payload.config.ratio,
       area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
-    }, payload.destinationPath, 'manual-crop')
+      angle: payload.config.angle,
+      flipHorizontal: payload.config.flipHorizontal,
+      flipVertical: payload.config.flipVertical,
+      keepOriginalFormat: payload.config.keepOriginalFormat,
+    }, payload.destinationPath, 'manual-crop', 'manual-crop')
   }
   throw new Error(`未支持的工具：${payload.toolId}`)
 }

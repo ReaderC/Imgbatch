@@ -109,9 +109,39 @@ export function renderManualCropPage(state) {
             <button class="icon-button" data-action="open-file-input" title="选择图片">
               <span class="material-symbols-outlined">add_photo_alternate</span>
             </button>
-            ${MANUAL_CROP_RATIO_OPTIONS.map((item) => `
-              <button class="${config.ratio === item.label ? 'footer-button primary' : 'footer-button'}" data-action="set-manual-crop-ratio" data-label="${item.label}" data-value="${item.value}">${item.value}</button>
-            `).join('')}
+            <div class="select-shell select-shell--up manual-footer__ratio-select">
+              <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false">
+                <span class="select-shell__text">${escapeHtml(currentRatio.value)}</span>
+                <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${MANUAL_CROP_RATIO_OPTIONS.map((item) => `
+                  <button
+                    type="button"
+                    class="select-shell__option ${config.ratio === item.label ? 'is-active' : ''}"
+                    data-action="set-manual-crop-ratio"
+                    data-label="${item.label}"
+                    data-value="${item.value}"
+                  >${item.value}</button>
+                `).join('')}
+              </div>
+            </div>
+            <button class="icon-button" data-action="manual-crop-rotate-left" title="向左旋转 90°">
+              <span class="material-symbols-outlined">rotate_90_degrees_ccw</span>
+            </button>
+            <button class="icon-button" data-action="manual-crop-rotate-right" title="向右旋转 90°">
+              <span class="material-symbols-outlined">rotate_90_degrees_cw</span>
+            </button>
+            <button class="icon-button ${config.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-pressed="${config.flipHorizontal ? 'true' : 'false'}">
+              <span class="material-symbols-outlined">flip</span>
+            </button>
+            <button class="icon-button ${config.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-pressed="${config.flipVertical ? 'true' : 'false'}">
+              <span class="material-symbols-outlined">swap_vert</span>
+            </button>
+            <div class="manual-footer__toggle">
+              <span class="manual-footer__toggle-label">保持原格式</span>
+              <button class="switch ${config.keepOriginalFormat ? 'is-on' : ''}" data-action="toggle-manual-crop-keep-format" aria-pressed="${config.keepOriginalFormat ? 'true' : 'false'}"></button>
+            </div>
           </div>
         </div>
         <div class="manual-footer__right">
