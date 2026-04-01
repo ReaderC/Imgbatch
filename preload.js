@@ -1089,6 +1089,11 @@ async function getAssetInputFormat(sharpLib, asset) {
     asset.inputFormat = cachedMetadataFormat
     return cachedMetadataFormat
   }
+  const headerFormat = detectImageFormatFromFile(sourcePath)
+  if (headerFormat && isFallbackDecodedInputFormat(headerFormat)) {
+    asset.inputFormat = headerFormat
+    return headerFormat
+  }
   let metadata = null
   try {
     metadata = await sharpLib(sourcePath).metadata()
@@ -1101,7 +1106,6 @@ async function getAssetInputFormat(sharpLib, asset) {
   } catch {
     // Fall back to the filename extension if metadata probing fails.
   }
-  const headerFormat = detectImageFormatFromFile(sourcePath)
   if (headerFormat) {
     asset.inputFormat = headerFormat
     return headerFormat
