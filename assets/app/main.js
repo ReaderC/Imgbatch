@@ -499,7 +499,7 @@ async function runBusyAction(task) {
   try {
     return await task()
   } finally {
-    setState({ isProcessing: false, cancelRequested: false })
+    setState({ isProcessing: false, cancelRequested: false, processingProgress: null })
   }
 }
 
