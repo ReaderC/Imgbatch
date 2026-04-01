@@ -16,12 +16,13 @@ const WATERMARK_POSITION_LABELS = {
 export function renderImageQueue(state) {
   const tool = TOOL_MAP[state.activeTool]
   const assets = state.assets
+  const compactLayout = isCompactQueueLayout()
 
   return `
     <section class="queue" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
         <div class="queue-list">
-          ${assets.map((asset, index) => renderQueueItem(asset, tool, state, index, assets.length)).join('')}
+          ${assets.map((asset, index) => renderQueueItem(asset, tool, state, index, assets.length, compactLayout)).join('')}
         </div>
       ` : `
         <div class="empty-state empty-state--queue">
@@ -35,16 +36,16 @@ export function renderImageQueue(state) {
       `}
       <div class="queue-footer">
         <div class="queue-toolbar">
-          <button class="icon-button queue-toolbar__button" data-action="open-folder-input" title="选择文件夹并导入其中的图片">
+          <button class="icon-button queue-toolbar__button" data-action="open-folder-input" data-tooltip="选择文件夹并导入其中的图片" aria-label="选择文件夹并导入其中的图片">
             <span class="material-symbols-outlined">folder_open</span>
           </button>
-          <button class="icon-button queue-toolbar__button" data-action="open-file-input" title="选择图片">
+          <button class="icon-button queue-toolbar__button" data-action="open-file-input" data-tooltip="选择图片" aria-label="选择图片">
             <span class="material-symbols-outlined">add_photo_alternate</span>
           </button>
-          <button class="icon-button queue-toolbar__button" data-action="clear-assets" title="清空" ${state.assets.length ? '' : 'disabled'}>
+          <button class="icon-button queue-toolbar__button" data-action="clear-assets" data-tooltip="清空" aria-label="清空" ${state.assets.length ? '' : 'disabled'}>
             <span class="material-symbols-outlined">delete_sweep</span>
           </button>
-          <button class="icon-button queue-toolbar__button" data-action="open-settings" title="设置">
+          <button class="icon-button queue-toolbar__button" data-action="open-settings" data-tooltip="设置" aria-label="设置">
             <span class="material-symbols-outlined">settings</span>
           </button>
         </div>
@@ -53,7 +54,7 @@ export function renderImageQueue(state) {
   `
 }
 
-function renderQueueItem(asset, tool, state, index, total) {
+function renderQueueItem(asset, tool, state, index, total, compactLayout = false) {
   const assetFormat = getAssetFormatLabel(asset)
   const sortableAttrs = tool.mode === 'sort'
     ? ` data-asset-id="${asset.id}" draggable="true"`
@@ -61,23 +62,24 @@ function renderQueueItem(asset, tool, state, index, total) {
   return `
     <article class="queue-item${tool.mode === 'sort' ? ' queue-item--sortable' : ''}"${sortableAttrs}>
       <div class="queue-item__thumb">
-        <img src="${asset.thumbnailUrl}" alt="${escapeHtml(asset.name)}" />
+        ${asset.listThumbnailUrl
+          ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" />`
+          : '<div class="queue-item__thumb-placeholder" aria-hidden="true"></div>'}
       </div>
       <div class="queue-item__content">
-        <p class="queue-item__name" title="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
+        <p class="queue-item__name" data-tooltip="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
         <div class="queue-item__subline queue-item__subline--meta">
           <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
           <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
           <span class="queue-pill">${assetFormat}</span>
         </div>
-        <div class="queue-item__subline queue-item__subline--summary">
-          <span class="queue-summary-text">${getToolSummary(tool.id, state, asset)}</span>
+        <div class="queue-item__subline queue-item__subline--summary${asset.error ? ' queue-item__subline--summary-error' : ''}">
+          <span class="queue-summary-text">${asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)}</span>
         </div>
-        ${renderCompactQueueTicker(asset, tool, state)}
+        ${compactLayout ? renderCompactQueueTicker(asset, tool, state) : ''}
         ${renderResultMeta(asset, tool)}
         ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
         ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
-        ${asset.error ? `<div class="queue-item__subline queue-item__subline--error"><span>错误：${escapeHtml(asset.error)}</span></div>` : ''}
       </div>
       <div class="queue-item__controls">
         ${tool.mode === 'sort' ? `
@@ -87,9 +89,9 @@ function renderQueueItem(asset, tool, state, index, total) {
           <button class="icon-button" data-action="move-asset" data-direction="down" data-asset-id="${asset.id}" ${index === total - 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">keyboard_arrow_down</span>
           </button>
-          <span class="material-symbols-outlined queue-item__drag" title="拖动排序">drag_indicator</span>
+          <span class="material-symbols-outlined queue-item__drag" data-tooltip="拖动排序" aria-label="拖动排序">drag_indicator</span>
         ` : renderPrimaryAction(asset, tool)}
-        <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" title="移除">
+        <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -99,21 +101,29 @@ function renderQueueItem(asset, tool, state, index, total) {
 
 function renderCompactQueueTicker(asset, tool, state) {
   const assetFormat = getAssetFormatLabel(asset)
-  const text = [
-    assetFormat,
-    getToolSummary(tool.id, state, asset),
-    formatBytes(asset.sizeBytes),
-    `${asset.width || '—'} × ${asset.height || '—'}`,
-    asset.warning || '',
-  ].join(' · ')
+  const isError = Boolean(asset.error)
+  const text = isError
+    ? `错误：${asset.error}`
+    : [
+        assetFormat,
+        getToolSummary(tool.id, state, asset),
+        formatBytes(asset.sizeBytes),
+        `${asset.width || '—'} × ${asset.height || '—'}`,
+        asset.warning || '',
+      ].join(' · ')
   return `
-    <div class="queue-item__compact-ticker" aria-label="${escapeHtml(text)}">
+    <div class="queue-item__compact-ticker${isError ? ' queue-item__compact-ticker--error' : ''}" aria-label="${escapeHtml(text)}">
       <div class="queue-item__compact-track">
         <span>${escapeHtml(text)}</span>
         <span aria-hidden="true">${escapeHtml(text)}</span>
       </div>
     </div>
   `
+}
+
+function isCompactQueueLayout() {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth <= 1040
 }
 
 function getAssetFormatLabel(asset) {

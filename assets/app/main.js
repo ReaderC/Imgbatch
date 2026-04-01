@@ -35,8 +35,8 @@ import {
 } from './lib/manual-crop-flow.js'
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
+import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -85,6 +85,8 @@ let tooltipElement = null
 let postRenderFrame = 0
 let pendingPostRenderWork = null
 let resultToolbarSignature = ''
+let processingProgressFrame = 0
+let pendingProcessingProgress = undefined
 const {
   flushManualCropConfigUpdates,
   queueManualCropConfigUpdate,
@@ -103,6 +105,7 @@ bootstrapSettings().finally(() => {
     attachLaunchSubscription()
   })
 })
+attachQueueThumbnailSubscription()
 
 async function bootstrapSettings() {
   try {
@@ -575,6 +578,7 @@ function clearAssetsResultState(processedItems) {
         width: Number(replaced?.width) || asset.width,
         height: Number(replaced?.height) || asset.height,
         thumbnailUrl: replaced?.thumbnailUrl || (nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl),
+        listThumbnailUrl: replaced?.listThumbnailUrl || replaced?.thumbnailUrl || asset.listThumbnailUrl || asset.thumbnailUrl,
         previewStatus: 'idle',
         previewUrl: '',
         stagedOutputPath: '',
@@ -1198,12 +1202,15 @@ function attachProcessingProgressEvents() {
   window.addEventListener('imgbatch-processing-progress', (event) => {
     const detail = event?.detail || null
     if (!detail) return
-    if (detail.phase === 'finish') {
-      setState({ processingProgress: null })
-      return
-    }
-    setState({
-      processingProgress: {
+    queueProcessingProgressState(detail)
+  })
+  attachProcessingProgressEvents.bound = true
+}
+
+function queueProcessingProgressState(detail) {
+  pendingProcessingProgress = detail?.phase === 'finish'
+    ? null
+    : {
         phase: detail.phase || 'progress',
         runId: detail.runId || '',
         toolId: detail.toolId || '',
@@ -1214,10 +1221,36 @@ function attachProcessingProgressEvents() {
         succeeded: Number(detail.succeeded) || 0,
         failed: Number(detail.failed) || 0,
         startedAt: Number(detail.startedAt) || Date.now(),
-      },
-    })
+      }
+  if (processingProgressFrame) return
+  processingProgressFrame = requestAnimationFrame(() => {
+    processingProgressFrame = 0
+    const nextProgress = pendingProcessingProgress
+    pendingProcessingProgress = undefined
+    const currentProgress = getState().processingProgress
+    if (isSameProcessingProgress(currentProgress, nextProgress)) return
+    setState({ processingProgress: nextProgress })
   })
-  attachProcessingProgressEvents.bound = true
+}
+
+function isSameProcessingProgress(currentProgress, nextProgress) {
+  if (currentProgress === nextProgress) return true
+  if (!currentProgress || !nextProgress) return !currentProgress && !nextProgress
+  return currentProgress.phase === nextProgress.phase
+    && currentProgress.runId === nextProgress.runId
+    && currentProgress.toolId === nextProgress.toolId
+    && currentProgress.mode === nextProgress.mode
+    && currentProgress.total === nextProgress.total
+    && currentProgress.completed === nextProgress.completed
+    && currentProgress.succeeded === nextProgress.succeeded
+    && currentProgress.failed === nextProgress.failed
+}
+
+function attachQueueThumbnailSubscription() {
+  subscribeQueueThumbnails(({ assetId, listThumbnailUrl }) => {
+    if (!assetId || !listThumbnailUrl) return
+    updateAssetListThumbnail(assetId, listThumbnailUrl)
+  })
 }
 
 function attachLaunchSubscription() {
