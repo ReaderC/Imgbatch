@@ -4732,6 +4732,12 @@ body {
   min-width: auto;
 }
 
+.manual-footer__left .manual-toolbar {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+
 .manual-footer__ratio-shell {
   width: 34px !important;
   min-width: 34px !important;
@@ -4807,7 +4813,6 @@ body {
   min-width: auto;
 }
 
-.manual-toolbar--crop-actions .footer-button,
 .manual-toolbar--crop-actions .primary-button {
   border-radius: 12px;
 }

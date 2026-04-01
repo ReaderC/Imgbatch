@@ -2142,14 +2142,15 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
 
   let transformed = createTransformer(sharpLib, asset)
   if (toolId === 'manual-crop' && hasTransform) {
-    if (hasFlipHorizontal) transformed = transformed.flop()
-    if (hasFlipVertical) transformed = transformed.flip()
     if (angle !== 0) {
       transformed = transformed.rotate(angle, {
         background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
       })
     }
-    transformed = transformed.extract(box)
+    if (hasFlipHorizontal) transformed = transformed.flop()
+    if (hasFlipVertical) transformed = transformed.flip()
+    const transformedBuffer = await transformed.png().toBuffer()
+    transformed = sharpLib(transformedBuffer).extract(box)
   } else {
     transformed = transformed.extract(box)
     if (hasFlipHorizontal) transformed = transformed.flop()
@@ -2587,12 +2588,17 @@ async function executeAssetTool(sharpLib, payload, asset) {
   if (handler) return handler(sharpLib, asset, payload.config, payload.destinationPath)
   if (payload.toolId === 'manual-crop') {
     const manualArea = payload.config.cropAreas?.[asset.id]
+    const manualTransform = {
+      angle: clampNumber(manualArea?.angle ?? payload.config.angle, -180, 180, 0),
+      flipHorizontal: Boolean(manualArea?.flipHorizontal ?? payload.config.flipHorizontal),
+      flipVertical: Boolean(manualArea?.flipVertical ?? payload.config.flipVertical),
+    }
     return writeCropAsset(sharpLib, asset, {
       ratio: payload.config.ratioValue || payload.config.ratio,
       area: manualArea || { x: 0, y: 0, width: asset.width, height: asset.height },
-      angle: payload.config.angle,
-      flipHorizontal: payload.config.flipHorizontal,
-      flipVertical: payload.config.flipVertical,
+      angle: manualTransform.angle,
+      flipHorizontal: manualTransform.flipHorizontal,
+      flipVertical: manualTransform.flipVertical,
       keepOriginalFormat: payload.config.keepOriginalFormat,
     }, payload.destinationPath, 'manual-crop', 'manual-crop')
   }

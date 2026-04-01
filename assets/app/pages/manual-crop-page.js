@@ -13,14 +13,11 @@ const MANUAL_CROP_RATIO_OPTIONS = [
 export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
   const current = state.assets[config.currentIndex] || state.assets[0]
-  const progress = state.processingProgress
-  const completedCount = config.completedIds.length
-  const skippedCount = config.skippedIds.length
-  const pendingCount = Math.max(0, state.assets.length - completedCount - skippedCount)
   const progressLabel = state.assets.length
     ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}`
     : '0 / 0'
   const currentRatio = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIO_OPTIONS[2]
+  const currentTransform = current ? getAssetTransformState(current, config) : { angle: 0, flipHorizontal: false, flipVertical: false }
   const cropArea = current ? resolveCropArea(current, config) : null
   const displaySize = current ? getPreviewDisplaySize(current, config) : { width: 1, height: 1 }
   const cropStyle = cropArea
@@ -38,8 +35,6 @@ export function renderManualCropPage(state) {
         <h2 class="manual-title">手动裁剪</h2>
         <div class="manual-header__meta" data-horizontal-scroll>
           <span class="badge">${progressLabel}</span>
-          <span class="badge">已标记 ${completedCount}</span>
-          <span class="badge">待处理 ${pendingCount}</span>
           <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭">
             <span class="material-symbols-outlined">close</span>
           </button>
@@ -119,10 +114,10 @@ export function renderManualCropPage(state) {
             <button class="icon-button" data-action="manual-crop-rotate-right" title="向右旋转 90°">
               <span class="material-symbols-outlined">rotate_90_degrees_cw</span>
             </button>
-            <button class="icon-button ${config.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-pressed="${config.flipHorizontal ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-pressed="${currentTransform.flipHorizontal ? 'true' : 'false'}">
               <span class="material-symbols-outlined">flip</span>
             </button>
-            <button class="icon-button ${config.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-pressed="${config.flipVertical ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-pressed="${currentTransform.flipVertical ? 'true' : 'false'}">
               <span class="material-symbols-outlined">swap_vert</span>
             </button>
             <div class="manual-footer__toggle">
@@ -133,14 +128,8 @@ export function renderManualCropPage(state) {
         </div>
         <div class="manual-footer__right">
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
-            <button class="footer-button" data-action="manual-crop-skip" ${!hasCurrent ? 'disabled' : ''}>跳过并下一张</button>
-            <button class="footer-button primary" data-action="manual-crop-complete" ${!hasCurrent ? 'disabled' : ''}>标记并下一张</button>
-            <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${!hasCurrent || state.isProcessing ? 'disabled' : ''}>
-              ${state.isProcessing
-                ? `${progress?.completed || 0}/${progress?.total || 0} 裁剪中`
-                : completedCount
-                  ? `开始裁剪 ${completedCount} 张`
-                  : '先标记图片'}
+            <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="manual-crop-complete" ${!hasCurrent || state.isProcessing ? 'disabled' : ''}>
+              ${state.isProcessing ? '剪裁中...' : '剪裁并下一张'}
             </button>
           </div>
         </div>
@@ -224,7 +213,8 @@ function currentRatioValue(config) {
 function getPreviewDisplaySize(asset, config) {
   const width = Math.max(1, Number(asset?.width) || 1)
   const height = Math.max(1, Number(asset?.height) || 1)
-  const normalizedAngle = Math.abs(Number(config?.angle) || 0) % 180
+  const transform = getAssetTransformState(asset, config)
+  const normalizedAngle = Math.abs(Number(transform.angle) || 0) % 180
   return normalizedAngle === 90
     ? { width: height, height: width }
     : { width, height }
@@ -233,7 +223,7 @@ function getPreviewDisplaySize(asset, config) {
 function getPreviewSvgMarkup(asset, config, displaySize) {
   const sourceWidth = Math.max(1, Number(asset?.width) || 1)
   const sourceHeight = Math.max(1, Number(asset?.height) || 1)
-  const matrix = getPreviewMatrix(sourceWidth, sourceHeight, config)
+  const matrix = getPreviewMatrix(asset, sourceWidth, sourceHeight, config)
   return `
     <svg class="manual-canvas__preview-svg" viewBox="0 0 ${displaySize.width} ${displaySize.height}" preserveAspectRatio="none" aria-hidden="true">
       <g transform="matrix(${matrix.join(' ')})">
@@ -243,15 +233,33 @@ function getPreviewSvgMarkup(asset, config, displaySize) {
   `
 }
 
-function getPreviewMatrix(sourceWidth, sourceHeight, config) {
+function getPreviewMatrix(asset, sourceWidth, sourceHeight, config) {
+  const transform = getAssetTransformState(asset, config)
   let matrix = [1, 0, 0, 1, 0, 0]
-  if (config.flipHorizontal) matrix = composeSvgMatrix(matrix, [-1, 0, 0, 1, sourceWidth, 0])
-  if (config.flipVertical) matrix = composeSvgMatrix(matrix, [1, 0, 0, -1, 0, sourceHeight])
-  const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
+  const normalizedAngle = ((Math.round(Number(transform.angle) || 0) % 360) + 360) % 360
   if (normalizedAngle === 90) matrix = composeSvgMatrix(matrix, [0, 1, -1, 0, sourceHeight, 0])
   if (normalizedAngle === 180) matrix = composeSvgMatrix(matrix, [-1, 0, 0, -1, sourceWidth, sourceHeight])
   if (normalizedAngle === 270) matrix = composeSvgMatrix(matrix, [0, -1, 1, 0, 0, sourceWidth])
+  if (transform.flipHorizontal) matrix = composeSvgMatrix(matrix, [-1, 0, 0, 1, displayWidthForTransform(sourceWidth, sourceHeight, normalizedAngle), 0])
+  if (transform.flipVertical) matrix = composeSvgMatrix(matrix, [1, 0, 0, -1, 0, displayHeightForTransform(sourceWidth, sourceHeight, normalizedAngle)])
   return matrix.map((value) => Number(value.toFixed(6)))
+}
+
+function displayWidthForTransform(sourceWidth, sourceHeight, normalizedAngle) {
+  return normalizedAngle === 90 || normalizedAngle === 270 ? sourceHeight : sourceWidth
+}
+
+function displayHeightForTransform(sourceWidth, sourceHeight, normalizedAngle) {
+  return normalizedAngle === 90 || normalizedAngle === 270 ? sourceWidth : sourceHeight
+}
+
+function getAssetTransformState(asset, config) {
+  const saved = asset?.id ? config?.cropAreas?.[asset.id] : null
+  return {
+    angle: Number(saved?.angle ?? config?.angle ?? 0) || 0,
+    flipHorizontal: Boolean(saved?.flipHorizontal ?? config?.flipHorizontal),
+    flipVertical: Boolean(saved?.flipVertical ?? config?.flipVertical),
+  }
 }
 
 function composeSvgMatrix(first, second) {
