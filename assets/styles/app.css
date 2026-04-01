@@ -1461,7 +1461,7 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range {
-  grid-template-columns: minmax(132px, 168px) auto minmax(120px, 1fr);
+  grid-template-columns: minmax(96px, 120px) max-content minmax(0, 1fr);
   align-items: center;
 }
 
@@ -1804,7 +1804,7 @@ body {
 }
 
 .workspace:not(.workspace--result) .setting-row--range {
-  grid-template-columns: minmax(132px, 168px) auto minmax(120px, 1fr);
+  grid-template-columns: minmax(96px, 120px) max-content minmax(0, 1fr);
 }
 
 .workspace:not(.workspace--result) .setting-row--range .setting-row__value {
@@ -1815,6 +1815,10 @@ body {
 
 .workspace:not(.workspace--result) .setting-row--range .range-shell {
   grid-column: 3;
+}
+
+.workspace:not(.workspace--result) .setting-row--range .setting-row__value-input {
+  width: 44px;
 }
 
 .workspace:not(.workspace--result) .text-input,
