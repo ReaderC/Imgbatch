@@ -2049,13 +2049,20 @@ function normalizeCropBox(asset, config) {
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
   const mode = config.mode === 'size' ? 'size' : 'ratio'
-  let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
-  let height = Math.min(assetHeight, Math.max(1, toInteger(config.area?.height, assetHeight)))
   let left = Math.max(0, resolveMeasureOffset(config.area?.x, assetWidth, 0))
   let top = Math.max(0, resolveMeasureOffset(config.area?.y, assetHeight, 0))
+  let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
+  let height = Math.min(assetHeight, Math.max(1, toInteger(config.area?.height, assetHeight)))
 
-  if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
-  if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
+  if (mode === 'ratio') {
+    const availableWidth = Math.max(1, assetWidth - left)
+    const availableHeight = Math.max(1, assetHeight - top)
+    width = availableWidth
+    height = availableHeight
+  } else {
+    if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
+    if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
+  }
 
   if (mode === 'ratio' && config.ratio !== 'Original') {
     const [ratioX, ratioY] = String(config.ratio).split(':').map((item) => Number.parseFloat(item))
@@ -2067,10 +2074,11 @@ function normalizeCropBox(asset, config) {
       } else {
         height = Math.max(1, Math.min(assetHeight, Math.round(width / targetRatio)))
       }
-      if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
-      if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
     }
   }
+
+  if (left + width > assetWidth) left = Math.max(0, assetWidth - width)
+  if (top + height > assetHeight) top = Math.max(0, assetHeight - height)
 
   return { left, top, width, height }
 }
