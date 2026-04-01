@@ -1706,7 +1706,7 @@ function attachGlobalEvents() {
       if (asset) {
         nextPatch.cropAreas = {
           ...(config.cropAreas || {}),
-          [asset.id]: createDefaultManualCropArea(asset, target.dataset.value),
+          [asset.id]: createDefaultManualCropArea(asset, target.dataset.value, config),
         }
       }
       updateConfig('manual-crop', nextPatch)
@@ -1715,22 +1715,44 @@ function attachGlobalEvents() {
     }
 
     if (action === 'manual-crop-rotate-left' || action === 'manual-crop-rotate-right') {
-      const config = getState().configs['manual-crop']
+      const state = getState()
+      const config = state.configs['manual-crop']
+      const asset = state.assets[config.currentIndex]
       const step = action === 'manual-crop-rotate-left' ? -90 : 90
       const nextAngle = (((Number(config.angle) || 0) + step + 540) % 360) - 180
-      updateConfig('manual-crop', { angle: nextAngle })
+      const patch = patchCurrentManualCropArea(
+        config,
+        asset,
+        { angle: nextAngle },
+        action === 'manual-crop-rotate-left' ? 'rotate-left' : 'rotate-right',
+      )
+      updateConfig('manual-crop', patch)
       return
     }
 
     if (action === 'manual-crop-flip-horizontal') {
-      const config = getState().configs['manual-crop']
-      updateConfig('manual-crop', { flipHorizontal: !config.flipHorizontal })
+      const state = getState()
+      const config = state.configs['manual-crop']
+      const asset = state.assets[config.currentIndex]
+      updateConfig('manual-crop', patchCurrentManualCropArea(
+        config,
+        asset,
+        { flipHorizontal: !config.flipHorizontal },
+        'flip-horizontal',
+      ))
       return
     }
 
     if (action === 'manual-crop-flip-vertical') {
-      const config = getState().configs['manual-crop']
-      updateConfig('manual-crop', { flipVertical: !config.flipVertical })
+      const state = getState()
+      const config = state.configs['manual-crop']
+      const asset = state.assets[config.currentIndex]
+      updateConfig('manual-crop', patchCurrentManualCropArea(
+        config,
+        asset,
+        { flipVertical: !config.flipVertical },
+        'flip-vertical',
+      ))
       return
     }
 
@@ -1782,14 +1804,15 @@ function attachGlobalEvents() {
         state.assets,
         Math.min(config.currentIndex + 1, Math.max(state.assets.length - 1, 0)),
       )
-      const completedArea = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
-      const assetWidth = Math.max(1, asset.width || 1)
-      const assetHeight = Math.max(1, asset.height || 1)
+      const completedArea = (config.cropAreas && config.cropAreas[asset.id]) || createDefaultManualCropArea(asset, config.ratioValue || '16:9', config)
+      const display = getManualCropDisplaySize(asset, config)
+      const assetWidth = Math.max(1, display.width || 1)
+      const assetHeight = Math.max(1, display.height || 1)
       const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
       const lastCompletedCropSeed = isComplete
         ? {
-            assetWidth: asset.width || 0,
-            assetHeight: asset.height || 0,
+            assetWidth,
+            assetHeight,
             ratioValue: config.ratioValue || '16:9',
             area: completedArea,
             normalizedArea: (() => {
@@ -2494,8 +2517,8 @@ function handleManualCropDrag(event) {
   const asset = state.assets[config.currentIndex]
   if (!asset || asset.id !== context.assetId) return
   const nextArea = context.mode === 'move'
-    ? moveManualCropArea(context, event, asset)
-    : resizeManualCropArea(context, event, asset)
+    ? moveManualCropArea(context, event, asset, config)
+    : resizeManualCropArea(context, event, asset, config)
   const cropAreas = { ...(config.cropAreas || {}), [asset.id]: nextArea }
   updateConfig('manual-crop', { cropAreas })
 }
@@ -2504,22 +2527,30 @@ function endManualCropDrag() {
   DRAG_CONTEXT.manualCrop = null
 }
 
+function getManualCropDisplaySize(asset, config) {
+  const sourceWidth = Math.max(1, Number(asset?.width) || 1)
+  const sourceHeight = Math.max(1, Number(asset?.height) || 1)
+  const normalizedAngle = Math.abs(Number(config?.angle) || 0) % 180
+  return normalizedAngle === 90
+    ? { width: sourceHeight, height: sourceWidth }
+    : { width: sourceWidth, height: sourceHeight }
+}
+
 function getManualCropArea(asset, config) {
   return (config.cropAreas && config.cropAreas[asset.id])
     || getInheritedManualCropArea(asset, config)
-    || createDefaultManualCropArea(asset, config.ratioValue || '16:9')
+    || createDefaultManualCropArea(asset, config.ratioValue || '16:9', config)
 }
 
 function getInheritedManualCropArea(asset, config) {
   const seed = config?.lastCompletedCropSeed
   if (!seed) return null
   if (String(seed.ratioValue || '') !== String(config?.ratioValue || '16:9')) return null
-  if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
+  const { width: assetWidth, height: assetHeight } = getManualCropDisplaySize(asset, config)
+  if (seed?.area && (seed.assetWidth || 0) === assetWidth && (seed.assetHeight || 0) === assetHeight) {
     return { ...seed.area }
   }
   if (!seed?.normalizedArea) return null
-  const assetWidth = Math.max(1, asset.width || 1)
-  const assetHeight = Math.max(1, asset.height || 1)
   const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
   const ratio = Math.max(1 / 1000, Number(seed.normalizedArea.ratio) || 1)
   const width = Math.max(40, Math.round(Number(seed.normalizedArea.scale || 0) * referenceSize))
@@ -2534,9 +2565,10 @@ function getInheritedManualCropArea(asset, config) {
   }, asset)
 }
 
-function createDefaultManualCropArea(asset, ratioValue) {
-  const width = Math.max(1, asset.width || 1)
-  const height = Math.max(1, asset.height || 1)
+function createDefaultManualCropArea(asset, ratioValue, config = {}) {
+  const display = getManualCropDisplaySize(asset, config)
+  const width = Math.max(1, display.width || 1)
+  const height = Math.max(1, display.height || 1)
   const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
   const targetRatio = ratioX / ratioY
   let cropWidth = width
@@ -2553,21 +2585,23 @@ function createDefaultManualCropArea(asset, ratioValue) {
   }
 }
 
-function moveManualCropArea(context, event, asset) {
-  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
-  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
+function moveManualCropArea(context, event, asset, config) {
+  const display = getManualCropDisplaySize(asset, config)
+  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * display.width
+  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * display.height
   const area = {
     ...context.area,
     x: Math.round(context.area.x + dx),
     y: Math.round(context.area.y + dy),
   }
-  return clampManualCropArea(area, asset)
+  return clampManualCropArea(area, asset, config)
 }
 
-function resizeManualCropArea(context, event, asset) {
+function resizeManualCropArea(context, event, asset, config) {
   const ratio = getEffectiveManualCropRatio(context.area, context.ratioValue)
-  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * Math.max(1, asset.width || 1)
-  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * Math.max(1, asset.height || 1)
+  const display = getManualCropDisplaySize(asset, config)
+  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * display.width
+  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * display.height
   const start = context.area
   const left = start.x
   const top = start.y
@@ -2584,14 +2618,14 @@ function resizeManualCropArea(context, event, asset) {
 
   if (handle === 'ml' || handle === 'mr') {
     const desiredWidth = handle === 'ml' ? right - (left + dx) : start.width + dx
-    const maxWidth = handle === 'ml' ? right : Math.max(40, (asset.width || 1) - left)
+    const maxWidth = handle === 'ml' ? right : Math.max(40, display.width - left)
     width = Math.max(40, Math.min(desiredWidth, maxWidth))
     height = start.height
     x = handle === 'ml' ? right - width : left
     y = top
   } else if (handle === 'tm' || handle === 'bm') {
     const desiredHeight = handle === 'tm' ? bottom - (top + dy) : start.height + dy
-    const maxHeight = handle === 'tm' ? bottom : Math.max(40, (asset.height || 1) - top)
+    const maxHeight = handle === 'tm' ? bottom : Math.max(40, display.height - top)
     height = Math.max(40, Math.min(desiredHeight, maxHeight))
     width = start.width
     y = handle === 'tm' ? bottom - height : top
@@ -2601,19 +2635,19 @@ function resizeManualCropArea(context, event, asset) {
     const heightByDrag = handle.includes('t') ? bottom - (top + dy) : start.height + dy
     const widthFromHeight = Math.max(40, heightByDrag * ratio)
     const desiredWidth = Math.max(40, Math.min(Math.abs(widthByDrag), Math.abs(widthFromHeight)))
-    const maxWidth = getManualCropResizeMaxWidth(handle, { left, top, right, bottom }, asset, ratio)
+    const maxWidth = getManualCropResizeMaxWidth(handle, { left, top, right, bottom }, display, ratio)
     width = Math.max(40, Math.min(desiredWidth, maxWidth))
     height = Math.max(40, width / ratio)
     x = handle.includes('l') ? right - width : left
     y = handle.includes('t') ? bottom - height : top
   }
 
-  return clampManualCropArea({ x, y, width, height }, asset)
+  return clampManualCropArea({ x, y, width, height }, asset, config)
 }
 
-function getManualCropResizeMaxWidth(handle, bounds, asset, ratio) {
-  const assetWidth = Math.max(1, asset.width || 1)
-  const assetHeight = Math.max(1, asset.height || 1)
+function getManualCropResizeMaxWidth(handle, bounds, display, ratio) {
+  const assetWidth = Math.max(1, display.width || 1)
+  const assetHeight = Math.max(1, display.height || 1)
   const maxWidthByHorizontal = handle.includes('l')
     ? bounds.right
     : assetWidth - bounds.left
@@ -2629,14 +2663,57 @@ function getEffectiveManualCropRatio(area, ratioValue) {
   return Math.abs(currentRatio - presetRatio) <= 0.02 ? presetRatio : currentRatio
 }
 
-function clampManualCropArea(area, asset) {
-  const assetWidth = Math.max(1, asset.width || 1)
-  const assetHeight = Math.max(1, asset.height || 1)
+function clampManualCropArea(area, asset, config) {
+  const display = getManualCropDisplaySize(asset, config)
+  const assetWidth = Math.max(1, display.width || 1)
+  const assetHeight = Math.max(1, display.height || 1)
   const width = Math.min(assetWidth, Math.max(40, Math.round(area.width)))
   const height = Math.min(assetHeight, Math.max(40, Math.round(area.height)))
   const x = Math.max(0, Math.min(assetWidth - width, Math.round(area.x)))
   const y = Math.max(0, Math.min(assetHeight - height, Math.round(area.y)))
   return { x, y, width, height }
+}
+
+function transformManualCropArea(area, display, transform) {
+  const width = Math.max(1, display.width || 1)
+  const height = Math.max(1, display.height || 1)
+  if (transform === 'flip-horizontal') {
+    return { ...area, x: width - area.x - area.width }
+  }
+  if (transform === 'flip-vertical') {
+    return { ...area, y: height - area.y - area.height }
+  }
+  if (transform === 'rotate-left') {
+    return {
+      x: area.y,
+      y: width - area.x - area.width,
+      width: area.height,
+      height: area.width,
+    }
+  }
+  if (transform === 'rotate-right') {
+    return {
+      x: height - area.y - area.height,
+      y: area.x,
+      width: area.height,
+      height: area.width,
+    }
+  }
+  return area
+}
+
+function patchCurrentManualCropArea(config, asset, patch, transform) {
+  if (!asset) return patch
+  const display = getManualCropDisplaySize(asset, config)
+  const area = getManualCropArea(asset, config)
+  const transformedArea = clampManualCropArea(transformManualCropArea(area, display, transform), asset, patch)
+  return {
+    ...patch,
+    cropAreas: {
+      ...(config.cropAreas || {}),
+      [asset.id]: transformedArea,
+    },
+  }
 }
 
 function getManualCropRatio(ratioValue) {

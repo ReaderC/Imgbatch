@@ -2057,10 +2057,21 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }
 
-function normalizeCropBox(asset, config) {
+function getCropDisplaySize(asset, config, toolId = 'crop') {
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
-  const mode = config.mode === 'size' ? 'size' : 'ratio'
+  if (toolId !== 'manual-crop') return { width: assetWidth, height: assetHeight }
+  const normalizedAngle = Math.abs(Math.round(Number(config.angle) || 0)) % 180
+  return normalizedAngle === 90
+    ? { width: assetHeight, height: assetWidth }
+    : { width: assetWidth, height: assetHeight }
+}
+
+function normalizeCropBox(asset, config, toolId = 'crop') {
+  const { width: assetWidth, height: assetHeight } = getCropDisplaySize(asset, config, toolId)
+  const mode = toolId === 'manual-crop'
+    ? 'size'
+    : (config.mode === 'size' ? 'size' : 'ratio')
   let left = Math.max(0, resolveMeasureOffset(config.area?.x, assetWidth, 0))
   let top = Math.max(0, resolveMeasureOffset(config.area?.y, assetHeight, 0))
   let width = Math.min(assetWidth, Math.max(1, toInteger(config.area?.width, assetWidth)))
@@ -2099,7 +2110,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat(toolId, asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
-  const box = normalizeCropBox(asset, config)
+  const box = normalizeCropBox(asset, config, toolId)
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
@@ -2129,13 +2140,25 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     })
   }
 
-  let transformed = createTransformer(sharpLib, asset).extract(box)
-  if (hasFlipHorizontal) transformed = transformed.flop()
-  if (hasFlipVertical) transformed = transformed.flip()
-  if (angle !== 0) {
-    transformed = transformed.rotate(angle, {
-      background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
-    })
+  let transformed = createTransformer(sharpLib, asset)
+  if (toolId === 'manual-crop' && hasTransform) {
+    if (hasFlipHorizontal) transformed = transformed.flop()
+    if (hasFlipVertical) transformed = transformed.flip()
+    if (angle !== 0) {
+      transformed = transformed.rotate(angle, {
+        background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
+      })
+    }
+    transformed = transformed.extract(box)
+  } else {
+    transformed = transformed.extract(box)
+    if (hasFlipHorizontal) transformed = transformed.flop()
+    if (hasFlipVertical) transformed = transformed.flip()
+    if (angle !== 0) {
+      transformed = transformed.rotate(angle, {
+        background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
+      })
+    }
   }
   return writeTransformedAsset(transformed, format, 90, outputPath)
 }

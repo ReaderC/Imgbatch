@@ -21,6 +21,7 @@ export function renderManualCropPage(state) {
   const progressLabel = state.assets.length ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}` : '0 / 0'
   const currentRatio = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIO_OPTIONS[2]
   const cropArea = current ? resolveCropArea(current, config) : null
+  const displaySize = current ? getPreviewDisplaySize(current, config) : { width: 1, height: 1 }
   const cropStyle = cropArea
     ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;`
     : ''
@@ -28,20 +29,9 @@ export function renderManualCropPage(state) {
   if (config.flipHorizontal) previewTransforms.push('scaleX(-1)')
   if (config.flipVertical) previewTransforms.push('scaleY(-1)')
   if (Number(config.angle)) previewTransforms.push(`rotate(${Number(config.angle)}deg)`)
-  const normalizedAngle = Math.abs(Number(config.angle) || 0) % 180
-  const previewScale = normalizedAngle === 90
-    ? Math.min(
-        Math.max(1, current?.width || 1),
-        Math.max(1, current?.height || 1),
-      ) / Math.max(
-        Math.max(1, current?.width || 1),
-        Math.max(1, current?.height || 1),
-      )
-    : 1
-  if (previewScale < 1) previewTransforms.push(`scale(${previewScale})`)
   const previewImageStyle = previewTransforms.length ? `style="transform:${previewTransforms.join(' ')};"` : ''
   const imageStyle = current
-    ? `style="aspect-ratio:${Math.max(1, current.width || 1)} / ${Math.max(1, current.height || 1)};"`
+    ? `style="aspect-ratio:${displaySize.width} / ${displaySize.height};"`
     : ''
 
   return `
@@ -94,7 +84,7 @@ export function renderManualCropPage(state) {
           <button class="manual-stage-nav manual-stage-nav--prev" data-action="manual-crop-prev" title="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
             <span class="material-symbols-outlined">navigate_before</span>
           </button>
-          <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${current.width || 1}" data-asset-height="${current.height || 1}" ${imageStyle}` : ''}>
+          <div class="manual-canvas__image" ${current ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${displaySize.width}" data-asset-height="${displaySize.height}" ${imageStyle}` : ''}>
             ${current ? `
               <div class="manual-canvas__content">
                 <img src="${current.thumbnailUrl}" alt="${escapeHtml(current.name)}" draggable="false" ${previewImageStyle} />
@@ -179,8 +169,7 @@ export function renderManualCropPage(state) {
 
 function resolveCropArea(asset, config) {
   const saved = config.cropAreas?.[asset.id]
-  const width = Math.max(1, asset.width || 1)
-  const height = Math.max(1, asset.height || 1)
+  const { width, height } = getPreviewDisplaySize(asset, config)
   const area = saved || getInheritedCropArea(asset, config) || getDefaultCropArea(width, height, config.ratioValue || currentRatioValue(config))
   return {
     x: area.x,
@@ -198,12 +187,11 @@ function getInheritedCropArea(asset, config) {
   const seed = config.lastCompletedCropSeed
   if (!seed) return null
   if (String(seed.ratioValue || '') !== String(config.ratioValue || currentRatioValue(config))) return null
-  if (seed?.area && (seed.assetWidth || 0) === (asset.width || 0) && (seed.assetHeight || 0) === (asset.height || 0)) {
+  const { width, height } = getPreviewDisplaySize(asset, config)
+  if (seed?.area && (seed.assetWidth || 0) === width && (seed.assetHeight || 0) === height) {
     return { ...seed.area }
   }
   if (!seed?.normalizedArea) return null
-  const width = Math.max(1, asset.width || 1)
-  const height = Math.max(1, asset.height || 1)
   const referenceSize = Math.max(1, Math.min(width, height))
   const ratio = Math.max(1 / 1000, Number(seed.normalizedArea.ratio) || 1)
   const cropWidth = Math.max(40, Math.round(Number(seed.normalizedArea.scale || 0) * referenceSize))
@@ -249,6 +237,15 @@ function getDefaultCropArea(width, height, ratioValue) {
 function currentRatioValue(config) {
   const matched = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio)
   return matched?.value || config.ratioValue || '16:9'
+}
+
+function getPreviewDisplaySize(asset, config) {
+  const width = Math.max(1, Number(asset?.width) || 1)
+  const height = Math.max(1, Number(asset?.height) || 1)
+  const normalizedAngle = Math.abs(Number(config?.angle) || 0) % 180
+  return normalizedAngle === 90
+    ? { width: height, height: width }
+    : { width, height }
 }
 
 function escapeHtml(value = '') {
