@@ -570,26 +570,24 @@ function normalizeColorValue(value = '#FFFFFF') {
 function renderRangeField({ label, toolId, key, min, max, value, suffix = '', disabled = false, hint = '', hintClass = '' }) {
   return `
     <label class="setting-row setting-row--range ${disabled ? 'is-disabled' : ''}">
-      <span class="setting-row__header">
-        <span class="setting-row__label">${label}</span>
-        <span class="setting-row__value">
-          <input
-            class="setting-row__value-input"
-            type="number"
-            inputmode="numeric"
-            min="${min}"
-            max="${max}"
-            step="1"
-            value="${value}"
-            data-action="set-range-value"
-            data-tool-id="${toolId}"
-            data-key="${key}"
-            data-range-value
-            data-value-suffix="${escapeAttribute(suffix)}"
-            ${disabled ? 'disabled' : ''}
-          />
-          <span class="setting-row__value-suffix">${escapeAttribute(suffix)}</span>
-        </span>
+      <span class="setting-row__label">${label}</span>
+      <span class="setting-row__value">
+        <input
+          class="setting-row__value-input"
+          type="number"
+          inputmode="numeric"
+          min="${min}"
+          max="${max}"
+          step="1"
+          value="${value}"
+          data-action="set-range-value"
+          data-tool-id="${toolId}"
+          data-key="${key}"
+          data-range-value
+          data-value-suffix="${escapeAttribute(suffix)}"
+          ${disabled ? 'disabled' : ''}
+        />
+        <span class="setting-row__value-suffix">${escapeAttribute(suffix)}</span>
       </span>
       <span class="range-shell">
         <input

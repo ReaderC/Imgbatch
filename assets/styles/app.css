@@ -1464,15 +1464,8 @@ body {
   grid-template-columns: minmax(132px, 168px) minmax(0, 1fr);
 }
 
-.workspace-stage__inner .setting-row--range .setting-row__header {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(132px, 168px) minmax(0, 1fr);
-  align-items: center;
-  gap: 4px 10px;
-}
-
 .workspace-stage__inner .setting-row--range .setting-row__label {
+  grid-column: 1;
   align-self: center;
   display: block;
   white-space: nowrap;
@@ -1481,6 +1474,7 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__value {
+  grid-column: 2;
   justify-self: end;
   margin-left: 0;
 }
