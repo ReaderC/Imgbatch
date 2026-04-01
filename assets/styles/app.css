@@ -4854,6 +4854,24 @@ body.manual-crop--dragging-handle .manual-handle {
   width: 100%;
 }
 
+.render-slot {
+  display: contents;
+}
+
+.queue-list--virtual {
+  gap: 0;
+}
+
+.queue-list--virtual .queue-item + .queue-item {
+  margin-top: 14px;
+}
+
+.queue-list__spacer {
+  flex: 0 0 auto;
+  width: 100%;
+  pointer-events: none;
+}
+
 .queue-item {
   width: 100%;
   box-sizing: border-box;

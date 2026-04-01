@@ -1,5 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
-import { renderAppShell } from './components/AppShell.js'
+import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
+import { renderImageQueue } from './components/ImageQueueList.js'
 import {
   applyManualCropSnap,
   clampManualCropArea,
@@ -87,6 +88,12 @@ let pendingPostRenderWork = null
 let resultToolbarSignature = ''
 let processingProgressFrame = 0
 let pendingProcessingProgress = undefined
+let lastRenderSnapshot = null
+let queueRenderFrame = 0
+const queueViewportState = {
+  scrollTop: 0,
+  height: 0,
+}
 const {
   flushManualCropConfigUpdates,
   queueManualCropConfigUpdate,
@@ -1100,13 +1107,143 @@ function getLatestAssetResultPath(asset) {
   return getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset?.outputPath || ''
 }
 
-function render(state) {
-  const snapshot = captureUiSnapshot()
-  app.innerHTML = renderAppShell(state) + renderNotifications(state.notifications)
+function captureRenderSnapshot(state) {
+  return {
+    mode: getAppShellMode(state),
+    activeTool: state.activeTool,
+    sidebarCollapsed: state.sidebarCollapsed,
+    isProcessing: state.isProcessing,
+    cancelRequested: state.cancelRequested,
+    processingProgress: state.processingProgress,
+    assets: state.assets,
+    activeConfig: state.configs[state.activeTool],
+    settingsDialog: state.settingsDialog,
+    resultView: state.resultView,
+    presetDialog: state.presetDialog,
+    confirmDialog: state.confirmDialog,
+    previewModal: state.previewModal,
+    notifications: state.notifications,
+  }
+}
+
+function renderNotificationsRoot(items) {
+  return `<div class="render-slot" data-root="notifications">${renderNotifications(items)}</div>`
+}
+
+function getRootNode(name) {
+  return app?.querySelector?.(`[data-root="${name}"]`) || null
+}
+
+function syncQueueViewportFromDom() {
+  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  if (!queueNode) return false
+  const nextHeight = Math.max(0, queueNode.clientHeight || 0)
+  const nextScrollTop = Math.max(0, queueNode.scrollTop || 0)
+  const changed = Math.abs(queueViewportState.height - nextHeight) > 1
+    || Math.abs(queueViewportState.scrollTop - nextScrollTop) > 1
+  queueViewportState.height = nextHeight
+  queueViewportState.scrollTop = nextScrollTop
+  return changed
+}
+
+function renderQueueRoot(state, preserveScroll = true) {
+  const root = getRootNode('queue')
+  if (!root) return
+  const previousScrollTop = preserveScroll ? queueViewportState.scrollTop : 0
+  root.innerHTML = renderImageQueue(state, queueViewportState)
+  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  if (queueNode && preserveScroll) {
+    queueNode.scrollTop = previousScrollTop
+  }
+  syncQueueViewportFromDom()
+}
+
+function scheduleQueueRootRender() {
+  if (queueRenderFrame) return
+  queueRenderFrame = requestAnimationFrame(() => {
+    queueRenderFrame = 0
+    const state = getState()
+    if (getAppShellMode(state) !== 'workspace') return
+    renderQueueRoot(state)
+    queuePostRenderWork({
+      snapshot: null,
+      activeTool: state.activeTool,
+      queueChanged: true,
+    })
+  })
+}
+
+function canPatchShell(prev, next) {
+  if (!prev) return false
+  if (prev.mode === 'manual' || next.mode === 'manual') return false
+  if (prev.mode !== next.mode) return false
+  return !!app?.querySelector?.('.app-shell')
+}
+
+function renderFullShell(state, snapshot) {
+  app.innerHTML = renderAppShell(state) + renderNotificationsRoot(state.notifications)
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
+    queueChanged: getAppShellMode(state) === 'workspace',
   })
+}
+
+function render(state) {
+  const nextSnapshot = captureRenderSnapshot(state)
+  const snapshot = captureUiSnapshot()
+  if (!canPatchShell(lastRenderSnapshot, nextSnapshot)) {
+    renderFullShell(state, snapshot)
+    lastRenderSnapshot = nextSnapshot
+    return
+  }
+
+  const workspaceChanged = nextSnapshot.activeTool !== lastRenderSnapshot.activeTool
+    || nextSnapshot.activeConfig !== lastRenderSnapshot.activeConfig
+    || nextSnapshot.settingsDialog !== lastRenderSnapshot.settingsDialog
+    || nextSnapshot.resultView !== lastRenderSnapshot.resultView
+  const sideNavChanged = workspaceChanged || nextSnapshot.sidebarCollapsed !== lastRenderSnapshot.sidebarCollapsed
+  const topbarChanged = sideNavChanged
+    || nextSnapshot.isProcessing !== lastRenderSnapshot.isProcessing
+    || nextSnapshot.cancelRequested !== lastRenderSnapshot.cancelRequested
+    || nextSnapshot.processingProgress !== lastRenderSnapshot.processingProgress
+  const overlaysChanged = nextSnapshot.presetDialog !== lastRenderSnapshot.presetDialog
+    || nextSnapshot.confirmDialog !== lastRenderSnapshot.confirmDialog
+    || nextSnapshot.previewModal !== lastRenderSnapshot.previewModal
+  const notificationsChanged = nextSnapshot.notifications !== lastRenderSnapshot.notifications
+  const queueChanged = nextSnapshot.assets !== lastRenderSnapshot.assets
+    || workspaceChanged
+  const needsWorkspaceRefresh = workspaceChanged
+
+  if (sideNavChanged) {
+    const root = getRootNode('side-nav')
+    if (root) root.innerHTML = renderShellSideNav(state)
+  }
+  if (topbarChanged) {
+    const root = getRootNode('topbar')
+    if (root) root.innerHTML = renderShellTopBar(state)
+  }
+  if (needsWorkspaceRefresh) {
+    const root = getRootNode('workspace')
+    if (root) root.innerHTML = renderShellWorkspace(state, renderImageQueue(state, queueViewportState))
+  } else if (queueChanged && nextSnapshot.mode === 'workspace') {
+    renderQueueRoot(state)
+  }
+  if (overlaysChanged) {
+    const root = getRootNode('overlays')
+    if (root) root.innerHTML = renderShellOverlays(state)
+  }
+  if (notificationsChanged) {
+    const root = getRootNode('notifications')
+    if (root) root.innerHTML = renderNotifications(state.notifications)
+  }
+
+  queuePostRenderWork({
+    snapshot: needsWorkspaceRefresh ? snapshot : null,
+    activeTool: state.activeTool,
+    queueChanged: queueChanged || needsWorkspaceRefresh,
+  })
+  lastRenderSnapshot = nextSnapshot
 }
 
 function queuePostRenderWork(work) {
@@ -1121,6 +1258,9 @@ function queuePostRenderWork(work) {
     restoreUiSnapshot(nextWork.snapshot)
     syncCustomTooltips(app)
     queueResultMarqueeSync()
+    if (nextWork.queueChanged && syncQueueViewportFromDom()) {
+      scheduleQueueRootRender()
+    }
     if (nextWork.activeTool === 'manual-crop') {
       queueManualCropStageSync()
     }
@@ -2157,10 +2297,25 @@ function attachGlobalEvents() {
     }
   }, true)
 
+  document.addEventListener('scroll', (event) => {
+    const queueNode = event.target?.closest?.('[data-scroll-role="queue"]')
+    if (queueNode) {
+      const nextScrollTop = Math.max(0, queueNode.scrollTop || 0)
+      const nextHeight = Math.max(0, queueNode.clientHeight || 0)
+      if (Math.abs(queueViewportState.scrollTop - nextScrollTop) > 1 || Math.abs(queueViewportState.height - nextHeight) > 1) {
+        queueViewportState.scrollTop = nextScrollTop
+        queueViewportState.height = nextHeight
+        scheduleQueueRootRender()
+      }
+    }
+  }, true)
   window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)
   window.addEventListener('resize', () => {
     positionTooltip(activeTooltipTarget)
     if (activeTooltipTarget) queueResultMarqueeSync()
+    if (syncQueueViewportFromDom()) {
+      scheduleQueueRootRender()
+    }
     if (getState().activeTool === 'manual-crop') {
       queueManualCropStageSync()
     }
