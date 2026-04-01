@@ -1,6 +1,7 @@
 {
   "name": "imgbatch",
   "version": "0.1.0",
+  "author": "readerc",
   "private": true,
   "dependencies": {
     "gifenc": "^1.0.3",

@@ -40,7 +40,7 @@ const state = {
     flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original' },
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'JPEG', quality: 90 },
-    'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true },
+    'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true, useMaxAssetSize: false },
     'manual-crop': {
       ratio: '16:9 电影',
       ratioValue: '16:9',
@@ -60,6 +60,7 @@ const state = {
       outerAreaMode: 'trim',
       snapEnabled: true,
       snapStrength: 'low',
+      lockAspectRatio: false,
       sessionOutputPath: '',
       keepOriginalFormat: true,
     },

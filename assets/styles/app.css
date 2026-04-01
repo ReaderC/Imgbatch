@@ -4666,6 +4666,10 @@ body {
   box-shadow: 0 2px 8px rgba(73, 86, 180, 0.18);
 }
 
+body.manual-crop--dragging-handle .manual-handle {
+  pointer-events: none;
+}
+
 .manual-handle--tl { top: -9px; left: -9px; }
 .manual-handle--tr { top: -9px; right: -9px; }
 .manual-handle--bl { bottom: -9px; left: -9px; }
@@ -4797,11 +4801,12 @@ body {
 .manual-footer__right {
   display: flex;
   justify-content: flex-end;
+  margin-right: -16px;
 }
 
 .manual-toolbar--crop-actions {
   min-width: auto;
-  gap: 12px;
+  gap: 8px;
 }
 
 .manual-toolbar--crop-actions .icon-button {

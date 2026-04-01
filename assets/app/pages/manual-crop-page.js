@@ -153,6 +153,15 @@ export function renderManualCropPage(state) {
               <span class="material-symbols-outlined">swap_vert</span>
             </button>
             <button
+              class="icon-button ${config.lockAspectRatio ? 'is-active' : ''}"
+              data-action="toggle-manual-crop-lock-aspect"
+              title="${config.lockAspectRatio ? '自由拖动' : '保持比例'}"
+              aria-label="${config.lockAspectRatio ? '自由拖动' : '保持比例'}"
+              aria-pressed="${config.lockAspectRatio ? 'true' : 'false'}"
+            >
+              <span class="material-symbols-outlined">crop_free</span>
+            </button>
+            <button
               class="icon-button ${config.keepOriginalFormat ? 'is-active' : ''}"
               data-action="toggle-manual-crop-keep-format"
               title="保持原格式"

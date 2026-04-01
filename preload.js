@@ -47,6 +47,7 @@ const WATERMARK_OVERLAY_CACHE = new Map()
 const WATERMARK_TEXT_CACHE = new Map()
 const WATERMARK_TILED_CACHE = new Map()
 const FALLBACK_IMAGE_BUFFER_CACHE = new Map()
+const DISPLAY_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
@@ -374,7 +375,7 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
 
 function createAssetDisplayUrl(filePath, inputFormat = '') {
   const format = normalizeImageFormatName(inputFormat)
-  if (format === 'bmp' || format === 'ico') {
+  if (format === 'bmp' || format === 'ico' || format === 'tiff') {
     try {
       const image = nativeImage.createFromPath(filePath)
       if (!image.isEmpty()) {
@@ -394,6 +395,47 @@ function createAssetDisplayUrl(filePath, inputFormat = '') {
   const normalized = String(filePath).replace(/\\/g, '/')
   const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
   return encodeURI(`file://${prefixed}`)
+}
+
+function getDisplayUrlCacheKey(filePath, inputFormat = '') {
+  try {
+    const stat = fs.statSync(filePath)
+    return `${path.resolve(filePath)}|${normalizeImageFormatName(inputFormat)}|${Number(stat.size) || 0}|${Number(stat.mtimeMs) || 0}`
+  } catch {
+    return `${path.resolve(filePath)}|${normalizeImageFormatName(inputFormat)}`
+  }
+}
+
+async function createAssetDisplayUrlAsync(filePath, inputFormat = '', sharpLib = null) {
+  const format = normalizeImageFormatName(inputFormat)
+  const cacheKey = getDisplayUrlCacheKey(filePath, format)
+  if (DISPLAY_URL_CACHE.has(cacheKey)) return DISPLAY_URL_CACHE.get(cacheKey)
+
+  const nativeUrl = createAssetDisplayUrl(filePath, format)
+  if (nativeUrl && (format === 'bmp' || format === 'ico' || format === 'tiff' ? nativeUrl.startsWith('data:') : true)) {
+    DISPLAY_URL_CACHE.set(cacheKey, nativeUrl)
+    return nativeUrl
+  }
+
+  if (format === 'tiff' && sharpLib) {
+    try {
+      const buffer = await sharpLib(filePath, { animated: false })
+        .resize({
+          width: 2048,
+          height: 2048,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer()
+      const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`
+      DISPLAY_URL_CACHE.set(cacheKey, dataUrl)
+      return dataUrl
+    } catch {}
+  }
+
+  DISPLAY_URL_CACHE.set(cacheKey, nativeUrl)
+  return nativeUrl
 }
 
 function copyAssetToOutput(asset, outputPath, sourceInput = null, fallback = asset) {
@@ -447,10 +489,11 @@ async function resolveProcessedMeta(resultPath, result, sharpLib = null) {
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = await resolveProcessedMeta(stagedPath, result, sharpLib)
-  const normalizedPreviewPath = String(stagedPath).replace(/\\/g, '/')
-  const prefixedPreviewPath = normalizedPreviewPath.startsWith('/') ? normalizedPreviewPath : `/${normalizedPreviewPath}`
-  const previewUrl = encodeURI(`file://${prefixedPreviewPath}`)
-  const cacheBustedPreviewUrl = previewUrl && payload.runId ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}` : previewUrl
+  const previewFormat = path.extname(stagedPath).replace('.', '') || meta.outputName.split('.').pop() || ''
+  const previewUrl = await createAssetDisplayUrlAsync(stagedPath, previewFormat, sharpLib)
+  const cacheBustedPreviewUrl = previewUrl && payload.runId && !previewUrl.startsWith('data:')
+    ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(payload.runId)}`
+    : previewUrl
   return {
     assetId: asset.id,
     name: asset.name,
@@ -488,16 +531,18 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
   }
 }
 
-async function mapWithConcurrency(items, concurrency, iteratee) {
+async function mapWithConcurrency(items, concurrency, iteratee, options = {}) {
   const list = Array.isArray(items) ? items : []
   if (!list.length) return []
 
   const workerCount = Math.max(1, Math.min(concurrency || 1, list.length))
   const results = new Array(list.length)
   let cursor = 0
+  const shouldStop = typeof options.shouldStop === 'function' ? options.shouldStop : () => false
 
   if (workerCount === 1) {
     for (let index = 0; index < list.length; index += 1) {
+      if (shouldStop()) break
       results[index] = await iteratee(list[index], index)
     }
     return results
@@ -505,8 +550,10 @@ async function mapWithConcurrency(items, concurrency, iteratee) {
 
   async function worker() {
     while (cursor < list.length) {
+      if (shouldStop()) break
       const index = cursor
       cursor += 1
+      if (shouldStop()) break
       results[index] = await iteratee(list[index], index)
     }
   }
@@ -706,6 +753,7 @@ function normalizeRunConfig(toolId, config = {}) {
       interval: Math.max(10, toNumber(config.interval, 500)),
       background: sanitizeText(config.background, '#ffffff'),
       loop: config.loop !== false,
+      useMaxAssetSize: Boolean(config.useMaxAssetSize),
     }
   }
 
@@ -962,9 +1010,9 @@ function mapOutputFormat(toolId, asset, config) {
 
   const original = String(asset?.inputFormat || asset?.ext || '').toLowerCase()
   if (original === 'jpg') return 'jpeg'
+  if (CUSTOM_OUTPUT_FORMATS.has(original)) return original
   if (toolId === 'manual-crop') {
     if (config.keepOriginalFormat !== false) {
-      if (CUSTOM_OUTPUT_FORMATS.has(original)) return original
       return SHARP_OUTPUT_FORMATS.has(original) ? original : 'png'
     }
     return 'png'
@@ -977,6 +1025,15 @@ function normalizeImageFormatName(format) {
   if (normalized === 'jpg') return 'jpeg'
   if (normalized === 'tif') return 'tiff'
   return normalized
+}
+
+function resolveCanonicalInputFormat(detectedFormat, headerFormat = '', fallbackFormat = '') {
+  const normalizedDetected = normalizeImageFormatName(detectedFormat)
+  const normalizedHeader = normalizeImageFormatName(headerFormat)
+  const normalizedFallback = normalizeImageFormatName(fallbackFormat)
+  if (normalizedHeader === 'avif') return 'avif'
+  if (normalizedDetected === 'heif' && normalizedFallback === 'avif') return 'avif'
+  return normalizedDetected
 }
 
 function isFallbackDecodedInputFormat(format) {
@@ -1116,8 +1173,8 @@ function detectImageFormatFromFile(filePath) {
 
 async function getAssetInputFormat(sharpLib, asset) {
   const sourcePath = sanitizeText(asset?.sourcePath)
+  const fallbackFormat = normalizeImageFormatName(asset?.ext)
   if (!sourcePath) {
-    const fallbackFormat = normalizeImageFormatName(asset?.ext)
     if (fallbackFormat) asset.inputFormat = fallbackFormat
     return fallbackFormat
   }
@@ -1138,7 +1195,7 @@ async function getAssetInputFormat(sharpLib, asset) {
   try {
     metadata = await sharpLib(sourcePath).metadata()
     asset.inputMetadata = metadata
-    const detectedFormat = normalizeImageFormatName(metadata?.format)
+    const detectedFormat = resolveCanonicalInputFormat(metadata?.format, headerFormat, fallbackFormat)
     if (detectedFormat) {
       asset.inputFormat = detectedFormat
       return detectedFormat
@@ -1150,7 +1207,6 @@ async function getAssetInputFormat(sharpLib, asset) {
     asset.inputFormat = headerFormat
     return headerFormat
   }
-  const fallbackFormat = normalizeImageFormatName(asset?.ext)
   if (fallbackFormat) asset.inputFormat = fallbackFormat
   return fallbackFormat
 }
@@ -1887,7 +1943,7 @@ async function replaceOriginals(items = []) {
         width,
         height,
         inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
-        thumbnailUrl: createAssetDisplayUrl(targetPath, resultExtension.replace('.', '')),
+        thumbnailUrl: await createAssetDisplayUrlAsync(targetPath, resultExtension.replace('.', ''), sharpLib),
       })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
@@ -2339,8 +2395,11 @@ async function writeMergeImageAsset(sharpLib, payload) {
       ? ((preventUpscale && sourceWidth <= payload.config.pageWidth) || sourceWidth === payload.config.pageWidth)
       : ((preventUpscale && sourceHeight <= payload.config.pageWidth) || sourceHeight === payload.config.pageWidth)
     if (sourceWidth > 0 && sourceHeight > 0 && keepsOriginalSize) {
+      const data = await createTransformer(sharpLib, asset)
+        .png()
+        .toBuffer()
       return {
-        input: asset.sourcePath,
+        input: data,
         width: sourceWidth,
         height: sourceHeight,
       }
@@ -2515,9 +2574,12 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           .png()
           .toBuffer()
       }
-    } else if (!['png', 'webp', 'avif', 'gif', 'jpg', 'jpeg'].includes(prepared.sourceFormat)) {
-      prepared.embeddedBytes = await createTransformer(sharpLib, asset).jpeg().toBuffer()
-      prepared.embeddedKind = 'jpg'
+    } else if (prepared.sourceFormat !== 'png' && prepared.sourceFormat !== 'jpg' && prepared.sourceFormat !== 'jpeg') {
+      const embeddedKind = isAlphaCapableFormat(prepared.sourceFormat) ? 'png' : 'jpg'
+      prepared.embeddedBytes = embeddedKind === 'png'
+        ? await createTransformer(sharpLib, asset).png().toBuffer()
+        : await createTransformer(sharpLib, asset).jpeg().toBuffer()
+      prepared.embeddedKind = embeddedKind
     }
 
     return prepared
@@ -2535,14 +2597,23 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let sourceHeight = prepared.sourceHeight
     const ensureEmbedded = async () => {
       if (embedded) return embedded
-      if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
+      if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
+        embedded = await pdf.embedPng(prepared.embeddedBytes)
+      } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
         embedded = await pdf.embedJpg(prepared.embeddedBytes)
-      } else if (prepared.sourceFormat === 'png' || prepared.sourceFormat === 'webp' || prepared.sourceFormat === 'avif' || prepared.sourceFormat === 'gif') {
+      } else if (prepared.sourceFormat === 'png') {
         embedded = await pdf.embedPng(imageBytes)
       } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
         embedded = await pdf.embedJpg(imageBytes)
       } else {
-        embedded = await pdf.embedJpg(prepared.embeddedBytes || imageBytes)
+        embedded = await pdf.embedPng(
+          prepared.embeddedBytes || await createTransformer(sharpLib, {
+            ...prepared,
+            sourcePath: prepared.sourcePath,
+            inputFormat: prepared.sourceFormat,
+            ext: prepared.sourceFormat,
+          }).png().toBuffer(),
+        )
       }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
@@ -2657,8 +2728,12 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
-  const frameWidth = payload.config.width
-  const frameHeight = payload.config.height
+  const frameWidth = payload.config.useMaxAssetSize
+    ? Math.max(1, ...payload.assets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
+    : payload.config.width
+  const frameHeight = payload.config.useMaxAssetSize
+    ? Math.max(1, ...payload.assets.map((asset) => Math.max(0, Number(asset?.height) || 0)))
+    : payload.config.height
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval))
   const repeat = payload.config.loop ? 0 : -1
@@ -2799,7 +2874,12 @@ async function executeSingleAssetTool(payload, sharpLib) {
   }
   const outcomes = totalCount === 1
     ? [await executeAsset(payload.assets[0])]
-    : await mapWithConcurrency(payload.assets, getAssetProcessingConcurrency(payload), executeAsset)
+    : await mapWithConcurrency(
+        payload.assets,
+        getAssetProcessingConcurrency(payload),
+        executeAsset,
+        { shouldStop: () => cancelled || isRunCancelled(payload.runId) },
+      )
 
   const processed = []
   const failed = []
@@ -3185,7 +3265,8 @@ const toolsApi = {
           const metadata = await sharpLib(filePath).metadata()
           width = Number(metadata?.width) || 0
           height = Number(metadata?.height) || 0
-          inputFormat = normalizeImageFormatName(metadata?.format)
+          const fallbackFormat = normalizeImageFormatName(path.extname(filePath).replace('.', '').toLowerCase())
+          inputFormat = resolveCanonicalInputFormat(metadata?.format, '', fallbackFormat)
         } catch {
           inputFormat = ''
         }
@@ -3223,7 +3304,7 @@ const toolsApi = {
         sizeBytes: stat.size,
         width,
         height,
-        thumbnailUrl: this.createAssetDisplayUrl(filePath, ext),
+        thumbnailUrl: await createAssetDisplayUrlAsync(filePath, ext, sharpLib),
         status: 'idle',
         outputPath: '',
         error: '',

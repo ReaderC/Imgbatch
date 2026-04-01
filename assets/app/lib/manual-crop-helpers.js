@@ -237,6 +237,7 @@ export function resizeManualCropArea(context, event, asset, config, stage = getM
   let height = start.height
   let x = start.x
   let y = start.y
+  let lockedRatio = null
 
   if (handle === 'ml' || handle === 'mr') {
     const desiredWidth = handle === 'ml' ? right - (left + dx) : start.width + dx
@@ -259,11 +260,85 @@ export function resizeManualCropArea(context, event, asset, config, stage = getM
     const maxHeight = handle.includes('t') ? bottom : Math.max(40, stage.height - top)
     width = Math.max(40, Math.min(desiredWidth, maxWidth))
     height = Math.max(40, Math.min(desiredHeight, maxHeight))
+    if (config?.lockAspectRatio) {
+      const ratio = start.width / Math.max(1, start.height)
+      lockedRatio = ratio
+      const widthBase = Math.max(1, start.width)
+      const heightBase = Math.max(1, start.height)
+      const outwardDx = handle.includes('l') ? -dx : dx
+      const outwardDy = handle.includes('t') ? -dy : dy
+      const scaleX = 1 + outwardDx / widthBase
+      const scaleY = 1 + outwardDy / heightBase
+      const weightX = Math.abs(outwardDx)
+      const weightY = Math.abs(outwardDy)
+      let scale = 1
+      if (weightX > 0 || weightY > 0) {
+        scale = (scaleX * weightX + scaleY * weightY) / Math.max(1, weightX + weightY)
+      }
+      const minScale = 40 / Math.max(1, start.width)
+      const maxScale = Math.min(
+        maxWidth / Math.max(1, start.width),
+        maxHeight / Math.max(1, start.height),
+      )
+      scale = Math.max(minScale, Math.min(scale, maxScale))
+      width = Math.max(40, Math.round(start.width * scale))
+      height = Math.max(40, Math.round(width / ratio))
+      if (height > maxHeight) {
+        height = Math.max(40, Math.min(maxHeight, height))
+        width = Math.max(40, Math.round(height * ratio))
+      }
+    }
     x = handle.includes('l') ? right - width : left
     y = handle.includes('t') ? bottom - height : top
   }
 
-  return clampManualCropArea(applyManualCropSnap({ x, y, width, height }, asset, config, 'resize', handle, stage), asset, config, stage)
+  let nextArea = applyManualCropSnap(
+    { x, y, width, height },
+    asset,
+    config,
+    'resize',
+    handle,
+    stage,
+  )
+  if (
+    config?.lockAspectRatio
+    && lockedRatio
+    && handle.includes('l')
+    && (handle.includes('t') || handle.includes('b'))
+  ) {
+    const anchorX = handle.includes('l') ? right : left
+    const anchorY = handle.includes('t') ? bottom : top
+    const horizontalChanged = nextArea.x !== x || nextArea.width !== width
+    const verticalChanged = nextArea.y !== y || nextArea.height !== height
+    if (horizontalChanged && !verticalChanged) {
+      const snappedHeight = Math.max(40, Math.round(nextArea.width / lockedRatio))
+      nextArea = {
+        ...nextArea,
+        height: snappedHeight,
+        y: handle.includes('t') ? anchorY - snappedHeight : anchorY,
+      }
+    } else if (verticalChanged && !horizontalChanged) {
+      const snappedWidth = Math.max(40, Math.round(nextArea.height * lockedRatio))
+      nextArea = {
+        ...nextArea,
+        width: snappedWidth,
+        x: handle.includes('l') ? anchorX - snappedWidth : anchorX,
+      }
+    } else if (horizontalChanged && verticalChanged) {
+      const scaleByWidth = nextArea.width / Math.max(1, start.width)
+      const scaleByHeight = nextArea.height / Math.max(1, start.height)
+      const scale = Math.min(scaleByWidth, scaleByHeight)
+      const snappedWidth = Math.max(40, Math.round(start.width * scale))
+      const snappedHeight = Math.max(40, Math.round(start.height * scale))
+      nextArea = {
+        x: handle.includes('l') ? anchorX - snappedWidth : anchorX,
+        y: handle.includes('t') ? anchorY - snappedHeight : anchorY,
+        width: snappedWidth,
+        height: snappedHeight,
+      }
+    }
+  }
+  return clampManualCropArea(nextArea, asset, config, stage)
 }
 
 export function patchCurrentManualCropArea(config, asset, patch) {

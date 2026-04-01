@@ -428,10 +428,11 @@ function renderMergeImageConfig(config) {
 function renderMergeGifConfig(config) {
   return renderSettingsSection(`
     ${renderFieldGrid(`
-      ${renderInputField({ label: '宽度', toolId: 'merge-gif', key: 'width', type: 'number', value: config.width, min: 1 })}
-      ${renderInputField({ label: '高度', toolId: 'merge-gif', key: 'height', type: 'number', value: config.height, min: 1 })}
+      ${renderInputField({ label: '宽度', toolId: 'merge-gif', key: 'width', type: 'number', value: config.width, min: 1, disabled: config.useMaxAssetSize })}
+      ${renderInputField({ label: '高度', toolId: 'merge-gif', key: 'height', type: 'number', value: config.height, min: 1, disabled: config.useMaxAssetSize })}
       ${renderInputField({ label: '间隔毫秒', toolId: 'merge-gif', key: 'interval', type: 'number', value: config.interval, min: 10, step: 10 })}
     `)}
+    ${renderToggleRow('使用列表最大宽高', '自动取当前图片列表中最大的宽度和最大的高度', 'merge-gif', 'useMaxAssetSize', config.useMaxAssetSize)}
     ${renderToggleRow('循环播放', '', 'merge-gif', 'loop', config.loop)}
     ${renderColorField({ label: '背景色', toolId: 'merge-gif', key: 'background', value: config.background || '#FFFFFF' })}
   `)
