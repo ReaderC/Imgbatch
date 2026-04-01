@@ -1,0 +1,6 @@
+.claude/
+CLAUDE.md
+HANDOFF.md
+CODEX_HANDOFF_*.md
+.release-test/
+node_modules/
