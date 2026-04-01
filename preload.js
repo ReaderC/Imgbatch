@@ -47,6 +47,7 @@ const WATERMARK_TEXT_CACHE = new Map()
 const WATERMARK_TILED_CACHE = new Map()
 const FALLBACK_IMAGE_BUFFER_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
+const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -436,11 +437,15 @@ function estimateCompressionQuality(originalSizeBytes, targetBytes) {
   return Math.max(1, Math.min(90, estimated))
 }
 
+async function resolveProcessedMeta(resultPath, result, sharpLib = null) {
+  return (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
+    ? createOutputMeta(resultPath, result, result)
+    : null) || await readOutputMeta(resultPath, sharpLib)
+}
+
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
-  const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
-    ? createOutputMeta(stagedPath, result, result)
-    : null) || await readOutputMeta(stagedPath, sharpLib)
+  const meta = await resolveProcessedMeta(stagedPath, result, sharpLib)
   const normalizedPreviewPath = String(stagedPath).replace(/\\/g, '/')
   const prefixedPreviewPath = normalizedPreviewPath.startsWith('/') ? normalizedPreviewPath : `/${normalizedPreviewPath}`
   const previewUrl = encodeURI(`file://${prefixedPreviewPath}`)
@@ -466,9 +471,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
 
 async function directResultToProcessed(asset, result, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
-  const meta = (typeof result === 'object' && result?.outputPath && result?.outputSizeBytes
-    ? createOutputMeta(outputPath, result, result)
-    : null) || await readOutputMeta(outputPath, sharpLib)
+  const meta = await resolveProcessedMeta(outputPath, result, sharpLib)
   return {
     assetId: asset.id,
     name: asset.name,
@@ -1051,16 +1054,22 @@ function detectImageFormatFromBuffer(buffer) {
 }
 
 function detectImageFormatFromFile(filePath) {
+  const normalizedPath = sanitizeText(filePath)
+  if (!normalizedPath) return ''
+  if (INPUT_FORMAT_CACHE.has(normalizedPath)) return INPUT_FORMAT_CACHE.get(normalizedPath)
   try {
-    const fd = fs.openSync(filePath, 'r')
+    const fd = fs.openSync(normalizedPath, 'r')
     try {
       const header = Buffer.alloc(32)
       const bytesRead = fs.readSync(fd, header, 0, header.length, 0)
-      return normalizeImageFormatName(detectImageFormatFromBuffer(header.subarray(0, bytesRead)))
+      const format = normalizeImageFormatName(detectImageFormatFromBuffer(header.subarray(0, bytesRead)))
+      INPUT_FORMAT_CACHE.set(normalizedPath, format)
+      return format
     } finally {
       fs.closeSync(fd)
     }
   } catch {
+    INPUT_FORMAT_CACHE.set(normalizedPath, '')
     return ''
   }
 }
