@@ -1,3 +1,5 @@
+import { getManualCropDisplaySize as computeManualCropDisplaySize, getManualCropStageMetrics as computeManualCropStageMetrics } from '../lib/manual-crop-stage.js'
+
 const MANUAL_CROP_RATIO_OPTIONS = [
   { label: '1:1', value: '1:1' },
   { label: '4:5', value: '4:5' },
@@ -10,24 +12,41 @@ const MANUAL_CROP_RATIO_OPTIONS = [
   { label: '21:9', value: '21:9' },
 ]
 
+const MANUAL_CROP_OUTER_AREA_OPTIONS = [
+  { label: '忽略空白', value: 'trim' },
+  { label: '白底填充', value: 'white' },
+]
+
+const MANUAL_CROP_SNAP_STRENGTH_OPTIONS = [
+  { label: '极低', value: 'very-low' },
+  { label: '低', value: 'low' },
+  { label: '中等', value: 'medium' },
+  { label: '高', value: 'high' },
+  { label: '极高', value: 'very-high' },
+]
+
 export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
   const current = state.assets[config.currentIndex] || state.assets[0]
+  const hasCurrent = Boolean(current)
   const progressLabel = state.assets.length
     ? `${Math.min(config.currentIndex + 1, state.assets.length)} / ${state.assets.length}`
     : '0 / 0'
   const currentRatio = MANUAL_CROP_RATIO_OPTIONS.find((item) => item.label === config.ratio) || MANUAL_CROP_RATIO_OPTIONS[2]
+  const currentOuterAreaMode = MANUAL_CROP_OUTER_AREA_OPTIONS.find((item) => item.value === config.outerAreaMode) || MANUAL_CROP_OUTER_AREA_OPTIONS[0]
+  const currentSnapStrength = MANUAL_CROP_SNAP_STRENGTH_OPTIONS.find((item) => item.value === config.snapStrength) || MANUAL_CROP_SNAP_STRENGTH_OPTIONS[0]
   const currentTransform = current ? getAssetTransformState(current, config) : { angle: 0, flipHorizontal: false, flipVertical: false }
-  const cropArea = current ? resolveCropArea(current, config) : null
-  const displaySize = current ? getPreviewDisplaySize(current, config) : { width: 1, height: 1 }
+  const isLastImage = !!current && config.currentIndex >= state.assets.length - 1
+  const displaySize = current ? getPreviewDisplaySize(current, currentTransform) : { width: 1, height: 1 }
+  const stageMetrics = current ? getPreviewStageMetrics(current, config, displaySize, currentTransform) : { width: 1, height: 1, imageX: 0, imageY: 0, imageWidth: 1, imageHeight: 1 }
+  const cropArea = current ? resolveCropArea(current, config, stageMetrics) : null
   const cropStyle = cropArea
     ? `left:${cropArea.xPct}%;top:${cropArea.yPct}%;width:${cropArea.widthPct}%;height:${cropArea.heightPct}%;`
     : ''
-  const stageStyle = current
-    ? `style="--display-width:${displaySize.width};--display-height:${displaySize.height};"`
+  const previewStyle = current
+    ? `style="left:${(stageMetrics.imageX / stageMetrics.width) * 100}%;top:${(stageMetrics.imageY / stageMetrics.height) * 100}%;width:${(stageMetrics.imageWidth / stageMetrics.width) * 100}%;height:${(stageMetrics.imageHeight / stageMetrics.height) * 100}%;"`
     : ''
-  const hasCurrent = Boolean(current)
-  const svgMarkup = hasCurrent ? getPreviewSvgMarkup(current, config, displaySize) : ''
+  const svgMarkup = hasCurrent ? getPreviewSvgMarkup(current, displaySize, currentTransform) : ''
 
   return `
     <div class="manual-shell">
@@ -35,25 +54,38 @@ export function renderManualCropPage(state) {
         <h2 class="manual-title">手动裁剪</h2>
         <div class="manual-header__meta" data-horizontal-scroll>
           <span class="badge">${progressLabel}</span>
-          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭">
+          <button class="icon-button" data-action="toggle-manual-crop-help" title="操作说明" aria-label="操作说明">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭" aria-label="关闭">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
       </header>
+      ${config.helpOpen ? `
+        <div class="preview-modal__help manual-crop__help">
+          <div class="preview-modal__help-title">操作说明</div>
+          <ul class="preview-modal__help-list">
+            <li>滚轮：缩放图片</li>
+            <li>鼠标右键拖动：平移图片</li>
+            <li>方向键：移动裁剪框</li>
+            <li>Shift + 方向键：快速移动裁剪框</li>
+            <li>空格 / 吸附按钮：切换边缘吸附</li>
+            <li>工具栏可调整吸附强度挡位</li>
+          </ul>
+        </div>
+      ` : ''}
       <main class="manual-canvas" data-role="drop-surface" data-scroll-role="manual-canvas">
         <div class="manual-canvas__stage">
-          <button class="manual-stage-nav manual-stage-nav--prev" data-action="manual-crop-prev" title="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
-            <span class="material-symbols-outlined">navigate_before</span>
-          </button>
           <div
             class="manual-canvas__image"
             ${hasCurrent
-              ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-asset-width="${displaySize.width}" data-asset-height="${displaySize.height}" ${stageStyle}`
+              ? `data-role="manual-crop-stage" data-asset-id="${current.id}" data-stage-width="${stageMetrics.width}" data-stage-height="${stageMetrics.height}"`
               : ''}
           >
             ${hasCurrent ? `
               <div class="manual-canvas__content">
-                <div class="manual-canvas__preview" data-role="manual-crop-preview">
+                <div class="manual-canvas__preview" data-role="manual-crop-preview" ${previewStyle}>
                   ${svgMarkup}
                 </div>
                 <div class="manual-crop-box" data-role="manual-crop-box" data-action="manual-crop-drag" style="${cropStyle}">
@@ -71,19 +103,19 @@ export function renderManualCropPage(state) {
               <div class="manual-canvas__empty">先导入图片，再拖动裁剪框开始裁剪</div>
             `}
           </div>
-          <button class="manual-stage-nav manual-stage-nav--next" data-action="manual-crop-next" title="下一张" ${!hasCurrent || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
-            <span class="material-symbols-outlined">navigate_next</span>
-          </button>
         </div>
       </main>
       <footer class="manual-footer">
         <div class="manual-footer__left" data-horizontal-scroll>
           <div class="manual-toolbar manual-toolbar--crop">
-            <button class="icon-button" data-action="open-folder-input" title="选择文件夹">
+            <button class="icon-button" data-action="open-folder-input" title="选择文件夹" aria-label="选择文件夹">
               <span class="material-symbols-outlined">folder_open</span>
             </button>
-            <button class="icon-button" data-action="open-file-input" title="选择图片">
+            <button class="icon-button" data-action="open-file-input" title="选择图片" aria-label="选择图片">
               <span class="material-symbols-outlined">add_photo_alternate</span>
+            </button>
+            <button class="icon-button" data-action="remove-asset" data-asset-id="${current?.id || ''}" title="删除当前图片" aria-label="删除当前图片" ${!hasCurrent ? 'disabled' : ''}>
+              <span class="material-symbols-outlined">delete</span>
             </button>
             <div class="select-shell select-shell--up manual-footer__ratio-shell">
               <button
@@ -92,7 +124,7 @@ export function renderManualCropPage(state) {
                 data-action="toggle-config-select"
                 aria-haspopup="listbox"
                 aria-expanded="false"
-                title="裁剪比例：${escapeHtml(currentRatio.value)}"
+                title="裁剪比例"
               >
                 <span class="material-symbols-outlined">aspect_ratio</span>
               </button>
@@ -108,28 +140,93 @@ export function renderManualCropPage(state) {
                 `).join('')}
               </div>
             </div>
-            <button class="icon-button" data-action="manual-crop-rotate-left" title="向左旋转 90°">
+            <button class="icon-button" data-action="manual-crop-rotate-left" title="向左旋转 90°" aria-label="向左旋转 90°">
               <span class="material-symbols-outlined">rotate_90_degrees_ccw</span>
             </button>
-            <button class="icon-button" data-action="manual-crop-rotate-right" title="向右旋转 90°">
+            <button class="icon-button" data-action="manual-crop-rotate-right" title="向右旋转 90°" aria-label="向右旋转 90°">
               <span class="material-symbols-outlined">rotate_90_degrees_cw</span>
             </button>
-            <button class="icon-button ${currentTransform.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-pressed="${currentTransform.flipHorizontal ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-label="左右翻转" aria-pressed="${currentTransform.flipHorizontal ? 'true' : 'false'}">
               <span class="material-symbols-outlined">flip</span>
             </button>
-            <button class="icon-button ${currentTransform.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-pressed="${currentTransform.flipVertical ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-label="上下翻转" aria-pressed="${currentTransform.flipVertical ? 'true' : 'false'}">
               <span class="material-symbols-outlined">swap_vert</span>
             </button>
-            <div class="manual-footer__toggle">
-              <span class="manual-footer__toggle-label">保持原格式</span>
-              <button class="switch ${config.keepOriginalFormat ? 'is-on' : ''}" data-action="toggle-manual-crop-keep-format" aria-pressed="${config.keepOriginalFormat ? 'true' : 'false'}"></button>
+            <button
+              class="icon-button ${config.keepOriginalFormat ? 'is-active' : ''}"
+              data-action="toggle-manual-crop-keep-format"
+              title="保持原格式"
+              aria-label="保持原格式"
+              aria-pressed="${config.keepOriginalFormat ? 'true' : 'false'}"
+            >
+              <span class="material-symbols-outlined">image</span>
+            </button>
+            <button
+              class="icon-button ${config.snapEnabled ? 'is-active' : ''}"
+              data-action="toggle-manual-crop-snap"
+              title="${config.snapEnabled ? '关闭边缘吸附' : '开启边缘吸附'}"
+              aria-label="${config.snapEnabled ? '关闭边缘吸附' : '开启边缘吸附'}"
+              aria-pressed="${config.snapEnabled ? 'true' : 'false'}"
+            >
+              <span class="material-symbols-outlined">attractions</span>
+            </button>
+            <div class="select-shell select-shell--up manual-footer__ratio-shell">
+              <button
+                type="button"
+                class="icon-button manual-footer__ratio-trigger"
+                data-action="toggle-config-select"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                title="吸附强度"
+                aria-label="吸附强度"
+              >
+                <span class="material-symbols-outlined">tune</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${MANUAL_CROP_SNAP_STRENGTH_OPTIONS.map((item) => `
+                  <button
+                    type="button"
+                    class="select-shell__option ${config.snapStrength === item.value ? 'is-active' : ''}"
+                    data-action="set-manual-crop-snap-strength"
+                    data-value="${item.value}"
+                  >${item.label}</button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="select-shell select-shell--up manual-footer__ratio-shell">
+              <button
+                type="button"
+                class="icon-button manual-footer__ratio-trigger"
+                data-action="toggle-config-select"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                title="图片外空白"
+              >
+                <span class="material-symbols-outlined">background_replace</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${MANUAL_CROP_OUTER_AREA_OPTIONS.map((item) => `
+                  <button
+                    type="button"
+                    class="select-shell__option ${config.outerAreaMode === item.value ? 'is-active' : ''}"
+                    data-action="set-manual-crop-outer-area-mode"
+                    data-value="${item.value}"
+                  >${item.label}</button>
+                `).join('')}
+              </div>
             </div>
           </div>
         </div>
         <div class="manual-footer__right">
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
+            <button class="icon-button" data-action="manual-crop-prev" title="上一张" aria-label="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
+              <span class="material-symbols-outlined">chevron_left</span>
+            </button>
             <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="manual-crop-complete" ${!hasCurrent || state.isProcessing ? 'disabled' : ''}>
-              ${state.isProcessing ? '剪裁中...' : '剪裁并下一张'}
+              ${state.isProcessing ? '剪裁中...' : (isLastImage ? '剪裁并完成' : '剪裁并下一张')}
+            </button>
+            <button class="icon-button" data-action="manual-crop-next" title="下一张" aria-label="下一张" ${!hasCurrent || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
+              <span class="material-symbols-outlined">chevron_right</span>
             </button>
           </div>
         </div>
@@ -138,10 +235,10 @@ export function renderManualCropPage(state) {
   `
 }
 
-function resolveCropArea(asset, config) {
+function resolveCropArea(asset, config, stageMetrics = getPreviewStageMetrics(asset, config)) {
   const saved = config.cropAreas?.[asset.id]
-  const { width, height } = getPreviewDisplaySize(asset, config)
-  const area = saved || getInheritedCropArea(asset, config) || getDefaultCropArea(width, height, config.ratioValue || currentRatioValue(config))
+  const { width, height } = stageMetrics
+  const area = saved || getInheritedCropArea(asset, config, stageMetrics) || getDefaultCropArea(asset, config.ratioValue || currentRatioValue(config), config, stageMetrics)
   return {
     x: area.x,
     y: area.y,
@@ -154,11 +251,11 @@ function resolveCropArea(asset, config) {
   }
 }
 
-function getInheritedCropArea(asset, config) {
+function getInheritedCropArea(asset, config, stageMetrics = getPreviewStageMetrics(asset, config)) {
   const seed = config.lastCompletedCropSeed
   if (!seed) return null
   if (String(seed.ratioValue || '') !== String(config.ratioValue || currentRatioValue(config))) return null
-  const { width, height } = getPreviewDisplaySize(asset, config)
+  const { width, height } = stageMetrics
   if (seed?.area && (seed.assetWidth || 0) === width && (seed.assetHeight || 0) === height) {
     return { ...seed.area }
   }
@@ -169,7 +266,7 @@ function getInheritedCropArea(asset, config) {
   const cropHeight = Math.max(40, Math.round(cropWidth / ratio))
   const centerX = Math.round(Number(seed.normalizedArea.centerX || 0.5) * width)
   const centerY = Math.round(Number(seed.normalizedArea.centerY || 0.5) * height)
-  return clampCropAreaToAsset({
+  return clampCropAreaToStage({
     x: Math.round(centerX - cropWidth / 2),
     y: Math.round(centerY - cropHeight / 2),
     width: cropWidth,
@@ -177,7 +274,7 @@ function getInheritedCropArea(asset, config) {
   }, width, height)
 }
 
-function clampCropAreaToAsset(area, width, height) {
+function clampCropAreaToStage(area, width, height) {
   const nextWidth = Math.min(width, Math.max(40, Math.round(area.width)))
   const nextHeight = Math.min(height, Math.max(40, Math.round(area.height)))
   return {
@@ -188,7 +285,9 @@ function clampCropAreaToAsset(area, width, height) {
   }
 }
 
-function getDefaultCropArea(width, height, ratioValue) {
+function getDefaultCropArea(asset, ratioValue, config, stage = getPreviewStageMetrics(asset, config)) {
+  const width = Math.max(1, stage.imageWidth || 1)
+  const height = Math.max(1, stage.imageHeight || 1)
   const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
   const targetRatio = ratioX / ratioY
   let cropWidth = width
@@ -198,8 +297,8 @@ function getDefaultCropArea(width, height, ratioValue) {
     cropWidth = Math.round(cropHeight * targetRatio)
   }
   return {
-    x: Math.max(0, Math.round((width - cropWidth) / 2)),
-    y: Math.max(0, Math.round((height - cropHeight) / 2)),
+    x: Math.round(stage.imageX + (width - cropWidth) / 2),
+    y: Math.round(stage.imageY + (height - cropHeight) / 2),
     width: cropWidth,
     height: cropHeight,
   }
@@ -210,20 +309,27 @@ function currentRatioValue(config) {
   return matched?.value || config.ratioValue || '16:9'
 }
 
-function getPreviewDisplaySize(asset, config) {
-  const width = Math.max(1, Number(asset?.width) || 1)
-  const height = Math.max(1, Number(asset?.height) || 1)
-  const transform = getAssetTransformState(asset, config)
-  const normalizedAngle = Math.abs(Number(transform.angle) || 0) % 180
-  return normalizedAngle === 90
-    ? { width: height, height: width }
-    : { width, height }
+function getPreviewDisplaySize(asset, transform = getAssetTransformState(asset, {})) {
+  return computeManualCropDisplaySize(asset?.width, asset?.height, transform.angle)
 }
 
-function getPreviewSvgMarkup(asset, config, displaySize) {
+function getPreviewStageMetrics(asset, config, display = getPreviewDisplaySize(asset, getAssetTransformState(asset, config)), transform = getAssetTransformState(asset, config)) {
+  return computeManualCropStageMetrics({
+    sourceWidth: asset?.width,
+    sourceHeight: asset?.height,
+    angle: transform.angle,
+    stageWidth: config.stageWidth,
+    stageHeight: config.stageHeight,
+    viewScale: transform.viewScale,
+    viewOffsetX: transform.viewOffsetX,
+    viewOffsetY: transform.viewOffsetY,
+  })
+}
+
+function getPreviewSvgMarkup(asset, displaySize, transform = getAssetTransformState(asset, {})) {
   const sourceWidth = Math.max(1, Number(asset?.width) || 1)
   const sourceHeight = Math.max(1, Number(asset?.height) || 1)
-  const matrix = getPreviewMatrix(asset, sourceWidth, sourceHeight, config)
+  const matrix = getPreviewMatrix(sourceWidth, sourceHeight, transform)
   return `
     <svg class="manual-canvas__preview-svg" viewBox="0 0 ${displaySize.width} ${displaySize.height}" preserveAspectRatio="none" aria-hidden="true">
       <g transform="matrix(${matrix.join(' ')})">
@@ -233,8 +339,7 @@ function getPreviewSvgMarkup(asset, config, displaySize) {
   `
 }
 
-function getPreviewMatrix(asset, sourceWidth, sourceHeight, config) {
-  const transform = getAssetTransformState(asset, config)
+function getPreviewMatrix(sourceWidth, sourceHeight, transform) {
   let matrix = [1, 0, 0, 1, 0, 0]
   const normalizedAngle = ((Math.round(Number(transform.angle) || 0) % 360) + 360) % 360
   if (normalizedAngle === 90) matrix = composeSvgMatrix(matrix, [0, 1, -1, 0, sourceHeight, 0])
@@ -259,6 +364,9 @@ function getAssetTransformState(asset, config) {
     angle: Number(saved?.angle ?? config?.angle ?? 0) || 0,
     flipHorizontal: Boolean(saved?.flipHorizontal ?? config?.flipHorizontal),
     flipVertical: Boolean(saved?.flipVertical ?? config?.flipVertical),
+    viewScale: Math.max(0.5, Number(saved?.viewScale ?? config?.viewScale ?? 1) || 1),
+    viewOffsetX: Math.round(Number(saved?.viewOffsetX ?? config?.viewOffsetX ?? 0) || 0),
+    viewOffsetY: Math.round(Number(saved?.viewOffsetY ?? config?.viewOffsetY ?? 0) || 0),
   }
 }
 

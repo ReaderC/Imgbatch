@@ -12,13 +12,32 @@
       "code": "image-batch",
       "explain": "批量处理图片并输出处理结果",
       "icon": "logo.png",
-      "cmds": [
-        "图片批处理",
-        {
-          "type": "img",
-          "label": "图片批量处理"
-        }
-      ]
-    }
+        "cmds": [
+          "图片批处理",
+          {
+            "type": "img",
+            "label": "图片批量处理"
+          },
+          {
+            "type": "files",
+            "label": "图片批量处理",
+            "fileType": "file",
+            "extensions": [
+              "jpg",
+              "jpeg",
+              "png",
+              "webp",
+              "gif",
+              "bmp",
+              "tif",
+              "tiff",
+              "avif",
+              "heic",
+              "heif"
+            ],
+            "minLength": 1
+          }
+        ]
+      }
   ]
 }

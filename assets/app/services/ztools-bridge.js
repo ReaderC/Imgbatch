@@ -55,6 +55,21 @@ export async function runTool(toolId, config, assets, destinationPath) {
   return window.imgbatch.runTool(toolId, config, assets, destinationPath)
 }
 
+export async function prepareRunPayload(toolId, config, assets, destinationPath) {
+  if (!hasBridge() || typeof window.imgbatch.prepareRunPayload !== 'function') {
+    return {
+      toolId,
+      config,
+      assets,
+      destinationPath,
+      baseDestinationPath: destinationPath,
+      runFolderName: '',
+      mode: 'direct',
+    }
+  }
+  return window.imgbatch.prepareRunPayload(toolId, config, assets, destinationPath)
+}
+
 export async function cancelRun(runId) {
   if (!hasBridge() || typeof window.imgbatch.cancelRun !== 'function') return false
   return window.imgbatch.cancelRun(runId)

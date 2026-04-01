@@ -3,6 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { execFileSync } = require('child_process')
+const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.avif', '.ico'
@@ -714,11 +715,17 @@ function normalizeRunConfig(toolId, config = {}) {
       ratioValue: sanitizeText(config.ratioValue, '16:9'),
       currentIndex: Math.max(0, toInteger(config.currentIndex, 0)),
       completedIds: uniqueStrings(config.completedIds),
-      skippedIds: uniqueStrings(config.skippedIds),
       cropAreas: config.cropAreas && typeof config.cropAreas === 'object' ? config.cropAreas : {},
       angle: clampNumber(config.angle, -180, 180, 0),
       flipHorizontal: Boolean(config.flipHorizontal),
       flipVertical: Boolean(config.flipVertical),
+      viewScale: clampNumber(config.viewScale, 0.5, 3, 1),
+      viewOffsetX: toInteger(config.viewOffsetX, 0),
+      viewOffsetY: toInteger(config.viewOffsetY, 0),
+      stageWidth: Math.max(320, toInteger(config.stageWidth, 1600)),
+      stageHeight: Math.max(240, toInteger(config.stageHeight, 900)),
+      outerAreaMode: pickOption(String(config.outerAreaMode || ''), ['trim', 'white'], 'trim'),
+      sessionOutputPath: sanitizeText(config.sessionOutputPath),
       keepOriginalFormat: config.keepOriginalFormat !== false,
     }
   }
@@ -729,6 +736,28 @@ function normalizeRunConfig(toolId, config = {}) {
 function prepareRunPayload(toolId, config, assets, destinationPath) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
+  const manualCropSessionPath = toolId === 'manual-crop' ? sanitizeText(normalizedConfig.sessionOutputPath) : ''
+  if (manualCropSessionPath) {
+    const createdAt = new Date().toISOString()
+    const resolvedRunPath = path.resolve(manualCropSessionPath)
+    return {
+      toolId,
+      toolLabel: TOOL_LABELS[toolId] || toolId,
+      config: normalizedConfig,
+      assets: normalizedAssets,
+      destinationPath: resolvedRunPath,
+      baseDestinationPath: path.dirname(resolvedRunPath),
+      output: {
+        destinationPath: path.dirname(resolvedRunPath),
+        strategy: 'manual-crop-session',
+      },
+      queuedCount: normalizedAssets.length,
+      summary: summarizeConfig(toolId, normalizedConfig),
+      createdAt,
+      runId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      runFolderName: path.basename(resolvedRunPath),
+    }
+  }
   const output = resolveDestinationPath(destinationPath, normalizedAssets, getAppSettings())
   const createdAt = new Date().toISOString()
   const run = createRunDescriptor(output.destinationPath, toolId, createdAt)
@@ -1182,6 +1211,17 @@ function getOutputName(asset, toolId, format) {
   const parsed = path.parse(asset.name || path.basename(asset.sourcePath))
   const outputExtension = format === 'jpeg' ? 'jpg' : format
   return `${parsed.name}-${toolId}.${outputExtension}`
+}
+
+function resolveUniqueOutputPath(outputPath) {
+  if (!fs.existsSync(outputPath)) return outputPath
+  const parsed = path.parse(outputPath)
+  let index = 2
+  while (true) {
+    const candidate = path.join(parsed.dir, `${parsed.name}-${index}${parsed.ext}`)
+    if (!fs.existsSync(candidate)) return candidate
+    index += 1
+  }
 }
 
 function createTransformerFromInput(sharpLib, input, ext = '') {
@@ -2061,14 +2101,25 @@ function getCropDisplaySize(asset, config, toolId = 'crop') {
   const assetWidth = Math.max(1, asset.width || 1)
   const assetHeight = Math.max(1, asset.height || 1)
   if (toolId !== 'manual-crop') return { width: assetWidth, height: assetHeight }
-  const normalizedAngle = Math.abs(Math.round(Number(config.angle) || 0)) % 180
-  return normalizedAngle === 90
-    ? { width: assetHeight, height: assetWidth }
-    : { width: assetWidth, height: assetHeight }
+  return computeManualCropDisplaySize(assetWidth, assetHeight, config.angle)
+}
+
+function getManualCropStageMetrics(asset, config) {
+  return computeManualCropStageMetrics({
+    sourceWidth: asset?.width,
+    sourceHeight: asset?.height,
+    angle: config.angle,
+    stageWidth: config.stageWidth,
+    stageHeight: config.stageHeight,
+    viewScale: config.viewScale,
+    viewOffsetX: config.viewOffsetX,
+    viewOffsetY: config.viewOffsetY,
+  })
 }
 
 function normalizeCropBox(asset, config, toolId = 'crop') {
-  const { width: assetWidth, height: assetHeight } = getCropDisplaySize(asset, config, toolId)
+  const stageMetrics = toolId === 'manual-crop' ? getManualCropStageMetrics(asset, config) : null
+  const { width: assetWidth, height: assetHeight } = stageMetrics || getCropDisplaySize(asset, config, toolId)
   const mode = toolId === 'manual-crop'
     ? 'size'
     : (config.mode === 'size' ? 'size' : 'ratio')
@@ -2106,11 +2157,68 @@ function normalizeCropBox(asset, config, toolId = 'crop') {
   return { left, top, width, height }
 }
 
+async function renderManualCropSelection(sharpLib, transformed, box, stageMetrics, alphaCapable, outerAreaMode = 'trim') {
+  const scaleX = stageMetrics.sourceWidth / Math.max(1, stageMetrics.imageWidth)
+  const scaleY = stageMetrics.sourceHeight / Math.max(1, stageMetrics.imageHeight)
+  const cropLeft = Math.round(box.left - stageMetrics.imageX)
+  const cropTop = Math.round(box.top - stageMetrics.imageY)
+  const cropRight = cropLeft + box.width
+  const cropBottom = cropTop + box.height
+  const intersectionLeft = Math.max(0, cropLeft)
+  const intersectionTop = Math.max(0, cropTop)
+  const intersectionRight = Math.min(stageMetrics.imageWidth, cropRight)
+  const intersectionBottom = Math.min(stageMetrics.imageHeight, cropBottom)
+  const intersectionWidth = Math.max(0, intersectionRight - intersectionLeft)
+  const intersectionHeight = Math.max(0, intersectionBottom - intersectionTop)
+  const mode = outerAreaMode === 'white' ? 'white' : 'trim'
+  const outputWidth = Math.max(1, Math.round(box.width * scaleX))
+  const outputHeight = Math.max(1, Math.round(box.height * scaleY))
+  const intersectionOutputWidth = Math.max(0, Math.round(intersectionWidth * scaleX))
+  const intersectionOutputHeight = Math.max(0, Math.round(intersectionHeight * scaleY))
+  const canvasWidth = mode === 'white' ? outputWidth : Math.max(1, intersectionOutputWidth)
+  const canvasHeight = mode === 'white' ? outputHeight : Math.max(1, intersectionOutputHeight)
+  const background = mode === 'white' ? OPAQUE_WHITE_BG : (alphaCapable ? TRANSPARENT_BG : OPAQUE_WHITE_BG)
+  let canvas = sharpLib({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 4,
+      background,
+    },
+  })
+
+  if (intersectionWidth > 0 && intersectionHeight > 0) {
+    const sourceLeft = Math.max(0, Math.round(intersectionLeft * scaleX))
+    const sourceTop = Math.max(0, Math.round(intersectionTop * scaleY))
+    const sourceWidth = Math.max(1, Math.round(intersectionWidth * scaleX))
+    const sourceHeight = Math.max(1, Math.round(intersectionHeight * scaleY))
+    const extracted = await transformed
+      .clone()
+      .extract({
+        left: Math.min(sourceLeft, Math.max(0, stageMetrics.sourceWidth - 1)),
+        top: Math.min(sourceTop, Math.max(0, stageMetrics.sourceHeight - 1)),
+        width: Math.min(sourceWidth, stageMetrics.sourceWidth - Math.min(sourceLeft, Math.max(0, stageMetrics.sourceWidth - 1))),
+        height: Math.min(sourceHeight, stageMetrics.sourceHeight - Math.min(sourceTop, Math.max(0, stageMetrics.sourceHeight - 1))),
+      })
+      .png()
+      .toBuffer()
+    canvas = canvas.composite([{
+      input: extracted,
+      left: mode === 'white' ? Math.max(0, Math.round(-cropLeft * scaleX)) : 0,
+      top: mode === 'white' ? Math.max(0, Math.round(-cropTop * scaleY)) : 0,
+    }])
+  }
+
+  return canvas
+}
+
 async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop', toolId = 'crop') {
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat(toolId, asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
+  const rawOutputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
+  const outputPath = toolId === 'manual-crop' ? resolveUniqueOutputPath(rawOutputPath) : rawOutputPath
   const box = normalizeCropBox(asset, config, toolId)
+  const manualStageMetrics = toolId === 'manual-crop' ? getManualCropStageMetrics(asset, config) : null
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
@@ -2118,8 +2226,10 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const hasFlipHorizontal = Boolean(config.flipHorizontal)
   const hasFlipVertical = Boolean(config.flipVertical)
   const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
+  const alphaCapable = isAlphaCapableFormat(format)
 
-  if (sourceWidth > 0 && sourceHeight > 0
+  if (toolId !== 'manual-crop'
+    && sourceWidth > 0 && sourceHeight > 0
     && sourceFormat === format
     && !hasTransform
     && box.left === 0
@@ -2128,7 +2238,8 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.height === sourceHeight) {
     return copyAssetToOutput(asset, outputPath)
   }
-  if (sourceWidth > 0 && sourceHeight > 0
+  if (toolId !== 'manual-crop'
+    && sourceWidth > 0 && sourceHeight > 0
     && !hasTransform
     && box.left === 0
     && box.top === 0
@@ -2141,23 +2252,29 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   }
 
   let transformed = createTransformer(sharpLib, asset)
-  if (toolId === 'manual-crop' && hasTransform) {
+  if (toolId === 'manual-crop') {
     if (angle !== 0) {
       transformed = transformed.rotate(angle, {
-        background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
+        background: alphaCapable ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
       })
     }
     if (hasFlipHorizontal) transformed = transformed.flop()
     if (hasFlipVertical) transformed = transformed.flip()
-    const transformedBuffer = await transformed.png().toBuffer()
-    transformed = sharpLib(transformedBuffer).extract(box)
+    transformed = await renderManualCropSelection(
+      sharpLib,
+      transformed,
+      box,
+      manualStageMetrics,
+      alphaCapable,
+      config.outerAreaMode,
+    )
   } else {
     transformed = transformed.extract(box)
     if (hasFlipHorizontal) transformed = transformed.flop()
     if (hasFlipVertical) transformed = transformed.flip()
     if (angle !== 0) {
       transformed = transformed.rotate(angle, {
-        background: isAlphaCapableFormat(format) ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
+        background: alphaCapable ? TRANSPARENT_BG : OPAQUE_WHITE_BG,
       })
     }
   }
@@ -2592,6 +2709,9 @@ async function executeAssetTool(sharpLib, payload, asset) {
       angle: clampNumber(manualArea?.angle ?? payload.config.angle, -180, 180, 0),
       flipHorizontal: Boolean(manualArea?.flipHorizontal ?? payload.config.flipHorizontal),
       flipVertical: Boolean(manualArea?.flipVertical ?? payload.config.flipVertical),
+      viewScale: clampNumber(manualArea?.viewScale ?? payload.config.viewScale, 0.5, 3, 1),
+      viewOffsetX: toInteger(manualArea?.viewOffsetX ?? payload.config.viewOffsetX, 0),
+      viewOffsetY: toInteger(manualArea?.viewOffsetY ?? payload.config.viewOffsetY, 0),
     }
     return writeCropAsset(sharpLib, asset, {
       ratio: payload.config.ratioValue || payload.config.ratio,
@@ -2599,6 +2719,12 @@ async function executeAssetTool(sharpLib, payload, asset) {
       angle: manualTransform.angle,
       flipHorizontal: manualTransform.flipHorizontal,
       flipVertical: manualTransform.flipVertical,
+      viewScale: manualTransform.viewScale,
+      viewOffsetX: manualTransform.viewOffsetX,
+      viewOffsetY: manualTransform.viewOffsetY,
+      stageWidth: payload.config.stageWidth,
+      stageHeight: payload.config.stageHeight,
+      outerAreaMode: payload.config.outerAreaMode,
       keepOriginalFormat: payload.config.keepOriginalFormat,
     }, payload.destinationPath, 'manual-crop', 'manual-crop')
   }

@@ -2457,6 +2457,11 @@ body {
   line-height: 1.55;
 }
 
+.manual-crop__help {
+  top: 60px;
+  right: 34px;
+}
+
 .preview-modal__body {
   min-height: 0;
   overflow: auto;
@@ -3974,20 +3979,14 @@ body {
 
 .manual-canvas__stage {
   position: absolute;
-  inset: 12px 24px 12px 24px;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 72px;
-  align-items: center;
-  justify-items: center;
-  gap: 18px;
+  inset: 0;
+  display: block;
 }
 
 .manual-canvas__image {
   position: relative;
-  aspect-ratio: var(--display-width) / var(--display-height) !important;
-  width: min(100%, calc((100dvh - 168px) * (var(--display-width) / var(--display-height))));
-  max-width: 100%;
-  max-height: calc(100dvh - 168px);
+  width: 100%;
+  height: 100%;
   border-radius: 0;
   overflow: hidden;
   box-shadow: none;
@@ -4001,9 +4000,26 @@ body {
   overflow: hidden;
 }
 
+.manual-canvas__empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(520px, calc(100% - 32px));
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--on-surface);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(28, 34, 79, 0.08);
+}
+
 .manual-canvas__preview {
   position: absolute;
-  inset: 0;
+  inset: auto;
   pointer-events: none;
 }
 
@@ -4165,23 +4181,6 @@ body {
 
 .manual-footer__ratio-select {
   min-width: 84px;
-}
-
-.manual-footer__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--primary);
-  white-space: nowrap;
-}
-
-.manual-footer__toggle-label {
-  font-size: 13px;
-  font-weight: 700;
 }
 
 .manual-footer__left,
@@ -4764,7 +4763,12 @@ body {
 .manual-footer__ratio-shell > .select-shell__menu {
   left: 0 !important;
   right: auto !important;
-  min-width: 88px;
+  min-width: 120px;
+  width: max-content;
+}
+
+.manual-footer__ratio-shell > .select-shell__menu .select-shell__option {
+  white-space: nowrap;
 }
 
 .manual-toolbar--crop .icon-button,
@@ -4795,24 +4799,19 @@ body {
   justify-content: flex-end;
 }
 
-.manual-stage-nav {
-  width: 52px;
-  height: 52px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--primary);
-  box-shadow: var(--shadow-soft);
-}
-
-.manual-stage-nav[disabled] {
-  opacity: 0.45;
-}
-
 .manual-toolbar--crop-actions {
   min-width: auto;
+  gap: 12px;
 }
 
+.manual-toolbar--crop-actions .icon-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.manual-toolbar--crop-actions .footer-button,
 .manual-toolbar--crop-actions .primary-button {
   border-radius: 12px;
 }

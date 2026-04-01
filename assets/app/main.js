@@ -1,7 +1,27 @@
 import { TOOL_MAP } from './config/tools.js'
 import { renderAppShell } from './components/AppShell.js'
+import {
+  applyManualCropSnap,
+  clampManualCropArea,
+  createDefaultManualCropArea,
+  createManualCropSeed,
+  ensureManualCropAreaForAsset,
+  findNextManualCropIndex,
+  getInheritedManualCropArea,
+  getManualCropArea,
+  getManualCropAssetState,
+  getManualCropDisplaySize,
+  getManualCropGlobalTransformPatch,
+  getManualCropSelection,
+  getManualCropSnapThreshold,
+  getManualCropStageMetrics,
+  mergeManualCropAreaPatch,
+  moveManualCropArea,
+  patchCurrentManualCropArea,
+  resizeManualCropArea,
+} from './lib/manual-crop-helpers.js'
 import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
+import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -41,6 +61,7 @@ watermarkFileInput.multiple = false
 const DRAG_CONTEXT = {
   rotateDial: null,
   manualCrop: null,
+  manualCropPan: null,
   previewCompare: null,
   previewPan: null,
   queueSort: null,
@@ -48,6 +69,11 @@ const DRAG_CONTEXT = {
 let resultMarqueeFrame = 0
 let activeTooltipTarget = null
 let tooltipElement = null
+let manualCropStageSyncFrame = 0
+let manualCropConfigUpdateFrame = 0
+let pendingManualCropConfigReducers = []
+let postRenderFrame = 0
+let pendingPostRenderWork = null
 
 document.body.append(fileInput, folderInput, watermarkFileInput)
 subscribe(render)
@@ -601,6 +627,54 @@ function refreshResultView() {
   })
 }
 
+function showManualCropSummaryResultView(completedIds) {
+  const state = getState()
+  const handledIds = new Set(Array.isArray(completedIds) ? completedIds : [])
+  const items = state.assets
+    .filter((asset) => handledIds.has(asset.id))
+    .map((asset) => {
+      const outputPath = getSavedOutputPath(asset) || asset.outputPath || ''
+      if (!outputPath) return null
+      const normalizedOutputPath = String(outputPath).replaceAll('\\', '/')
+      const resultName = normalizedOutputPath.split('/').pop() || asset.name || ''
+      return {
+        assetId: asset.id,
+        name: asset.name,
+        beforeUrl: asset.thumbnailUrl || '',
+        afterUrl: outputPath,
+        outputPath,
+        source: {
+          name: asset.name || '',
+          sizeBytes: asset.sizeBytes || 0,
+          width: asset.width || 0,
+          height: asset.height || 0,
+        },
+        result: {
+          name: resultName,
+          sizeBytes: asset.stagedSizeBytes || asset.sizeBytes || 0,
+          width: asset.stagedWidth || asset.width || 0,
+          height: asset.stagedHeight || asset.height || 0,
+        },
+        summary: getPreviewMessage(asset),
+      }
+    })
+    .filter(Boolean)
+
+  if (!items.length) {
+    setResultView(null)
+    return
+  }
+
+  setResultView({
+    runId: state.activeRun?.runId || '',
+    toolId: 'manual-crop',
+    mode: 'direct',
+    items,
+    failed: [],
+    createdAt: Date.now(),
+  })
+}
+
 function updateColorPreview(toolId, key, value) {
   updateConfig(toolId, { [key]: value })
 }
@@ -626,6 +700,7 @@ function syncResultMarquees() {
 }
 
 function queueResultMarqueeSync() {
+  if (!document.querySelector('.result-strip__marquee')) return
   if (resultMarqueeFrame) cancelAnimationFrame(resultMarqueeFrame)
   resultMarqueeFrame = requestAnimationFrame(() => {
     resultMarqueeFrame = 0
@@ -684,6 +759,18 @@ async function replaceAssetOriginal(assetId) {
 }
 
 async function openCurrentResultsDirectory() {
+  const state = getState()
+  if (state.activeTool === 'manual-crop') {
+    const config = state.configs['manual-crop']
+    const currentAsset = state.assets[config.currentIndex]
+    const currentTargetPath = config.sessionOutputPath || getLatestAssetResultPath(currentAsset) || state.assets.map((item) => getLatestAssetResultPath(item)).find(Boolean) || ''
+    if (!currentTargetPath) {
+      notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
+      return
+    }
+    await openResultPath(currentTargetPath)
+    return
+  }
   if (!hasVisibleResultComparison()) {
     refreshResultView()
     const visible = !!getState().resultView?.items?.length
@@ -708,12 +795,12 @@ async function openCurrentResultsDirectory() {
     await openSourceDirectories(sourceDirectories)
     return
   }
-  const asset = getState().assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item))
+  const asset = state.assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item) || item.outputPath)
   if (!asset) {
     notify({ type: 'info', message: '当前没有可打开的结果目录。' })
     return
   }
-  const targetPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath || ''
+  const targetPath = getLatestAssetResultPath(asset)
   if (!targetPath) {
     notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
     return
@@ -992,16 +1079,57 @@ function getAssetsForTool(toolId, assets) {
   return assets.filter((asset) => getState().configs['manual-crop'].completedIds.includes(asset.id))
 }
 
-function findNextManualCropIndex(config, assets, startIndex) {
-  if (!assets.length) return 0
-  const handled = new Set([...(config.completedIds || []), ...(config.skippedIds || [])])
-  for (let index = startIndex; index < assets.length; index += 1) {
-    if (!handled.has(assets[index].id)) return index
+async function ensureManualCropSessionOutputPath(toolId, config, asset, destinationPath) {
+  if (config.sessionOutputPath) return config
+  const prepared = await prepareRunPayload(toolId, config, [asset], destinationPath)
+  const sessionOutputPath = prepared?.destinationPath || ''
+  if (!sessionOutputPath) return config
+  updateConfig('manual-crop', { sessionOutputPath })
+  return { ...config, sessionOutputPath }
+}
+
+function advanceManualCropAfterSuccess(asset, latestState, latestConfig) {
+  const completedIds = [...latestConfig.completedIds]
+  if (!completedIds.includes(asset.id)) completedIds.push(asset.id)
+
+  const isFinishingOnLastImage = latestConfig.currentIndex >= latestState.assets.length - 1
+  const isAllCompleted = latestState.assets.length > 0 && completedIds.length >= latestState.assets.length
+  if (!isAllCompleted && !isFinishingOnLastImage) {
+    setResultView(null)
+  } else {
+    showManualCropSummaryResultView(completedIds)
   }
-  for (let index = 0; index < startIndex; index += 1) {
-    if (!handled.has(assets[index].id)) return index
+
+  const completedArea = (latestConfig.cropAreas && latestConfig.cropAreas[asset.id])
+    || createDefaultManualCropArea(asset, latestConfig.ratioValue || '16:9', latestConfig)
+  const lastCompletedCropSeed = createManualCropSeed(asset, latestConfig, completedArea)
+
+  if (isFinishingOnLastImage) {
+    updateConfig('manual-crop', {
+      completedIds,
+      cropAreas: latestConfig.cropAreas || {},
+      lastCompletedCropSeed,
+      ...getManualCropGlobalTransformPatch(asset, latestConfig),
+    })
+    notify({ type: 'success', message: '当前图片已裁剪，本轮处理完成。' })
+    return
   }
-  return Math.min(startIndex, assets.length - 1)
+
+  const nextIndex = findNextManualCropIndex(
+    { ...latestConfig, completedIds },
+    latestState.assets,
+    Math.min(latestConfig.currentIndex + 1, Math.max(latestState.assets.length - 1, 0)),
+  )
+  const nextAsset = latestState.assets[nextIndex]
+  const cropAreas = ensureManualCropAreaForAsset(nextAsset, { ...latestConfig, lastCompletedCropSeed })
+  updateConfig('manual-crop', {
+    completedIds,
+    currentIndex: nextIndex,
+    cropAreas,
+    lastCompletedCropSeed,
+    ...getManualCropGlobalTransformPatch(nextAsset, latestConfig),
+  })
+  notify({ type: 'success', message: '当前图片已裁剪，并切换到下一张。' })
 }
 
 function closeConfigSelect(target) {
@@ -1038,13 +1166,152 @@ function getSavedOutputPath(asset) {
   return asset.savedOutputPath || ''
 }
 
+function getLatestAssetResultPath(asset) {
+  return getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset?.outputPath || ''
+}
+
 function render(state) {
   const snapshot = captureUiSnapshot()
   app.innerHTML = renderAppShell(state) + renderNotifications(state.notifications)
-  injectResultToolbar()
-  restoreUiSnapshot(snapshot)
-  syncCustomTooltips()
-  queueResultMarqueeSync()
+  queuePostRenderWork({
+    snapshot,
+    activeTool: state.activeTool,
+  })
+}
+
+function queuePostRenderWork(work) {
+  pendingPostRenderWork = work
+  if (postRenderFrame) cancelAnimationFrame(postRenderFrame)
+  postRenderFrame = requestAnimationFrame(() => {
+    postRenderFrame = 0
+    const nextWork = pendingPostRenderWork
+    pendingPostRenderWork = null
+    if (!nextWork) return
+    injectResultToolbar()
+    restoreUiSnapshot(nextWork.snapshot)
+    syncCustomTooltips()
+    queueResultMarqueeSync()
+    if (nextWork.activeTool === 'manual-crop') {
+      queueManualCropStageSync()
+    }
+  })
+}
+
+function queueManualCropStageSync() {
+  if (manualCropStageSyncFrame) cancelAnimationFrame(manualCropStageSyncFrame)
+  manualCropStageSyncFrame = requestAnimationFrame(() => {
+    manualCropStageSyncFrame = 0
+    syncManualCropStageViewport()
+  })
+}
+
+function flushManualCropConfigUpdates() {
+  if (!pendingManualCropConfigReducers.length) return
+  if (manualCropConfigUpdateFrame) {
+    cancelAnimationFrame(manualCropConfigUpdateFrame)
+    manualCropConfigUpdateFrame = 0
+  }
+  const reducers = pendingManualCropConfigReducers
+  pendingManualCropConfigReducers = []
+  const state = getState()
+  if (state.activeTool !== 'manual-crop') return
+  let nextConfig = state.configs['manual-crop']
+  let changed = false
+  for (const reducer of reducers) {
+    const patch = reducer(nextConfig, state)
+    if (!patch || typeof patch !== 'object') continue
+    nextConfig = { ...nextConfig, ...patch }
+    changed = true
+  }
+  if (changed) {
+    updateConfig('manual-crop', nextConfig)
+  }
+}
+
+function queueManualCropConfigUpdate(reducer) {
+  pendingManualCropConfigReducers.push(reducer)
+  if (manualCropConfigUpdateFrame) return
+  manualCropConfigUpdateFrame = requestAnimationFrame(() => {
+    manualCropConfigUpdateFrame = 0
+    flushManualCropConfigUpdates()
+  })
+}
+
+function syncManualCropStageViewport() {
+  const state = getState()
+  if (state.activeTool !== 'manual-crop') return
+  const stage = document.querySelector('[data-role="manual-crop-stage"]')
+  if (!stage) return
+  const rect = stage.getBoundingClientRect()
+  const width = Math.max(320, Math.round(rect.width))
+  const height = Math.max(240, Math.round(rect.height))
+  const config = state.configs['manual-crop']
+  if (Math.abs((config.stageWidth || 0) - width) <= 1 && Math.abs((config.stageHeight || 0) - height) <= 1) return
+  const currentAsset = state.assets[config.currentIndex]
+  if (!currentAsset) {
+    updateConfig('manual-crop', { stageWidth: width, stageHeight: height })
+    return
+  }
+  const previousMetrics = getManualCropStageMetrics(currentAsset, config)
+  const savedArea = config.cropAreas?.[currentAsset.id]
+  const currentState = getManualCropAssetState(currentAsset, config)
+  const nextViewOffsetX = Math.round(Number(currentState.viewOffsetX) || 0)
+  const nextViewOffsetY = Math.round(Number(currentState.viewOffsetY) || 0)
+  const nextMetrics = getManualCropStageMetrics(currentAsset, {
+    ...config,
+    stageWidth: width,
+    stageHeight: height,
+    viewOffsetX: nextViewOffsetX,
+    viewOffsetY: nextViewOffsetY,
+    cropAreas: {
+      ...(config.cropAreas || {}),
+      [currentAsset.id]: savedArea
+        ? {
+            ...savedArea,
+            viewOffsetX: nextViewOffsetX,
+            viewOffsetY: nextViewOffsetY,
+          }
+        : {
+            angle: currentState.angle,
+            flipHorizontal: currentState.flipHorizontal,
+            flipVertical: currentState.flipVertical,
+            viewScale: currentState.viewScale,
+            viewOffsetX: nextViewOffsetX,
+            viewOffsetY: nextViewOffsetY,
+          },
+    },
+  })
+  const nextPatch = {
+    stageWidth: width,
+    stageHeight: height,
+    viewOffsetX: nextViewOffsetX,
+    viewOffsetY: nextViewOffsetY,
+  }
+  if (savedArea) {
+    const normalizedX = (savedArea.x - previousMetrics.imageX) / Math.max(1, previousMetrics.imageWidth)
+    const normalizedY = (savedArea.y - previousMetrics.imageY) / Math.max(1, previousMetrics.imageHeight)
+    const normalizedWidth = savedArea.width / Math.max(1, previousMetrics.imageWidth)
+    const normalizedHeight = savedArea.height / Math.max(1, previousMetrics.imageHeight)
+    nextPatch.cropAreas = {
+      ...(config.cropAreas || {}),
+      [currentAsset.id]: {
+        ...savedArea,
+        x: Math.round(nextMetrics.imageX + normalizedX * nextMetrics.imageWidth),
+        y: Math.round(nextMetrics.imageY + normalizedY * nextMetrics.imageHeight),
+        width: Math.round(normalizedWidth * nextMetrics.imageWidth),
+        height: Math.round(normalizedHeight * nextMetrics.imageHeight),
+        viewOffsetX: nextViewOffsetX,
+        viewOffsetY: nextViewOffsetY,
+      },
+    }
+  }
+  updateConfig('manual-crop', nextPatch)
+}
+
+function isEditableTarget(target) {
+  if (!target) return false
+  const tagName = String(target.tagName || '').toLowerCase()
+  return tagName === 'input' || tagName === 'textarea' || target.isContentEditable
 }
 
 function ensureTooltipElement() {
@@ -1256,6 +1523,24 @@ function attachGlobalEvents() {
         return
       }
     }
+    const manualCropStage = event.target.closest('[data-role="manual-crop-stage"]')
+    if (manualCropStage && getState().activeTool === 'manual-crop') {
+      const state = getState()
+      const config = state.configs['manual-crop']
+      const asset = state.assets[config.currentIndex]
+      if (asset) {
+        event.preventDefault()
+        const currentState = getManualCropAssetState(asset, config)
+        const delta = event.deltaY < 0 ? 0.08 : -0.08
+        const nextScale = Math.max(0.5, Math.min(3, (Number(currentState.viewScale) || 1) + delta))
+        queueManualCropConfigUpdate((latestConfig, latestState) => {
+          const latestAsset = latestState.assets[latestConfig.currentIndex]
+          if (!latestAsset) return null
+          return patchCurrentManualCropArea(latestConfig, latestAsset, { viewScale: Number(nextScale.toFixed(2)) })
+        })
+        return
+      }
+    }
     const scroller = event.target.closest('[data-horizontal-scroll]')
     if (!scroller) return
     if (scroller.scrollWidth <= scroller.clientWidth) return
@@ -1289,6 +1574,11 @@ function attachGlobalEvents() {
       return
     }
     const target = event.target.closest('[data-action]')
+    const manualCropPreview = event.target.closest('[data-role="manual-crop-preview"], [data-role="manual-crop-stage"]')
+    if (manualCropPreview && event.button === 2 && getState().activeTool === 'manual-crop') {
+      beginManualCropPan(event, manualCropPreview)
+      return
+    }
     if (!target) return
     if (target.dataset.action === 'drag-preview-compare') {
       beginPreviewCompareDrag(event, target)
@@ -1445,6 +1735,38 @@ function attachGlobalEvents() {
     }
 
     if (action === 'remove-asset') {
+      if (getState().activeTool === 'manual-crop') {
+        flushManualCropConfigUpdates()
+        const state = getState()
+        const assetId = target.dataset.assetId
+        const config = state.configs['manual-crop']
+        const removeIndex = state.assets.findIndex((item) => item.id === assetId)
+        if (removeIndex !== -1) {
+          const nextAssets = state.assets.filter((item) => item.id !== assetId)
+          const cropAreas = { ...(config.cropAreas || {}) }
+          delete cropAreas[assetId]
+          const completedIds = (config.completedIds || []).filter((id) => id !== assetId)
+          const nextIndex = nextAssets.length
+            ? Math.min(removeIndex <= config.currentIndex ? Math.max(0, config.currentIndex - 1) : config.currentIndex, nextAssets.length - 1)
+            : 0
+          const nextAsset = nextAssets[nextIndex] || null
+          removeAsset(assetId)
+          updateConfig('manual-crop', {
+            currentIndex: nextIndex,
+            completedIds,
+            cropAreas,
+            ...getManualCropGlobalTransformPatch(nextAsset, {
+              ...config,
+              cropAreas,
+            }),
+          })
+          if (!nextAssets.length) {
+            setResultView(null)
+          }
+          notify({ type: 'success', message: '已移除当前图片。' })
+          return
+        }
+      }
       removeAsset(target.dataset.assetId)
       return
     }
@@ -1538,7 +1860,7 @@ function attachGlobalEvents() {
 
     if (action === 'open-asset-result') {
       const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
-      const targetPath = asset ? (getSavedOutputPath(asset) || getPreviewOutputPath(asset) || asset.outputPath || asset.sourcePath) : ''
+      const targetPath = asset ? getLatestAssetResultPath(asset) : ''
       if (!targetPath) {
         notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
         return
@@ -1697,8 +2019,7 @@ function attachGlobalEvents() {
 
     if (action === 'set-manual-crop-ratio') {
       const state = getState()
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
+      const { config, asset } = getManualCropSelection(state)
       const nextPatch = {
         ratio: target.dataset.label,
         ratioValue: target.dataset.value,
@@ -1708,6 +2029,7 @@ function attachGlobalEvents() {
         nextPatch.cropAreas = {
           ...(config.cropAreas || {}),
           [asset.id]: {
+            ...((config.cropAreas || {})[asset.id] || {}),
             ...createDefaultManualCropArea(asset, target.dataset.value, config),
             ...transformState,
           },
@@ -1720,8 +2042,7 @@ function attachGlobalEvents() {
 
     if (action === 'manual-crop-rotate-left' || action === 'manual-crop-rotate-right') {
       const state = getState()
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
+      const { config, asset } = getManualCropSelection(state)
       const step = action === 'manual-crop-rotate-left' ? -90 : 90
       const currentTransform = getManualCropAssetState(asset, config)
       const nextAngle = (((Number(currentTransform.angle) || 0) + step + 540) % 360) - 180
@@ -1737,8 +2058,7 @@ function attachGlobalEvents() {
 
     if (action === 'manual-crop-flip-horizontal') {
       const state = getState()
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
+      const { config, asset } = getManualCropSelection(state)
       const currentTransform = getManualCropAssetState(asset, config)
       updateConfig('manual-crop', patchCurrentManualCropArea(
         config,
@@ -1751,8 +2071,7 @@ function attachGlobalEvents() {
 
     if (action === 'manual-crop-flip-vertical') {
       const state = getState()
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
+      const { config, asset } = getManualCropSelection(state)
       const currentTransform = getManualCropAssetState(asset, config)
       updateConfig('manual-crop', patchCurrentManualCropArea(
         config,
@@ -1769,51 +2088,65 @@ function attachGlobalEvents() {
       return
     }
 
-    if (action === 'toggle-manual-crop-hud') {
-      const state = getState()
-      const config = state.configs['manual-crop']
-      updateConfig('manual-crop', { hudCollapsed: !(config.hudCollapsed !== false) })
+    if (action === 'toggle-manual-crop-help') {
+      const config = getState().configs['manual-crop']
+      updateConfig('manual-crop', { helpOpen: !config.helpOpen })
+      return
+    }
+
+    if (action === 'toggle-manual-crop-snap') {
+      const config = getState().configs['manual-crop']
+      updateConfig('manual-crop', { snapEnabled: !config.snapEnabled })
+      return
+    }
+
+    if (action === 'set-manual-crop-snap-strength') {
+      const nextStrength = new Set(['very-low', 'low', 'medium', 'high', 'very-high']).has(target.dataset.value)
+        ? target.dataset.value
+        : 'very-low'
+      updateConfig('manual-crop', { snapStrength: nextStrength })
+      closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'set-manual-crop-outer-area-mode') {
+      const config = getState().configs['manual-crop']
+      const nextMode = target.dataset.value === 'white' ? 'white' : 'trim'
+      updateConfig('manual-crop', { outerAreaMode: nextMode })
+      closeConfigSelect(target)
       return
     }
 
     if (action === 'manual-crop-prev' || action === 'manual-crop-next') {
+      flushManualCropConfigUpdates()
+      syncManualCropStageViewport()
       const state = getState()
-      const config = state.configs['manual-crop']
-      const currentIndex = config.currentIndex
+      const { config, currentIndex, asset: currentAsset } = getManualCropSelection(state)
       const nextIndex = action === 'manual-crop-prev' ? currentIndex - 1 : currentIndex + 1
       if (nextIndex >= 0 && nextIndex < state.assets.length) {
         const nextAsset = state.assets[nextIndex]
+        const cropAreas = ensureManualCropAreaForAsset(nextAsset, config, currentAsset)
         updateConfig('manual-crop', {
           currentIndex: nextIndex,
+          cropAreas,
           ...getManualCropGlobalTransformPatch(nextAsset, config),
         })
       }
       return
     }
 
-    if (action === 'manual-crop-unmark') {
-      const state = getState()
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
-      if (!asset) return
-      updateConfig('manual-crop', {
-        completedIds: (config.completedIds || []).filter((id) => id !== asset.id),
-        skippedIds: (config.skippedIds || []).filter((id) => id !== asset.id),
-      })
-      notify({ type: 'success', message: '已取消当前图片标记。' })
-      return
-    }
-
     if (action === 'manual-crop-complete') {
+      flushManualCropConfigUpdates()
+      syncManualCropStageViewport()
       const state = getState()
       const tool = TOOL_MAP['manual-crop']
-      const config = state.configs['manual-crop']
-      const asset = state.assets[config.currentIndex]
+      const { config, asset } = getManualCropSelection(state)
       if (!asset || state.isProcessing) return
 
       try {
         const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
-        const result = await runBusyAction(() => runTool(tool.id, config, [asset], destinationPath))
+        const nextConfig = await ensureManualCropSessionOutputPath(tool.id, config, asset, destinationPath)
+        const result = await runBusyAction(() => runTool(tool.id, nextConfig, [asset], destinationPath))
         if (result?.processed?.length || result?.failed?.length) {
           applyRunResult(result)
         }
@@ -1823,57 +2156,10 @@ function attachGlobalEvents() {
         }
 
         const latestState = getState()
-        const latestConfig = latestState.configs['manual-crop']
-        const latestAsset = latestState.assets[latestConfig.currentIndex]
+        const { config: latestConfig, asset: latestAsset } = getManualCropSelection(latestState)
         if (!latestAsset || latestAsset.id !== asset.id) return
-
-        const completedIds = [...latestConfig.completedIds]
-        const skippedIds = [...latestConfig.skippedIds]
-        if (!completedIds.includes(asset.id)) completedIds.push(asset.id)
-        const skipIndex = skippedIds.indexOf(asset.id)
-        if (skipIndex >= 0) skippedIds.splice(skipIndex, 1)
-
-        const nextIndex = findNextManualCropIndex(
-          { ...latestConfig, completedIds, skippedIds },
-          latestState.assets,
-          Math.min(latestConfig.currentIndex + 1, Math.max(latestState.assets.length - 1, 0)),
-        )
-        const completedArea = (latestConfig.cropAreas && latestConfig.cropAreas[asset.id]) || createDefaultManualCropArea(asset, latestConfig.ratioValue || '16:9', latestConfig)
-        const display = getManualCropDisplaySize(asset, latestConfig)
-        const assetWidth = Math.max(1, display.width || 1)
-        const assetHeight = Math.max(1, display.height || 1)
-        const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
-        const lastCompletedCropSeed = {
-          assetWidth,
-          assetHeight,
-          ratioValue: latestConfig.ratioValue || '16:9',
-          area: completedArea,
-          normalizedArea: (() => {
-            return {
-              centerX: (completedArea.x + completedArea.width / 2) / assetWidth,
-              centerY: (completedArea.y + completedArea.height / 2) / assetHeight,
-              scale: completedArea.width / referenceSize,
-              ratio: completedArea.width / Math.max(1, completedArea.height),
-            }
-          })(),
-        }
-        const cropAreas = { ...(latestConfig.cropAreas || {}) }
-        const nextAsset = latestState.assets[nextIndex]
-        if (nextAsset && !cropAreas[nextAsset.id]) {
-          cropAreas[nextAsset.id] = getInheritedManualCropArea(nextAsset, {
-            ...latestConfig,
-            lastCompletedCropSeed,
-          }) || cropAreas[nextAsset.id]
-        }
-        updateConfig('manual-crop', {
-          completedIds,
-          skippedIds,
-          currentIndex: nextIndex,
-          cropAreas,
-          lastCompletedCropSeed,
-          ...getManualCropGlobalTransformPatch(nextAsset, latestConfig),
-        })
-        notify({ type: 'success', message: '当前图片已裁剪，并切换到下一张。' })
+        advanceManualCropAfterSuccess(asset, latestState, latestConfig)
+        return
       } catch (error) {
         notify({ type: 'error', message: error?.message || '当前图片裁剪失败。' })
       }
@@ -2015,6 +2301,10 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointermove', (event) => {
+    if (DRAG_CONTEXT.manualCropPan) {
+      handleManualCropPan(event)
+      return
+    }
     if (DRAG_CONTEXT.previewPan) {
       handlePreviewComparePan(event)
       return
@@ -2033,6 +2323,7 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointerup', () => {
+    endManualCropPan()
     endPreviewComparePan()
     endPreviewCompareDrag()
     endRotateDrag()
@@ -2040,6 +2331,7 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('pointercancel', () => {
+    endManualCropPan()
     endPreviewComparePan()
     endPreviewCompareDrag()
     endRotateDrag()
@@ -2047,6 +2339,10 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('contextmenu', (event) => {
+    if (event.target.closest('[data-role="manual-crop-stage"]') && getState().activeTool === 'manual-crop') {
+      event.preventDefault()
+      return
+    }
     if (!event.target.closest('.preview-modal__body--compare, .preview-modal__body--split')) return
     const preview = getState().previewModal
     const zoom = Number.isFinite(Number(preview?.compareZoom)) ? Number(preview.compareZoom) : 1
@@ -2061,6 +2357,47 @@ function attachGlobalEvents() {
   })
 
   document.addEventListener('keydown', (event) => {
+    if (event.code === 'Space' && getState().activeTool === 'manual-crop' && !isEditableTarget(event.target)) {
+      if (!event.repeat) {
+        const config = getState().configs['manual-crop']
+        updateConfig('manual-crop', { snapEnabled: !config.snapEnabled })
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().activeTool === 'manual-crop' && !isEditableTarget(event.target)) {
+      const arrowDelta = {
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 },
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+      }[event.key]
+      if (arrowDelta) {
+        const state = getState()
+        const config = state.configs['manual-crop']
+        const asset = state.assets[config.currentIndex]
+        if (asset) {
+          const step = event.shiftKey ? 10 : 1
+          queueManualCropConfigUpdate((latestConfig, latestState) => {
+            const latestAsset = latestState.assets[latestConfig.currentIndex]
+            if (!latestAsset) return null
+            const latestArea = getManualCropArea(latestAsset, latestConfig)
+            const movedArea = clampManualCropArea({
+              ...latestArea,
+              x: latestArea.x + arrowDelta.x * step,
+              y: latestArea.y + arrowDelta.y * step,
+            }, latestAsset, latestConfig)
+            return mergeManualCropAreaPatch(latestConfig, latestAsset.id, movedArea)
+          })
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation()
+          return
+        }
+      }
+    }
     const preview = getState().previewModal
     if (!preview?.url) return
     if (event.key === 'Escape') {
@@ -2092,6 +2429,18 @@ function attachGlobalEvents() {
   }, true)
 
   document.addEventListener('keyup', (event) => {
+    if (event.code === 'Space' && getState().activeTool === 'manual-crop') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().activeTool === 'manual-crop' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
     if (!getState().previewModal?.url) return
     if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
@@ -2104,6 +2453,12 @@ function attachGlobalEvents() {
   window.addEventListener('resize', () => {
     positionTooltip(activeTooltipTarget)
     if (activeTooltipTarget) queueResultMarqueeSync()
+    if (getState().activeTool === 'manual-crop') {
+      queueManualCropStageSync()
+    }
+  })
+  window.addEventListener('blur', () => {
+    hideTooltip()
   })
 
   document.addEventListener('dragstart', (event) => {
@@ -2529,12 +2884,14 @@ function beginManualCropDrag(event, target) {
   const asset = state.assets[config.currentIndex]
   if (!asset) return
   const imageRect = stage.getBoundingClientRect()
+  const stageMetrics = getManualCropStageMetrics(asset, config)
   const area = getManualCropArea(asset, config)
   DRAG_CONTEXT.manualCrop = {
     assetId: asset.id,
     pointerId: event.pointerId,
     ratioValue: config.ratioValue || '16:9',
     stageRect: imageRect,
+    stageMetrics,
     area,
     startX: event.clientX,
     startY: event.clientY,
@@ -2544,253 +2901,62 @@ function beginManualCropDrag(event, target) {
   target.setPointerCapture?.(event.pointerId)
 }
 
+function beginManualCropPan(event, target) {
+  const stage = target.closest('[data-role="manual-crop-stage"]')
+  if (!stage) return
+  event.preventDefault()
+  const state = getState()
+  const config = state.configs['manual-crop']
+  const asset = state.assets[config.currentIndex]
+  if (!asset) return
+  const currentState = getManualCropAssetState(asset, config)
+  DRAG_CONTEXT.manualCropPan = {
+    assetId: asset.id,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: Number(currentState.viewOffsetX) || 0,
+    originY: Number(currentState.viewOffsetY) || 0,
+  }
+  target.setPointerCapture?.(event.pointerId)
+}
+
+function handleManualCropPan(event) {
+  const context = DRAG_CONTEXT.manualCropPan
+  if (!context) return
+  if (context.pointerId != null && event.pointerId != null && event.pointerId !== context.pointerId) return
+  const nextOffsetX = Math.round(context.originX + (event.clientX - context.startX))
+  const nextOffsetY = Math.round(context.originY + (event.clientY - context.startY))
+  queueManualCropConfigUpdate((latestConfig, latestState) => {
+    const latestAsset = latestState.assets[latestConfig.currentIndex]
+    if (!latestAsset || latestAsset.id !== context.assetId) return null
+    return patchCurrentManualCropArea(latestConfig, latestAsset, {
+      viewOffsetX: nextOffsetX,
+      viewOffsetY: nextOffsetY,
+    })
+  })
+}
+
 function handleManualCropDrag(event) {
   const context = DRAG_CONTEXT.manualCrop
   if (!context) return
   if (context.pointerId != null && event.pointerId != null && event.pointerId !== context.pointerId) return
-  const state = getState()
-  const config = state.configs['manual-crop']
-  const asset = state.assets[config.currentIndex]
-  if (!asset || asset.id !== context.assetId) return
-  const nextArea = context.mode === 'move'
-    ? moveManualCropArea(context, event, asset, config)
-    : resizeManualCropArea(context, event, asset, config)
-  const cropAreas = { ...(config.cropAreas || {}), [asset.id]: nextArea }
-  updateConfig('manual-crop', { cropAreas })
+  queueManualCropConfigUpdate((latestConfig, latestState) => {
+    const latestAsset = latestState.assets[latestConfig.currentIndex]
+    if (!latestAsset || latestAsset.id !== context.assetId) return null
+    const nextArea = context.mode === 'move'
+      ? moveManualCropArea(context, event, latestAsset, latestConfig, context.stageMetrics)
+      : resizeManualCropArea(context, event, latestAsset, latestConfig, context.stageMetrics)
+    return mergeManualCropAreaPatch(latestConfig, latestAsset.id, nextArea)
+  })
 }
 
 function endManualCropDrag() {
   DRAG_CONTEXT.manualCrop = null
 }
 
-function getManualCropDisplaySize(asset, config) {
-  const sourceWidth = Math.max(1, Number(asset?.width) || 1)
-  const sourceHeight = Math.max(1, Number(asset?.height) || 1)
-  const currentTransform = getManualCropAssetState(asset, config)
-  const normalizedAngle = Math.abs(Number(currentTransform.angle) || 0) % 180
-  return normalizedAngle === 90
-    ? { width: sourceHeight, height: sourceWidth }
-    : { width: sourceWidth, height: sourceHeight }
-}
-
-function getManualCropArea(asset, config) {
-  return (config.cropAreas && config.cropAreas[asset.id])
-    || getInheritedManualCropArea(asset, config)
-    || createDefaultManualCropArea(asset, config.ratioValue || '16:9', config)
-}
-
-function getInheritedManualCropArea(asset, config) {
-  const seed = config?.lastCompletedCropSeed
-  if (!seed) return null
-  if (String(seed.ratioValue || '') !== String(config?.ratioValue || '16:9')) return null
-  const { width: assetWidth, height: assetHeight } = getManualCropDisplaySize(asset, config)
-  if (seed?.area && (seed.assetWidth || 0) === assetWidth && (seed.assetHeight || 0) === assetHeight) {
-    return { ...seed.area }
-  }
-  if (!seed?.normalizedArea) return null
-  const referenceSize = Math.max(1, Math.min(assetWidth, assetHeight))
-  const ratio = Math.max(1 / 1000, Number(seed.normalizedArea.ratio) || 1)
-  const width = Math.max(40, Math.round(Number(seed.normalizedArea.scale || 0) * referenceSize))
-  const height = Math.max(40, Math.round(width / ratio))
-  const centerX = Math.round(Number(seed.normalizedArea.centerX || 0.5) * assetWidth)
-  const centerY = Math.round(Number(seed.normalizedArea.centerY || 0.5) * assetHeight)
-  return clampManualCropArea({
-    x: Math.round(centerX - width / 2),
-    y: Math.round(centerY - height / 2),
-    width,
-    height,
-  }, asset)
-}
-
-function createDefaultManualCropArea(asset, ratioValue, config = {}) {
-  const display = getManualCropDisplaySize(asset, config)
-  const width = Math.max(1, display.width || 1)
-  const height = Math.max(1, display.height || 1)
-  const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
-  const targetRatio = ratioX / ratioY
-  let cropWidth = width
-  let cropHeight = Math.round(cropWidth / targetRatio)
-  if (cropHeight > height) {
-    cropHeight = height
-    cropWidth = Math.round(cropHeight * targetRatio)
-  }
-  return {
-    x: Math.max(0, Math.round((width - cropWidth) / 2)),
-    y: Math.max(0, Math.round((height - cropHeight) / 2)),
-    width: cropWidth,
-    height: cropHeight,
-  }
-}
-
-function moveManualCropArea(context, event, asset, config) {
-  const display = getManualCropDisplaySize(asset, config)
-  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * display.width
-  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * display.height
-  const area = {
-    ...context.area,
-    x: Math.round(context.area.x + dx),
-    y: Math.round(context.area.y + dy),
-  }
-  return clampManualCropArea(area, asset, config)
-}
-
-function resizeManualCropArea(context, event, asset, config) {
-  const ratio = getEffectiveManualCropRatio(context.area, context.ratioValue)
-  const display = getManualCropDisplaySize(asset, config)
-  const dx = ((event.clientX - context.startX) / Math.max(1, context.stageRect.width)) * display.width
-  const dy = ((event.clientY - context.startY) / Math.max(1, context.stageRect.height)) * display.height
-  const start = context.area
-  const left = start.x
-  const top = start.y
-  const right = start.x + start.width
-  const bottom = start.y + start.height
-  const centerX = start.x + start.width / 2
-  const centerY = start.y + start.height / 2
-  const handle = context.handle
-
-  let width = start.width
-  let height = start.height
-  let x = start.x
-  let y = start.y
-
-  if (handle === 'ml' || handle === 'mr') {
-    const desiredWidth = handle === 'ml' ? right - (left + dx) : start.width + dx
-    const maxWidth = handle === 'ml' ? right : Math.max(40, display.width - left)
-    width = Math.max(40, Math.min(desiredWidth, maxWidth))
-    height = start.height
-    x = handle === 'ml' ? right - width : left
-    y = top
-  } else if (handle === 'tm' || handle === 'bm') {
-    const desiredHeight = handle === 'tm' ? bottom - (top + dy) : start.height + dy
-    const maxHeight = handle === 'tm' ? bottom : Math.max(40, display.height - top)
-    height = Math.max(40, Math.min(desiredHeight, maxHeight))
-    width = start.width
-    y = handle === 'tm' ? bottom - height : top
-    x = left
-  } else {
-    const widthByDrag = handle.includes('l') ? right - (left + dx) : start.width + dx
-    const heightByDrag = handle.includes('t') ? bottom - (top + dy) : start.height + dy
-    const widthFromHeight = Math.max(40, heightByDrag * ratio)
-    const desiredWidth = Math.max(40, Math.min(Math.abs(widthByDrag), Math.abs(widthFromHeight)))
-    const maxWidth = getManualCropResizeMaxWidth(handle, { left, top, right, bottom }, display, ratio)
-    width = Math.max(40, Math.min(desiredWidth, maxWidth))
-    height = Math.max(40, width / ratio)
-    x = handle.includes('l') ? right - width : left
-    y = handle.includes('t') ? bottom - height : top
-  }
-
-  return clampManualCropArea({ x, y, width, height }, asset, config)
-}
-
-function getManualCropResizeMaxWidth(handle, bounds, display, ratio) {
-  const assetWidth = Math.max(1, display.width || 1)
-  const assetHeight = Math.max(1, display.height || 1)
-  const maxWidthByHorizontal = handle.includes('l')
-    ? bounds.right
-    : assetWidth - bounds.left
-  const maxHeightByVertical = handle.includes('t')
-    ? bounds.bottom
-    : assetHeight - bounds.top
-  return Math.max(40, Math.min(maxWidthByHorizontal, maxHeightByVertical * ratio))
-}
-
-function getEffectiveManualCropRatio(area, ratioValue) {
-  const presetRatio = getManualCropRatio(ratioValue)
-  const currentRatio = Math.max(1 / 1000, (Number(area?.width) || 1) / Math.max(1, Number(area?.height) || 1))
-  return Math.abs(currentRatio - presetRatio) <= 0.02 ? presetRatio : currentRatio
-}
-
-function clampManualCropArea(area, asset, config) {
-  const display = getManualCropDisplaySize(asset, config)
-  const assetWidth = Math.max(1, display.width || 1)
-  const assetHeight = Math.max(1, display.height || 1)
-  const width = Math.min(assetWidth, Math.max(40, Math.round(area.width)))
-  const height = Math.min(assetHeight, Math.max(40, Math.round(area.height)))
-  const x = Math.max(0, Math.min(assetWidth - width, Math.round(area.x)))
-  const y = Math.max(0, Math.min(assetHeight - height, Math.round(area.y)))
-  return { x, y, width, height }
-}
-
-function transformManualCropArea(area, display, transform) {
-  const width = Math.max(1, display.width || 1)
-  const height = Math.max(1, display.height || 1)
-  if (transform === 'flip-horizontal') {
-    return { ...area, x: width - area.x - area.width }
-  }
-  if (transform === 'flip-vertical') {
-    return { ...area, y: height - area.y - area.height }
-  }
-  if (transform === 'rotate-left') {
-    return {
-      x: area.y,
-      y: width - area.x - area.width,
-      width: area.height,
-      height: area.width,
-    }
-  }
-  if (transform === 'rotate-right') {
-    return {
-      x: height - area.y - area.height,
-      y: area.x,
-      width: area.height,
-      height: area.width,
-    }
-  }
-  return area
-}
-
-function patchCurrentManualCropArea(config, asset, patch, transform) {
-  if (!asset) return patch
-  const area = getManualCropArea(asset, config)
-  const currentTransform = getManualCropAssetState(asset, config)
-  const nextAngle = Number(patch.angle ?? currentTransform.angle ?? 0) || 0
-  const nextFlipHorizontal = Boolean(patch.flipHorizontal ?? currentTransform.flipHorizontal)
-  const nextFlipVertical = Boolean(patch.flipVertical ?? currentTransform.flipVertical)
-  const nextConfig = {
-    ...config,
-    angle: nextAngle,
-    flipHorizontal: nextFlipHorizontal,
-    flipVertical: nextFlipVertical,
-  }
-  const transformedArea = clampManualCropArea(area, asset, nextConfig)
-  return {
-    ...patch,
-    angle: nextAngle,
-    flipHorizontal: nextFlipHorizontal,
-    flipVertical: nextFlipVertical,
-    cropAreas: {
-      ...(config.cropAreas || {}),
-      [asset.id]: {
-        ...transformedArea,
-        angle: nextAngle,
-        flipHorizontal: nextFlipHorizontal,
-        flipVertical: nextFlipVertical,
-      },
-    },
-  }
-}
-
-function getManualCropAssetState(asset, config) {
-  const saved = asset?.id ? config?.cropAreas?.[asset.id] : null
-  return {
-    angle: Number(saved?.angle ?? config?.angle ?? 0) || 0,
-    flipHorizontal: Boolean(saved?.flipHorizontal ?? config?.flipHorizontal),
-    flipVertical: Boolean(saved?.flipVertical ?? config?.flipVertical),
-  }
-}
-
-function getManualCropGlobalTransformPatch(asset, config) {
-  const saved = asset?.id ? config?.cropAreas?.[asset.id] : null
-  return {
-    angle: Number(saved?.angle ?? 0) || 0,
-    flipHorizontal: Boolean(saved?.flipHorizontal),
-    flipVertical: Boolean(saved?.flipVertical),
-  }
-}
-
-function getManualCropRatio(ratioValue) {
-  const [ratioX, ratioY] = String(ratioValue || '16:9').split(':').map((item) => Number(item) || 1)
-  return ratioX / ratioY
+function endManualCropPan() {
+  DRAG_CONTEXT.manualCropPan = null
 }
 
 function parseValue(value) {
