@@ -1461,22 +1461,26 @@ body {
 }
 
 .workspace-stage__inner .setting-row--range {
-  grid-template-columns: minmax(96px, 116px) minmax(0, 1fr);
+  grid-template-columns: minmax(max-content, 168px) minmax(0, 1fr);
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__header {
-  display: grid;
-  grid-template-columns: minmax(132px, 168px) auto;
-  grid-column: 1 / -1;
-  align-items: center;
-  gap: 6px;
+  display: contents;
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__label {
+  grid-column: 1;
+  align-self: center;
+  display: block;
+  min-width: max-content;
   white-space: nowrap;
+  word-break: keep-all;
+  line-height: 1.2;
 }
 
 .workspace-stage__inner .setting-row--range .setting-row__value {
+  grid-column: 2;
+  justify-self: end;
   margin-left: 0;
 }
 
