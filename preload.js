@@ -1117,6 +1117,41 @@ async function getAssetInputFormat(sharpLib, asset) {
 
 async function getAssetMetadata(sharpLib, asset) {
   if (asset?.inputMetadata) return asset.inputMetadata
+  const normalizedFormat = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
+  if (normalizedFormat === 'bmp') {
+    try {
+      const decoded = getCachedPathValue(BMP_DECODE_CACHE, asset.sourcePath, () => {
+        const sourceBuffer = fs.readFileSync(asset.sourcePath)
+        return decodeBmpBuffer(sourceBuffer)
+      })
+      if (decoded) {
+        const metadata = {
+          format: 'bmp',
+          width: decoded.width,
+          height: decoded.height,
+          channels: decoded.channels,
+          hasAlpha: decoded.channels === 4,
+        }
+        asset.inputMetadata = metadata
+        asset.inputFormat = 'bmp'
+        return metadata
+      }
+    } catch {
+      // Fall through to generic probing when BMP decoding also fails.
+    }
+  }
+  if (isFallbackDecodedInputFormat(normalizedFormat)) {
+    try {
+      const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
+      if (decodedInput) {
+        const metadata = await sharpLib(decodedInput).metadata()
+        asset.inputMetadata = metadata
+        return metadata
+      }
+    } catch {
+      // Fall through to generic probing when fallback probing also fails.
+    }
+  }
   try {
     const metadata = await sharpLib(asset.sourcePath).metadata()
     asset.inputMetadata = metadata
@@ -1124,40 +1159,6 @@ async function getAssetMetadata(sharpLib, asset) {
     if (detectedFormat && !asset.inputFormat) asset.inputFormat = detectedFormat
     return metadata
   } catch {
-    if (normalizeImageFormatName(asset?.inputFormat || asset?.ext) === 'bmp') {
-      try {
-        const decoded = getCachedPathValue(BMP_DECODE_CACHE, asset.sourcePath, () => {
-          const sourceBuffer = fs.readFileSync(asset.sourcePath)
-          return decodeBmpBuffer(sourceBuffer)
-        })
-        if (decoded) {
-          const metadata = {
-            format: 'bmp',
-            width: decoded.width,
-            height: decoded.height,
-            channels: decoded.channels,
-            hasAlpha: decoded.channels === 4,
-          }
-          asset.inputMetadata = metadata
-          asset.inputFormat = 'bmp'
-          return metadata
-        }
-      } catch {
-        // Fall through to native-image fallback.
-      }
-    }
-    if (isFallbackDecodedInputFormat(asset?.inputFormat || asset?.ext)) {
-      try {
-        const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
-        if (decodedInput) {
-          const metadata = await sharpLib(decodedInput).metadata()
-          asset.inputMetadata = metadata
-          return metadata
-        }
-      } catch {
-        // Fall through to null when fallback probing also fails.
-      }
-    }
     return null
   }
 }
