@@ -1470,6 +1470,7 @@ body {
   grid-column: 1;
   align-self: center;
   display: block;
+  width: fit-content;
   white-space: nowrap;
   word-break: keep-all;
   line-height: 1.2;
@@ -1477,7 +1478,7 @@ body {
 
 .workspace-stage__inner .setting-row--range .setting-row__value {
   grid-column: 2;
-  justify-self: end;
+  justify-self: start;
   margin-left: 0;
 }
 
@@ -1811,7 +1812,7 @@ body {
 
 .workspace:not(.workspace--result) .setting-row--range .setting-row__value {
   grid-column: 2;
-  justify-self: end;
+  justify-self: start;
   margin-left: 0;
 }
 
