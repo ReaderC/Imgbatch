@@ -1803,6 +1803,20 @@ body {
   grid-column: 2;
 }
 
+.workspace:not(.workspace--result) .setting-row--range {
+  grid-template-columns: minmax(132px, 168px) auto minmax(120px, 1fr);
+}
+
+.workspace:not(.workspace--result) .setting-row--range .setting-row__value {
+  grid-column: 2;
+  justify-self: end;
+  margin-left: 0;
+}
+
+.workspace:not(.workspace--result) .setting-row--range .range-shell {
+  grid-column: 3;
+}
+
 .workspace:not(.workspace--result) .text-input,
 .workspace:not(.workspace--result) .field select,
 .workspace:not(.workspace--result) .select-shell__value {
