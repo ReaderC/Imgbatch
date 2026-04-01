@@ -329,7 +329,7 @@ function renderRotateConfig(config) {
   const signedAngle = Number(config.angle) || 0
   const normalizedAngle = ((signedAngle % 360) + 360) % 360
   const angleChars = Math.max(1, String(signedAngle).length)
-  const angleWidth = `${Math.max(1.1, angleChars * 0.62)}ch`
+  const angleWidth = `${Math.max(1.4, angleChars * 0.9)}ch`
   const dialRadians = (normalizedAngle - 90) * (Math.PI / 180)
   const dialCenter = 92
   const dialRadius = 68
