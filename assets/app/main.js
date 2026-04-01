@@ -8,6 +8,17 @@ const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark
 const MERGE_PREVIEW_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
 const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
+const MANUAL_CROP_RATIO_ORDER = [
+  { label: '1:1', value: '1:1' },
+  { label: '4:5', value: '4:5' },
+  { label: '16:9', value: '16:9' },
+  { label: '9:16', value: '9:16' },
+  { label: '4:3', value: '4:3' },
+  { label: '3:2', value: '3:2' },
+  { label: '3:4', value: '3:4' },
+  { label: '2:3', value: '2:3' },
+  { label: '21:9', value: '21:9' },
+]
 const SETTINGS_TOOL_ID = 'settings'
 const WATERMARK_POSITION_LABELS = {
   'top-left': '左上',

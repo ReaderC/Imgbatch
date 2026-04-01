@@ -4099,6 +4099,7 @@ body {
   padding: 8px;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
+  border-radius: 0;
 }
 
 .manual-toolbar--compact .footer-button {
@@ -4697,8 +4698,7 @@ body {
 .manual-footer__left {
   display: block;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -4710,6 +4710,31 @@ body {
   align-items: center;
   gap: 12px;
   min-width: max-content;
+}
+
+.manual-footer__ratio-shell {
+  width: auto !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+.manual-footer__ratio-shell > .select-shell__value {
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+
+.manual-footer__ratio-shell > .select-shell__value .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.manual-footer__ratio-shell > .select-shell__menu {
+  left: 0 !important;
+  right: auto !important;
+  min-width: 88px;
 }
 
 .manual-footer__right {
@@ -4741,6 +4766,11 @@ body {
 
 .manual-toolbar--crop-actions {
   min-width: auto;
+}
+
+.manual-toolbar--crop-actions .footer-button,
+.manual-toolbar--crop-actions .primary-button {
+  border-radius: 12px;
 }
 
 .queue-list {

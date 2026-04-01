@@ -109,10 +109,9 @@ export function renderManualCropPage(state) {
             <button class="icon-button" data-action="open-file-input" title="选择图片">
               <span class="material-symbols-outlined">add_photo_alternate</span>
             </button>
-            <div class="select-shell select-shell--up manual-footer__ratio-select">
-              <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false">
-                <span class="select-shell__text">${escapeHtml(currentRatio.value)}</span>
-                <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+            <div class="select-shell select-shell--up manual-footer__ratio-shell">
+              <button type="button" class="icon-button select-shell__value manual-footer__ratio-trigger" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false" title="裁剪比例：${escapeHtml(currentRatio.value)}">
+                <span class="material-symbols-outlined">aspect_ratio</span>
               </button>
               <div class="select-shell__menu" role="listbox">
                 ${MANUAL_CROP_RATIO_OPTIONS.map((item) => `
