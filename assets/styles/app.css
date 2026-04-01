@@ -3683,6 +3683,7 @@ body {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  contain: layout paint style;
 }
 
 .queue-footer {
@@ -3774,6 +3775,9 @@ body {
   gap: 16px;
   padding: 14px;
   align-items: center;
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 104px;
 }
 
 .queue-item--sortable {
@@ -3813,6 +3817,12 @@ body {
   object-fit: cover;
 }
 
+.queue-item__thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(148, 163, 184, 0.14));
+}
+
 .queue-item__name {
   margin: 0 0 6px;
   font-weight: 700;
@@ -3838,6 +3848,11 @@ body {
 .queue-item__subline--summary,
 .queue-item__subline > span {
   min-width: 0;
+}
+
+.queue-item__subline--summary-error,
+.queue-item__subline--error {
+  color: #b42318;
 }
 
 .queue-pill {
@@ -3880,6 +3895,11 @@ body {
 
 .queue-item__compact-track span {
   display: inline-block;
+}
+
+.queue-item__compact-ticker--error {
+  background: rgba(180, 35, 24, 0.08);
+  color: #b42318;
 }
 
 @keyframes queueTickerScroll {

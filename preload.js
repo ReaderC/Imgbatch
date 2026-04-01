@@ -48,9 +48,11 @@ const WATERMARK_TEXT_CACHE = new Map()
 const WATERMARK_TILED_CACHE = new Map()
 const FALLBACK_IMAGE_BUFFER_CACHE = new Map()
 const DISPLAY_URL_CACHE = new Map()
+const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
+const QUEUE_THUMBNAIL_MAX_SIZE = 240
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -406,6 +408,10 @@ function getDisplayUrlCacheKey(filePath, inputFormat = '') {
   }
 }
 
+function getThumbnailUrlCacheKey(filePath, inputFormat = '', maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+  return `${getDisplayUrlCacheKey(filePath, inputFormat)}|thumb|${Number(maxDimension) || QUEUE_THUMBNAIL_MAX_SIZE}`
+}
+
 async function createAssetDisplayUrlAsync(filePath, inputFormat = '', sharpLib = null) {
   const format = normalizeImageFormatName(inputFormat)
   const cacheKey = getDisplayUrlCacheKey(filePath, format)
@@ -436,6 +442,59 @@ async function createAssetDisplayUrlAsync(filePath, inputFormat = '', sharpLib =
 
   DISPLAY_URL_CACHE.set(cacheKey, nativeUrl)
   return nativeUrl
+}
+
+async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+  const format = normalizeImageFormatName(inputFormat)
+  const cacheKey = getThumbnailUrlCacheKey(filePath, format, maxDimension)
+  if (QUEUE_THUMBNAIL_URL_CACHE.has(cacheKey)) return QUEUE_THUMBNAIL_URL_CACHE.get(cacheKey)
+
+  if (sharpLib) {
+    try {
+      const buffer = await sharpLib(filePath, { animated: false })
+        .resize({
+          width: maxDimension,
+          height: maxDimension,
+          fit: 'cover',
+          position: 'centre',
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer()
+      const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`
+      QUEUE_THUMBNAIL_URL_CACHE.set(cacheKey, dataUrl)
+      return dataUrl
+    } catch {}
+  }
+
+  try {
+    const image = nativeImage.createFromPath(filePath)
+    if (!image.isEmpty()) {
+      const resized = image.resize({
+        width: maxDimension,
+        height: maxDimension,
+        quality: 'good',
+      })
+      const dataUrl = resized.toDataURL()
+      QUEUE_THUMBNAIL_URL_CACHE.set(cacheKey, dataUrl)
+      return dataUrl
+    }
+  } catch {}
+
+  const fallbackUrl = await createAssetDisplayUrlAsync(filePath, format, sharpLib)
+  QUEUE_THUMBNAIL_URL_CACHE.set(cacheKey, fallbackUrl)
+  return fallbackUrl
+}
+
+function queueQueueThumbnailGeneration(assetId, filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+  if (!assetId || !filePath) return
+  Promise.resolve()
+    .then(() => createQueueThumbnailUrlAsync(filePath, inputFormat, sharpLib, maxDimension))
+    .then((listThumbnailUrl) => {
+      if (!listThumbnailUrl) return
+      emitQueueThumbnailReady({ assetId, listThumbnailUrl })
+    })
+    .catch(() => {})
 }
 
 function copyAssetToOutput(asset, outputPath, sourceInput = null, fallback = asset) {
@@ -952,6 +1011,15 @@ function emitProcessingProgress(detail = {}) {
     window.dispatchEvent(new CustomEvent('imgbatch-processing-progress', { detail }))
   } catch {
     // Ignore progress bridge errors so processing is not affected.
+  }
+}
+
+function emitQueueThumbnailReady(detail = {}) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  try {
+    window.dispatchEvent(new CustomEvent('imgbatch-queue-thumbnail-ready', { detail }))
+  } catch {
+    // Ignore thumbnail bridge errors so importing is not affected.
   }
 }
 
@@ -1944,6 +2012,7 @@ async function replaceOriginals(items = []) {
         height,
         inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
         thumbnailUrl: await createAssetDisplayUrlAsync(targetPath, resultExtension.replace('.', ''), sharpLib),
+        listThumbnailUrl: await createQueueThumbnailUrlAsync(targetPath, resultExtension.replace('.', ''), sharpLib),
       })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
@@ -3295,8 +3364,11 @@ const toolsApi = {
         height = height || size.height
       }
       const ext = inputFormat || path.extname(filePath).replace('.', '').toLowerCase()
+      const assetId = `asset-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
+      const thumbnailUrl = createAssetDisplayUrl(filePath, ext)
+      queueQueueThumbnailGeneration(assetId, filePath, ext, sharpLib)
       return {
-        id: `asset-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        id: assetId,
         sourcePath: filePath,
         name: path.basename(filePath),
         ext,
@@ -3304,7 +3376,8 @@ const toolsApi = {
         sizeBytes: stat.size,
         width,
         height,
-        thumbnailUrl: await createAssetDisplayUrlAsync(filePath, ext, sharpLib),
+        thumbnailUrl,
+        listThumbnailUrl: '',
         status: 'idle',
         outputPath: '',
         error: '',

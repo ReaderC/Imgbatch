@@ -176,6 +176,13 @@ export function subscribeLaunchInputs(callback) {
   return window.imgbatch.subscribeLaunchInputs(callback)
 }
 
+export function subscribeQueueThumbnails(callback) {
+  if (typeof window === 'undefined' || typeof callback !== 'function') return false
+  const handler = (event) => callback(event?.detail || {})
+  window.addEventListener('imgbatch-queue-thumbnail-ready', handler)
+  return () => window.removeEventListener('imgbatch-queue-thumbnail-ready', handler)
+}
+
 export function getEnvironment() {
   if (!hasBridge()) {
     return {
@@ -206,6 +213,7 @@ async function readBrowserFileMeta(file, index) {
     width: dimensions.width,
     height: dimensions.height,
     thumbnailUrl,
+    listThumbnailUrl: thumbnailUrl,
     status: 'idle',
     outputPath: '',
     error: '',

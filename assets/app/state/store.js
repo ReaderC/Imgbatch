@@ -160,6 +160,20 @@ export function removeAsset(assetId) {
   emit()
 }
 
+export function updateAssetListThumbnail(assetId, listThumbnailUrl) {
+  if (!assetId || !listThumbnailUrl) return
+  let changed = false
+  state.assets = state.assets.map((asset) => {
+    if (asset.id !== assetId || asset.listThumbnailUrl === listThumbnailUrl) return asset
+    changed = true
+    return {
+      ...asset,
+      listThumbnailUrl,
+    }
+  })
+  if (changed) emit()
+}
+
 export function applyRunResult(result) {
   if (!result) return
 
@@ -246,6 +260,7 @@ function createAssetState(asset) {
   const normalizedFormat = normalizeAssetFormat(asset?.inputFormat || asset?.ext)
   return {
     ...asset,
+    listThumbnailUrl: asset.listThumbnailUrl || asset.thumbnailUrl || '',
     ext: normalizedFormat || asset.ext || '',
     inputFormat: normalizedFormat || '',
     status: asset.status || 'idle',
