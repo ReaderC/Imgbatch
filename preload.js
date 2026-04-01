@@ -2767,21 +2767,6 @@ async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
   })
 }
 
-function loadSettings() {
-  return buildSettingsPayload(getAppSettings())
-}
-
-function saveSettings(settings) {
-  return saveAppSettings(settings)
-}
-
-function createPreparedRunPayload(toolId, config, assets, destinationPath) {
-  return {
-    ...prepareRunPayload(toolId, config, assets, destinationPath),
-    mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
-  }
-}
-
 async function executeMergeTool(payload, sharpLib) {
   const processed = []
   const failed = []
@@ -3201,7 +3186,10 @@ const toolsApi = {
   },
 
   prepareRunPayload(toolId, config, assets, destinationPath) {
-    return createPreparedRunPayload(toolId, config, assets, destinationPath)
+    return {
+      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
+    }
   },
 
   async stageToolPreview(toolId, config, assets, destinationPath, mode) {
@@ -3217,11 +3205,11 @@ const toolsApi = {
   },
 
   loadSettings() {
-    return loadSettings()
+    return buildSettingsPayload(getAppSettings())
   },
 
   saveSettings(settings) {
-    return saveSettings(settings)
+    return saveAppSettings(settings)
   },
 
   buildStagedItems(assets = []) {
@@ -3229,7 +3217,10 @@ const toolsApi = {
   },
 
   async runTool(toolId, config, assets, destinationPath) {
-    const payload = createPreparedRunPayload(toolId, config, assets, destinationPath)
+    const payload = {
+      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
+    }
     const hostApi = getHostApi()
 
     if (SINGLE_IMAGE_TOOL_IDS.has(payload.toolId) || MERGE_TOOL_IDS.has(payload.toolId)) {
