@@ -16,13 +16,14 @@ export function getAppShellMode(state) {
 
 export function renderAppShell(state, queueMarkup = null) {
   const mode = getAppShellMode(state)
+  const fullScreenWorkspace = mode === 'result' || mode === 'settings'
 
   if (mode === 'manual') {
     return renderToolPage(TOOL_MAP[state.activeTool].id, state)
   }
 
   return `
-    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${mode === 'result' ? 'app-shell--result-overlay' : ''}">
+    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${fullScreenWorkspace ? 'app-shell--workspace-overlay' : ''}">
       <div class="render-slot" data-root="side-nav">${renderShellSideNav(state, mode)}</div>
       <div class="render-slot" data-root="topbar">${renderShellTopBar(state, mode)}</div>
       <div class="render-slot" data-root="workspace">${renderShellWorkspace(state, queueMarkup, mode)}</div>
@@ -32,18 +33,18 @@ export function renderAppShell(state, queueMarkup = null) {
 }
 
 export function renderShellSideNav(state, mode = getAppShellMode(state)) {
-  if (mode === 'result') return ''
+  if (mode === 'result' || mode === 'settings') return ''
   return renderSideNav(state.activeTool, state.sidebarCollapsed)
 }
 
 export function renderShellTopBar(state, mode = getAppShellMode(state)) {
-  if (mode === 'result') return ''
+  if (mode === 'result' || mode === 'settings') return ''
   return renderTopBar(state)
 }
 
 export function renderShellWorkspace(state, queueMarkup = null, mode = getAppShellMode(state)) {
   if (mode === 'settings') {
-    return `<div class="workspace workspace--settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
+    return `<div class="workspace workspace--settings" data-scroll-role="settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
   }
   if (mode === 'result') {
     return `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`

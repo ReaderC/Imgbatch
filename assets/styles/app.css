@@ -5329,13 +5329,22 @@ body.manual-crop--dragging-handle .manual-handle {
 
 .workspace--settings {
   display: block;
-  overflow: auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #F0F4F8;
 }
 
 .settings-page {
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  min-height: 100%;
-  padding: 28px 32px 40px;
+  min-height: 100vh;
+  padding: 22px 22px 40px;
+  background: #F0F4F8;
 }
 
 .settings-page__header {
@@ -5349,6 +5358,7 @@ body.manual-crop--dragging-handle .manual-handle {
 .settings-page__content {
   display: grid;
   gap: 20px;
+  width: min(760px, 100%);
   max-width: 760px;
 }
 
@@ -5527,13 +5537,13 @@ body.manual-crop--dragging-handle .manual-handle {
   backdrop-filter: none !important;
 }
 
-/* Final result overlay override: occupy the full app shell. */
-.app-shell.app-shell--result-overlay {
+/* Final full workspace overlay override: occupy the full app shell. */
+.app-shell.app-shell--workspace-overlay {
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
 }
 
-.app-shell.app-shell--result-overlay > .render-slot[data-root="workspace"] {
+.app-shell.app-shell--workspace-overlay > .render-slot[data-root="workspace"] {
   display: block !important;
   grid-column: 1 / -1 !important;
   grid-row: 1 / -1 !important;
@@ -5542,7 +5552,8 @@ body.manual-crop--dragging-handle .manual-handle {
   min-height: 100vh !important;
 }
 
-.app-shell.app-shell--result-overlay .workspace--result {
+.app-shell.app-shell--workspace-overlay .workspace--result,
+.app-shell.app-shell--workspace-overlay .workspace--settings {
   display: block !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -5550,7 +5561,8 @@ body.manual-crop--dragging-handle .manual-handle {
   background: #F0F4F8 !important;
 }
 
-.app-shell.app-shell--result-overlay .result-page {
+.app-shell.app-shell--workspace-overlay .result-page,
+.app-shell.app-shell--workspace-overlay .settings-page {
   display: flex !important;
   flex-direction: column !important;
   width: 100% !important;
@@ -5559,6 +5571,10 @@ body.manual-crop--dragging-handle .manual-handle {
   min-height: 100vh !important;
   padding: 22px 22px 92px !important;
   background: #F0F4F8 !important;
+}
+
+.app-shell.app-shell--workspace-overlay .settings-page {
+  padding-bottom: 40px !important;
 }
 
 .topbar__title {
