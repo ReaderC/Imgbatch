@@ -27,6 +27,9 @@ const MANUAL_CROP_SNAP_STRENGTH_OPTIONS = [
 
 export function renderManualCropPage(state) {
   const config = state.configs['manual-crop']
+  const exitToolId = state.lastWorkspaceTool && state.lastWorkspaceTool !== 'manual-crop'
+    ? state.lastWorkspaceTool
+    : 'compression'
   const current = state.assets[config.currentIndex] || state.assets[0]
   const hasCurrent = Boolean(current)
   const progressLabel = state.assets.length
@@ -57,7 +60,7 @@ export function renderManualCropPage(state) {
           <button class="icon-button" data-action="toggle-manual-crop-help" data-tooltip="操作说明" aria-label="操作说明">
             <span class="material-symbols-outlined">help</span>
           </button>
-          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" data-tooltip="关闭" aria-label="关闭">
+          <button class="icon-button" data-action="activate-tool" data-tool-id="${exitToolId}" data-apply-default-preset="false" data-tooltip="关闭" aria-label="关闭">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>

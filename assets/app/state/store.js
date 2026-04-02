@@ -3,9 +3,12 @@ import { DEFAULT_TOOL } from '../config/tools.js'
 const listeners = new Set()
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
+let batchDepth = 0
+let emitQueued = false
 
 const state = {
   activeTool: DEFAULT_TOOL,
+  lastWorkspaceTool: DEFAULT_TOOL,
   searchQuery: '',
   destinationPath: '',
   isProcessing: false,
@@ -76,6 +79,20 @@ export function subscribe(listener) {
   return () => listeners.delete(listener)
 }
 
+export function batchStateUpdates(task) {
+  if (typeof task !== 'function') return
+  batchDepth += 1
+  try {
+    task()
+  } finally {
+    batchDepth = Math.max(0, batchDepth - 1)
+    if (!batchDepth && emitQueued) {
+      emitQueued = false
+      emitNow()
+    }
+  }
+}
+
 export function setState(patch) {
   Object.assign(state, patch)
   emit()
@@ -101,12 +118,14 @@ export function setConfirmDialog(confirmDialog) {
   emit()
 }
 
-export function setToolPresets(toolId, presets) {
+export function setToolPresets(toolId, presets, emitChange = true) {
+  const nextPresets = Array.isArray(presets) ? presets : []
+  if (state.presetsByTool?.[toolId] === nextPresets) return
   state.presetsByTool = {
     ...state.presetsByTool,
-    [toolId]: Array.isArray(presets) ? presets : [],
+    [toolId]: nextPresets,
   }
-  emit()
+  if (emitChange) emit()
 }
 
 export function setPreviewModal(previewModal) {
@@ -128,7 +147,14 @@ export function updateConfig(toolId, patch) {
 }
 
 export function setActiveTool(toolId) {
-  state.activeTool = toolId
+  const nextToolId = String(toolId || '').trim() || DEFAULT_TOOL
+  const previousToolId = state.activeTool
+  if (nextToolId !== 'manual-crop') {
+    state.lastWorkspaceTool = nextToolId
+  } else if (previousToolId && previousToolId !== 'manual-crop') {
+    state.lastWorkspaceTool = previousToolId
+  }
+  state.activeTool = nextToolId
   emit()
 }
 
@@ -463,6 +489,14 @@ function getPathFileName(value = '') {
   return normalized.split('/').pop() || ''
 }
 
-function emit() {
+function emitNow() {
   for (const listener of listeners) listener(state)
+}
+
+function emit() {
+  if (batchDepth > 0) {
+    emitQueued = true
+    return
+  }
+  emitNow()
 }

@@ -14,7 +14,7 @@ export function getAppShellMode(state) {
   return 'workspace'
 }
 
-export function renderAppShell(state) {
+export function renderAppShell(state, queueMarkup = null) {
   const mode = getAppShellMode(state)
 
   if (mode === 'manual') {
@@ -25,7 +25,7 @@ export function renderAppShell(state) {
     <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${mode === 'result' ? 'app-shell--result-overlay' : ''}">
       <div class="render-slot" data-root="side-nav">${renderShellSideNav(state, mode)}</div>
       <div class="render-slot" data-root="topbar">${renderShellTopBar(state, mode)}</div>
-      <div class="render-slot" data-root="workspace">${renderShellWorkspace(state, undefined, mode)}</div>
+      <div class="render-slot" data-root="workspace">${renderShellWorkspace(state, queueMarkup, mode)}</div>
       <div class="render-slot" data-root="overlays">${renderShellOverlays(state)}</div>
     </div>
   `
@@ -165,7 +165,7 @@ function renderPresetModal(state) {
   return `
     <div class="app-modal" data-action="close-preset-dialog">
       <div class="app-modal__dialog app-modal__dialog--preset">
-        <button class="app-modal__close" data-action="close-preset-dialog" title="关闭">
+        <button class="app-modal__close" data-action="close-preset-dialog" data-tooltip="关闭" aria-label="关闭">
           <span class="material-symbols-outlined">close</span>
         </button>
         <div class="app-modal__header">
@@ -234,7 +234,7 @@ function renderConfirmModal(dialog) {
   return `
     <div class="app-modal" data-action="close-confirm-dialog">
       <div class="app-modal__dialog app-modal__dialog--preset">
-        <button class="app-modal__close" data-action="close-confirm-dialog" title="关闭">
+        <button class="app-modal__close" data-action="close-confirm-dialog" data-tooltip="关闭" aria-label="关闭">
           <span class="material-symbols-outlined">close</span>
         </button>
         <div class="app-modal__header">
@@ -434,16 +434,16 @@ function renderInteractivePreviewModal(preview) {
 function renderPreviewActions({ mode = 'slider', isExpanded = false } = {}) {
   const fullscreenButton = mode === 'split'
     ? `
-          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" title="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
+          <button class="preview-modal__close" data-action="toggle-preview-compare-fullscreen" data-tooltip="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}" aria-label="${isExpanded ? '\u7f29\u5c0f\u663e\u793a' : '\u5168\u5c4f\u663e\u793a'}">
             <span class="material-symbols-outlined">${isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
           </button>`
     : ''
   return `
         <div class="preview-modal__actions">
-          <button class="preview-modal__close" data-action="toggle-preview-help" title="查看操作说明">
+          <button class="preview-modal__close" data-action="toggle-preview-help" data-tooltip="查看操作说明" aria-label="查看操作说明">
             <span class="material-symbols-outlined">help</span>
           </button>${fullscreenButton}
-          <button class="preview-modal__close" data-action="close-preview-modal" title="\u5173\u95ed">
+          <button class="preview-modal__close" data-action="close-preview-modal" data-tooltip="\u5173\u95ed" aria-label="\u5173\u95ed">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>`

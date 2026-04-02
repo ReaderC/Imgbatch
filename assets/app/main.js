@@ -37,7 +37,7 @@ import {
 } from './lib/manual-crop-flow.js'
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
 import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -93,6 +93,7 @@ let lastRenderSnapshot = null
 let queueRenderFrame = 0
 let queueItemPatchFrame = 0
 let detachedQueueContent = null
+let detachedQueueState = null
 let queueThumbnailPatchFrame = 0
 let pendingQueueScrollRestore = null
 const pendingQueueThumbnailPatches = new Map()
@@ -178,11 +179,11 @@ function normalizeLoadedPresets(presets = []) {
   }))
 }
 
-async function ensureToolPresetsLoaded(toolId, force = false) {
+async function ensureToolPresetsLoaded(toolId, force = false, options = {}) {
   const cached = getState().presetsByTool?.[toolId]
   if (!force && Array.isArray(cached)) return cached
   const presets = normalizeLoadedPresets(await loadPresets(toolId))
-  setToolPresets(toolId, presets)
+  setToolPresets(toolId, presets, options.emitChange !== false)
   return presets
 }
 
@@ -227,7 +228,7 @@ function isSameConfigShape(left, right) {
 async function applyDefaultPresetForTool(toolId, silent = false) {
   const defaultPresetId = getDefaultPresetMap()?.[toolId]
   if (!defaultPresetId) return false
-  const presets = await ensureToolPresetsLoaded(toolId)
+  const presets = await ensureToolPresetsLoaded(toolId, false, { emitChange: !silent })
   const preset = presets.find((item) => item.id === defaultPresetId)
   if (!preset?.config) return false
   if (isSameConfigShape(getState().configs?.[toolId], preset.config)) return false
@@ -729,9 +730,11 @@ function openColorPickerZoom(target) {
 }
 
 function resetActiveResultUi() {
-  closePreviewModal()
-  setResultView(null)
-  setState({ activeRun: null })
+  batchStateUpdates(() => {
+    closePreviewModal()
+    setResultView(null)
+    setState({ activeRun: null })
+  })
 }
 
 function injectResultToolbar() {
@@ -1320,19 +1323,34 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
   return { root, changed: false }
 }
 
-function detachQueueContent() {
-  const root = getRootNode('queue')
-  const content = root?.firstElementChild || null
-  if (!root || !content) return
-  root.removeChild(content)
-  detachedQueueContent = content
+function canReuseDetachedQueueContent(state) {
+  if (!detachedQueueContent || !detachedQueueState) return false
+  if ((detachedQueueState.activeTool || '') !== String(state?.activeTool || '')) return false
+  return detachedQueueState.assetOrderSignature === getAssetOrderSignature(state?.assets)
 }
 
-function attachDetachedQueueContent() {
+function detachQueueContent(snapshot = null) {
   const root = getRootNode('queue')
-  if (!root || !detachedQueueContent) return false
+  const content = root?.firstElementChild || null
+  if (!root || !content) {
+    detachedQueueContent = null
+    detachedQueueState = null
+    return
+  }
+  root.removeChild(content)
+  detachedQueueContent = content
+  detachedQueueState = {
+    activeTool: snapshot?.activeTool || getState().activeTool,
+    assetOrderSignature: getAssetOrderSignature(snapshot?.assets || getState().assets),
+  }
+}
+
+function attachDetachedQueueContent(state = getState()) {
+  const root = getRootNode('queue')
+  if (!root || !canReuseDetachedQueueContent(state)) return false
   root.replaceChildren(detachedQueueContent)
   detachedQueueContent = null
+  detachedQueueState = null
   syncQueueViewportFromDom()
   return true
 }
@@ -1500,7 +1518,7 @@ function scheduleQueueRootRender() {
       queueChanged: changed,
       toolbarChanged: false,
       marqueeChanged: false,
-      tooltipRoots: changed && root ? [root] : [],
+      tooltipRoots: [],
     })
   })
 }
@@ -1511,15 +1529,49 @@ function canPatchShell(prev, next) {
   return !!app?.querySelector?.('.app-shell')
 }
 
+function shouldCaptureSnapshotForFullShell(prev, next) {
+  if (!prev || !next) return false
+  if (prev.mode === 'manual' || next.mode === 'manual') return false
+  return true
+}
+
+function getAssetOrderSignature(assets = []) {
+  if (!Array.isArray(assets) || !assets.length) return ''
+  return assets.map((asset) => String(asset?.id || '')).join('|')
+}
+
 function renderFullShell(state, snapshot) {
   const mode = getAppShellMode(state)
-  app.innerHTML = renderAppShell(state) + renderNotificationsRoot(state.notifications)
+  const shouldReuseDetachedQueue = mode === 'workspace' && canReuseDetachedQueueContent(state)
+  const queueMarkup = mode === 'workspace'
+    ? (shouldReuseDetachedQueue
+        ? ''
+        : renderImageQueue(state, shouldTrackQueueViewport(state) ? queueViewportState : null))
+    : null
+  app.innerHTML = renderAppShell(state, queueMarkup) + renderNotificationsRoot(state.notifications)
   const sideNavRoot = getRootNode('side-nav')
   const topbarRoot = getRootNode('topbar')
   const workspaceRoot = getRootNode('workspace')
   const panelRoot = getRootNode('panel')
+  const queueRoot = getRootNode('queue')
   const overlaysRoot = getRootNode('overlays')
   const notificationsRoot = getRootNode('notifications')
+  let queueTooltipRoot = null
+  if (shouldReuseDetachedQueue) {
+    if (attachDetachedQueueContent(state)) {
+      if (patchQueueItemsForToolChange(state) && queueRoot) {
+        queueTooltipRoot = queueRoot
+      }
+    } else if (mode === 'workspace') {
+      detachedQueueContent = null
+      detachedQueueState = null
+      renderQueueRoot(state, false)
+    }
+  }
+  restoreQueuedQueueScroll(state)
+  const queueViewportChanged = mode === 'workspace'
+    && shouldTrackQueueViewport(state)
+    && syncQueueViewportFromDom()
   rootMarkupCache.sideNav = sideNavRoot?.innerHTML || ''
   rootMarkupCache.topbar = topbarRoot?.innerHTML || ''
   rootMarkupCache.workspace = workspaceRoot?.innerHTML || ''
@@ -1527,14 +1579,13 @@ function renderFullShell(state, snapshot) {
   rootMarkupCache.queue = getRootNode('queue')?.innerHTML || ''
   rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
   rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
-  restoreQueuedQueueScroll(state)
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
-    queueChanged: mode === 'workspace' && shouldTrackQueueViewport(state),
+    queueChanged: queueViewportChanged,
     toolbarChanged: Boolean(state.activeRun || state.resultView),
     marqueeChanged: mode === 'result',
-    tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
+    tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, queueTooltipRoot, overlaysRoot, notificationsRoot].filter(Boolean),
   })
 }
 
@@ -1542,7 +1593,12 @@ function render(state) {
   const nextSnapshot = captureRenderSnapshot(state)
   const fullShellChange = !canPatchShell(lastRenderSnapshot, nextSnapshot)
   if (fullShellChange) {
-    const snapshot = captureUiSnapshot()
+    if (lastRenderSnapshot?.mode === 'workspace' && nextSnapshot.mode === 'manual') {
+      detachQueueContent(lastRenderSnapshot)
+    }
+    const snapshot = shouldCaptureSnapshotForFullShell(lastRenderSnapshot, nextSnapshot)
+      ? captureUiSnapshot()
+      : null
     renderFullShell(state, snapshot)
     lastRenderSnapshot = nextSnapshot
     return
@@ -1606,7 +1662,6 @@ function render(state) {
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
     const { root, changed } = renderQueueRoot(state)
-    if (root && changed) tooltipRoots.push(root)
     if (!changed) {
       queuePostRenderWork({
         snapshot: null,
@@ -2096,9 +2151,13 @@ function attachGlobalEvents() {
     if (action === 'activate-tool') {
       event.preventDefault()
       queueQueueScrollRestore()
-      resetActiveResultUi()
-      setActiveTool(target.dataset.toolId)
-      void applyDefaultPresetForTool(target.dataset.toolId, true)
+      batchStateUpdates(() => {
+        resetActiveResultUi()
+        setActiveTool(target.dataset.toolId)
+      })
+      if (target.dataset.applyDefaultPreset !== 'false') {
+        void applyDefaultPresetForTool(target.dataset.toolId, true)
+      }
       return
     }
 
@@ -2711,6 +2770,20 @@ function attachGlobalEvents() {
       queueManualCropConfigUpdate,
       updateConfig,
     })) return
+    if (event.key === 'Escape' && getState().presetDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closePresetDialog()
+      return
+    }
+    if (event.key === 'Escape' && getState().confirmDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closeConfirmDialog()
+      return
+    }
     const preview = getState().previewModal
     if (!preview?.url) return
     if (event.key === 'Escape') {
@@ -2743,6 +2816,18 @@ function attachGlobalEvents() {
 
   document.addEventListener('keyup', (event) => {
     if (handleManualCropKeyup(event, { getState })) return
+    if (getState().presetDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().confirmDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
     if (!getState().previewModal?.url) return
     if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()

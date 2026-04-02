@@ -273,7 +273,7 @@ function renderWatermarkConfig(config) {
         <div class="card-label" style="margin-bottom:6px;">锚点位置</div>
         <div class="position-grid">
           ${WATERMARK_POSITIONS.map((position) => `
-            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${WATERMARK_POSITION_LABELS[position] || position}">
+            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" data-tooltip="${WATERMARK_POSITION_LABELS[position] || position}" aria-label="${WATERMARK_POSITION_LABELS[position] || position}">
               <span></span>
             </button>
           `).join('')}
