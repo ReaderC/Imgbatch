@@ -1387,6 +1387,13 @@ function supportsTransparentCanvasOutput(format) {
   return isAlphaCapableFormat(normalized) && normalized !== 'tiff'
 }
 
+function canSkipSameFormatEncoding(format, quality = 100) {
+  const normalized = normalizeImageFormatName(format)
+  if (!normalized) return false
+  if (!isQualityCapableFormat(normalized)) return true
+  return Math.round(Number(quality) || 0) >= 100
+}
+
 function buildFormatCapabilitiesPayload() {
   const entries = [
     ['PNG', 'png', []],
@@ -1725,7 +1732,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
-  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight) {
+  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight && canSkipSameFormatEncoding(format, quality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (sourceWidth > 0 && sourceHeight > 0 && width === sourceWidth && height === sourceHeight) {
@@ -2153,7 +2160,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
   const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
-  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
+  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
@@ -2202,7 +2209,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
   const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
-  if (sourceFormat === format && hasNoFlipTransform) {
+  if (sourceFormat === format && hasNoFlipTransform && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (hasNoFlipTransform) {
