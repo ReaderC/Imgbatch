@@ -96,6 +96,7 @@ let detachedQueueContent = null
 let detachedQueueState = null
 let queueThumbnailPatchFrame = 0
 let pendingQueueScrollRestore = null
+let queueMarkupCacheDirty = false
 const pendingQueueThumbnailPatches = new Map()
 const rootMarkupCache = {
   sideNav: '',
@@ -1360,6 +1361,7 @@ function attachDetachedQueueContent(state = getState()) {
   root.replaceChildren(detachedQueueContent)
   detachedQueueContent = null
   detachedQueueState = null
+  queueMarkupCacheDirty = true
   syncQueueViewportFromDom()
   return true
 }
@@ -1470,7 +1472,7 @@ function queueQueueItemPatch() {
     const state = getState()
     if (getAppShellMode(state) !== 'workspace') return
     if (patchQueueItemsForToolChange(state)) {
-      rootMarkupCache.queue = getRootNode('queue')?.innerHTML || rootMarkupCache.queue
+      queueMarkupCacheDirty = true
     }
     restoreQueuedQueueScroll(state)
   })
@@ -1503,11 +1505,12 @@ function renderQueueRoot(state, preserveScroll = true) {
   const previousScrollTop = preserveScroll ? queueViewportState.scrollTop : 0
   const markup = renderImageQueue(state, queueViewportState)
   let changed = false
-  if (rootMarkupCache.queue !== markup) {
+  if (queueMarkupCacheDirty || rootMarkupCache.queue !== markup) {
     const detachedThumbs = detachQueueThumbContent(root)
     root.innerHTML = markup
     attachQueueThumbContent(root, detachedThumbs)
     rootMarkupCache.queue = markup
+    queueMarkupCacheDirty = false
     changed = true
   }
   const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
@@ -1603,7 +1606,10 @@ function renderFullShell(state, snapshot) {
   rootMarkupCache.topbar = topbarRoot?.innerHTML || ''
   rootMarkupCache.workspace = workspaceRoot?.innerHTML || ''
   rootMarkupCache.panel = panelRoot?.innerHTML || ''
-  rootMarkupCache.queue = getRootNode('queue')?.innerHTML || ''
+  rootMarkupCache.queue = mode === 'workspace' && !shouldReuseDetachedQueue
+    ? (queueMarkup || '')
+    : ''
+  queueMarkupCacheDirty = mode === 'workspace' && shouldReuseDetachedQueue
   rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
   rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
   queuePostRenderWork({
