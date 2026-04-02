@@ -155,16 +155,19 @@ function renderCompressionConfig(config) {
       ['quality', '按质量'],
       ['target', '按体积'],
     ])}
-    ${renderRangeField({
-      label: '压缩质量',
-      toolId: 'compression',
-      key: 'quality',
-      min: 1,
-      max: 100,
-      value: config.quality,
-      suffix: '%',
-      disabled: !isQualityMode,
-    })}
+    <div class="quality-field">
+      ${renderRangeField({
+        label: '压缩质量',
+        toolId: 'compression',
+        key: 'quality',
+        min: 1,
+        max: 100,
+        value: config.quality,
+        suffix: '%',
+        disabled: !isQualityMode,
+      })}
+      <div class="quality-field__note">该选项对 JPEG / WebP / AVIF / TIFF 的压缩效果更直接；对 PNG 主要影响压缩策略与调色板量化；GIF 不属于同类质量压缩；BMP / ICO 在压缩时通常会改用更适合压缩的输出格式。</div>
+    </div>
     ${renderFieldGrid(`
       ${renderInputField({
         label: '目标大小 KB',
