@@ -649,6 +649,10 @@ function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
 
+function hasResultOutputs(state = getState()) {
+  return (state.assets || []).some((asset) => !!getLatestAssetResultPath(asset))
+}
+
 function refreshResultView() {
   const state = getState()
   const items = state.assets
@@ -752,14 +756,15 @@ function injectResultToolbar() {
   const activeRun = getState().activeRun
   const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
   const hasVisibleResults = hasVisibleResultComparison()
-  const shouldShow = hasBatchRun || hasVisibleResults
+  const hasResultEntries = hasVisibleResults || hasResultOutputs()
+  const shouldShow = hasBatchRun || hasResultEntries
   if (!shouldShow) {
     if (existing) existing.remove()
     resultToolbarSignature = ''
     return
   }
-  const nextSignature = `${hasBatchRun ? 1 : 0}:${hasVisibleResults ? 1 : 0}`
-  const primaryLabel = hasVisibleResults ? '打开目录' : '显示结果'
+  const nextSignature = `${hasBatchRun ? 1 : 0}:${hasResultEntries ? 1 : 0}:${hasVisibleResults ? 1 : 0}`
+  const primaryLabel = hasResultEntries ? '打开目录' : '显示结果'
   if (existing) {
     if (resultToolbarSignature === nextSignature) return
     const primaryButton = existing.querySelector('[data-action="open-current-results"]')
