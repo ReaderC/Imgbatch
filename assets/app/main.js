@@ -649,10 +649,6 @@ function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
 
-function hasResultOutputs(state = getState()) {
-  return (state.assets || []).some((asset) => !!getLatestAssetResultPath(asset))
-}
-
 function refreshResultView() {
   const state = getState()
   const items = state.assets
@@ -756,14 +752,13 @@ function injectResultToolbar() {
   const activeRun = getState().activeRun
   const hasBatchRun = activeRun && activeRun.mode !== 'preview-only'
   const hasVisibleResults = hasVisibleResultComparison()
-  const hasResultEntries = hasVisibleResults || hasResultOutputs()
-  const shouldShow = hasBatchRun || hasResultEntries
+  const shouldShow = hasBatchRun || hasVisibleResults
   if (!shouldShow) {
     if (existing) existing.remove()
     resultToolbarSignature = ''
     return
   }
-  const nextSignature = `${hasBatchRun ? 1 : 0}:${hasResultEntries ? 1 : 0}:${hasVisibleResults ? 1 : 0}`
+  const nextSignature = `${hasBatchRun ? 1 : 0}:${hasVisibleResults ? 1 : 0}`
   const primaryLabel = hasVisibleResults ? '打开目录' : '显示结果'
   if (existing) {
     if (resultToolbarSignature === nextSignature) return
