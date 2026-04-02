@@ -95,26 +95,50 @@ export function batchStateUpdates(task) {
 }
 
 export function setState(patch) {
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  let changed = false
+  for (const [key, value] of entries) {
+    if (state[key] !== value) {
+      changed = true
+      break
+    }
+  }
+  if (!changed) return
   Object.assign(state, patch)
   emit()
 }
 
 export function updateSettings(patch) {
-  state.settings = { ...state.settings, ...patch }
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  const nextSettings = { ...state.settings }
+  let changed = false
+  for (const [key, value] of entries) {
+    if (nextSettings[key] !== value) {
+      nextSettings[key] = value
+      changed = true
+    }
+  }
+  if (!changed) return
+  state.settings = nextSettings
   emit()
 }
 
 export function setSettingsDialog(settingsDialog) {
+  if (state.settingsDialog === settingsDialog) return
   state.settingsDialog = settingsDialog
   emit()
 }
 
 export function setPresetDialog(presetDialog) {
+  if (state.presetDialog === presetDialog) return
   state.presetDialog = presetDialog
   emit()
 }
 
 export function setConfirmDialog(confirmDialog) {
+  if (state.confirmDialog === confirmDialog) return
   state.confirmDialog = confirmDialog
   emit()
 }
@@ -135,6 +159,7 @@ export function setPreviewModal(previewModal) {
 }
 
 export function setResultView(resultView) {
+  if (state.resultView === resultView) return
   state.resultView = resultView
   emit()
 }
@@ -174,6 +199,7 @@ export function setActiveTool(toolId) {
 }
 
 export function setSearchQuery(value) {
+  if (state.searchQuery === value) return
   state.searchQuery = value
   emit()
 }
