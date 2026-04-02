@@ -21,6 +21,7 @@ const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PERFORMANCE_MODES = new Set(['compatible', 'balanced', 'max'])
+const QUEUE_THUMBNAIL_SIZE_OPTIONS = new Set(['60', '100', '128', '160', '192'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
@@ -53,7 +54,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
-const QUEUE_THUMBNAIL_MAX_SIZE = 100
+const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -132,6 +133,15 @@ function clampNumber(value, min, max, fallback = min) {
 function sanitizeText(value, fallback = '') {
   const text = typeof value === 'string' ? value.trim() : ''
   return text || fallback
+}
+
+function normalizeQueueThumbnailSize(value) {
+  const normalized = String(value ?? '').trim()
+  return QUEUE_THUMBNAIL_SIZE_OPTIONS.has(normalized) ? normalized : String(DEFAULT_QUEUE_THUMBNAIL_SIZE)
+}
+
+function getQueueThumbnailMaxSize(settings = getAppSettings()) {
+  return Number.parseInt(normalizeQueueThumbnailSize(settings?.queueThumbnailSize), 10) || DEFAULT_QUEUE_THUMBNAIL_SIZE
 }
 
 function pickOption(value, options, fallback) {
@@ -445,7 +455,7 @@ async function createAssetDisplayUrlAsync(filePath, inputFormat = '', sharpLib =
   return nativeUrl
 }
 
-async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib = null, maxDimension = getQueueThumbnailMaxSize()) {
   const format = normalizeImageFormatName(inputFormat)
   const cacheKey = getThumbnailUrlCacheKey(filePath, format, maxDimension)
   if (QUEUE_THUMBNAIL_URL_CACHE.has(cacheKey)) return QUEUE_THUMBNAIL_URL_CACHE.get(cacheKey)
@@ -487,7 +497,7 @@ async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib
   return fallbackUrl
 }
 
-function queueQueueThumbnailGeneration(assetId, filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+function queueQueueThumbnailGeneration(assetId, filePath, inputFormat = '', sharpLib = null, maxDimension = getQueueThumbnailMaxSize()) {
   if (!assetId || !filePath) return
   Promise.resolve()
     .then(() => createQueueThumbnailUrlAsync(filePath, inputFormat, sharpLib, maxDimension))
@@ -669,11 +679,13 @@ function buildSettingsPayload(settings = {}) {
   const saveLocationMode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
   const saveLocationCustomPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
   const performanceMode = PERFORMANCE_MODES.has(settings?.performanceMode) ? settings.performanceMode : 'balanced'
+  const queueThumbnailSize = normalizeQueueThumbnailSize(settings?.queueThumbnailSize)
   return {
     defaultSavePath: saveLocationMode === 'custom' ? saveLocationCustomPath : '',
     saveLocationMode,
     saveLocationCustomPath,
     performanceMode,
+    queueThumbnailSize,
     defaultPresetByTool,
   }
 }
@@ -1063,6 +1075,27 @@ function getSharp() {
   } catch {
     return null
   }
+}
+
+async function regenerateQueueThumbnails(assets = []) {
+  const sharpLib = getSharp()
+  const queueThumbnailSize = getQueueThumbnailMaxSize()
+  const sourceAssets = Array.isArray(assets) ? assets : []
+  await Promise.all(sourceAssets.map(async (asset) => {
+    const assetId = sanitizeText(asset?.id)
+    const sourcePath = sanitizeText(asset?.sourcePath)
+    if (!assetId || !sourcePath || !fs.existsSync(sourcePath)) return
+    try {
+      const listThumbnailUrl = await createQueueThumbnailUrlAsync(
+        sourcePath,
+        sanitizeText(asset?.inputFormat || asset?.ext),
+        sharpLib,
+        queueThumbnailSize,
+      )
+      if (!listThumbnailUrl) return
+      emitQueueThumbnailReady({ assetId, listThumbnailUrl })
+    } catch {}
+  }))
 }
 
 function ensureDirectory(targetPath) {
@@ -3597,6 +3630,10 @@ const toolsApi = {
 
   saveSettings(settings) {
     return saveAppSettings(settings)
+  },
+
+  regenerateQueueThumbnails(assets = []) {
+    return regenerateQueueThumbnails(assets)
   },
 
   buildStagedItems(assets = []) {

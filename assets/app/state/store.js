@@ -20,6 +20,7 @@ const state = {
     saveLocationMode: 'source',
     saveLocationCustomPath: '',
     performanceMode: 'balanced',
+    queueThumbnailSize: '128',
     defaultPresetByTool: {},
   },
   settingsDialog: null,

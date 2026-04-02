@@ -159,6 +159,8 @@ export async function loadSettings() {
       defaultSavePath: '',
       saveLocationMode: 'source',
       saveLocationCustomPath: '',
+      performanceMode: 'balanced',
+      queueThumbnailSize: '128',
       defaultPresetByTool: {},
     }
   }
@@ -171,10 +173,18 @@ export async function saveSettings(settings) {
       defaultSavePath: settings?.defaultSavePath || '',
       saveLocationMode: settings?.saveLocationMode || 'source',
       saveLocationCustomPath: settings?.saveLocationCustomPath || '',
+      performanceMode: settings?.performanceMode || 'balanced',
+      queueThumbnailSize: settings?.queueThumbnailSize || '128',
       defaultPresetByTool: settings?.defaultPresetByTool || {},
     }
   }
   return window.imgbatch.saveSettings(settings)
+}
+
+export async function regenerateQueueThumbnails(assets = []) {
+  if (!hasBridge() || typeof window.imgbatch.regenerateQueueThumbnails !== 'function') return false
+  await window.imgbatch.regenerateQueueThumbnails(assets)
+  return true
 }
 
 export function buildStagedItems(assets = []) {

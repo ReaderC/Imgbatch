@@ -72,6 +72,7 @@ function renderSettingsWorkspace(dialog) {
   const mode = dialog.saveLocationMode || 'source'
   const customPath = dialog.saveLocationCustomPath || ''
   const performanceMode = dialog.performanceMode || 'balanced'
+  const queueThumbnailSize = dialog.queueThumbnailSize || '128'
   const options = [
     ['source', '原图目录'],
     ['downloads', '下载目录'],
@@ -83,6 +84,13 @@ function renderSettingsWorkspace(dialog) {
     ['compatible', '兼容'],
     ['balanced', '均衡'],
     ['max', '高性能'],
+  ]
+  const queueThumbnailOptions = [
+    ['60', '极低'],
+    ['100', '低'],
+    ['128', '中'],
+    ['160', '高'],
+    ['192', '极高'],
   ]
 
   return `
@@ -143,6 +151,29 @@ function renderSettingsWorkspace(dialog) {
               </div>
             </div>
             <div class="queue-subtitle">${escapeHtml(getPerformanceSummary(performanceMode))}</div>
+          </div>
+          <div class="settings-panel__group">
+            <div class="settings-panel__label">队列缩略图质量</div>
+            <div class="select-shell settings-select">
+              <button type="button" class="select-shell__value" data-action="toggle-config-select" aria-haspopup="listbox" aria-expanded="false">
+                <span class="select-shell__text">${escapeHtml((queueThumbnailOptions.find(([value]) => value === queueThumbnailSize) || queueThumbnailOptions[2])[1])}</span>
+                <span class="material-symbols-outlined select-shell__icon">expand_more</span>
+              </button>
+              <div class="select-shell__menu" role="listbox">
+                ${queueThumbnailOptions.map(([value, label]) => `
+                <button
+                  type="button"
+                  class="select-shell__option ${queueThumbnailSize === value ? 'is-active' : ''}"
+                  data-action="set-settings-queue-thumbnail-size"
+                  data-value="${value}"
+                >${label}</button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="queue-subtitle">${escapeHtml(getQueueThumbnailSummary(queueThumbnailSize))}</div>
+            ${queueThumbnailSize === '192'
+              ? '<div class="queue-subtitle">极高档位会生成更大的队列缩略图，并显著增加解码、内存与绘制开销。在大批量图片或全屏场景下，界面响应可能变慢，建议仅在确实需要更高清缩略图时启用。</div>'
+              : ''}
           </div>
         </div>
         <div class="settings-page__actions">
@@ -549,6 +580,14 @@ function getPerformanceSummary(mode) {
   if (mode === 'compatible') return '较低资源占用，适合老机器或后台并行工作。'
   if (mode === 'max') return '优先处理速度，会更积极使用 CPU 与内存。'
   return '默认推荐模式，兼顾速度、稳定性与资源占用。'
+}
+
+function getQueueThumbnailSummary(size) {
+  if (size === '60') return '极低：最轻量，优先降低列表解码与绘制压力，清晰度最低。'
+  if (size === '100') return '低：比默认更省资源，适合更关注流畅度的场景。'
+  if (size === '160') return '高：缩略图更清晰，但会增加一定的内存与绘制开销。'
+  if (size === '192') return '极高：优先保证列表缩略图清晰度，资源占用最高。'
+  return '中：默认推荐档位，在清晰度与性能之间保持较均衡的表现。'
 }
 
 function formatPresetTime(value) {

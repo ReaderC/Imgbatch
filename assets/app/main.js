@@ -39,7 +39,7 @@ import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
 import { getFormatCapability } from './services/ztools-bridge.js'
 import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
+import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -155,6 +155,7 @@ function createSettingsDialogState() {
     saveLocationMode: settings.saveLocationMode || 'source',
     saveLocationCustomPath: settings.saveLocationCustomPath || settings.defaultSavePath || '',
     performanceMode: settings.performanceMode || 'balanced',
+    queueThumbnailSize: settings.queueThumbnailSize || '128',
     settingsSelectOpen: false,
     performanceSelectOpen: false,
   }
@@ -244,13 +245,18 @@ async function saveSettingsFromDialog() {
     notify({ type: 'info', message: '请先选择自定义保存目录。' })
     return
   }
+  const previousQueueThumbnailSize = getState().settings.queueThumbnailSize || '128'
   const payload = {
     saveLocationMode: dialog.saveLocationMode || 'source',
     saveLocationCustomPath: dialog.saveLocationCustomPath || '',
     performanceMode: dialog.performanceMode || 'balanced',
+    queueThumbnailSize: dialog.queueThumbnailSize || '128',
   }
   const settings = await saveSettings(payload)
   updateSettings(settings)
+  if ((settings.queueThumbnailSize || '128') !== previousQueueThumbnailSize) {
+    void regenerateQueueThumbnails(getState().assets)
+  }
   closeSettingsDialog()
   notify({ type: 'success', message: '已保存默认图片保存位置与性能模式。' })
 }
@@ -2229,6 +2235,12 @@ function attachGlobalEvents() {
 
     if (action === 'set-settings-performance-mode') {
       updateSettingsDialog({ performanceMode: target.dataset.value || 'balanced' })
+      closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'set-settings-queue-thumbnail-size') {
+      updateSettingsDialog({ queueThumbnailSize: target.dataset.value || '128' })
       closeConfigSelect(target)
       return
     }
