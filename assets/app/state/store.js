@@ -220,27 +220,44 @@ export function applyRunResult(result) {
     ? { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
     : state.activeRun
 
-  state.assets = state.assets.map((asset, index) => {
+  let nextAssets = null
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
     const processed = processedMap.get(asset.id)
     if (processed) {
-      return applyProcessedAsset(asset, processed, result)
+      const nextAsset = applyProcessedAsset(asset, processed, result)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+      continue
     }
 
     if (isMergedOutput && index === 0 && result.processed?.[0]) {
-      return applyProcessedAsset(asset, result.processed[0], result)
+      const nextAsset = applyProcessedAsset(asset, result.processed[0], result)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+      continue
     }
 
     const failed = failedMap.get(asset.id)
     if (failed) {
-      return {
+      const nextAsset = {
         ...asset,
         status: 'error',
         error: failed.error || '处理失败',
       }
+      if (!nextAssets) nextAssets = [...state.assets]
+      nextAssets[index] = nextAsset
+      continue
     }
+  }
 
-    return asset
-  })
+  if (nextAssets) {
+    state.assets = nextAssets
+  }
 
   if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
     state.resultView = buildResultView(result, state.assets)

@@ -290,7 +290,6 @@ function renderPaddingConfig(config) {
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderInfoRow('总留白', '四边额外扩展画布', `${config.top + config.right + config.bottom + config.left}px`)}
     ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90 })}
   `)
 }
