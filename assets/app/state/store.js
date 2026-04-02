@@ -154,6 +154,7 @@ export function setToolPresets(toolId, presets, emitChange = true) {
 }
 
 export function setPreviewModal(previewModal) {
+  if (state.previewModal === previewModal) return
   state.previewModal = previewModal
   emit()
 }
@@ -189,11 +190,13 @@ export function updateConfig(toolId, patch) {
 export function setActiveTool(toolId) {
   const nextToolId = String(toolId || '').trim() || DEFAULT_TOOL
   const previousToolId = state.activeTool
+  const previousLastWorkspaceTool = state.lastWorkspaceTool
   if (nextToolId !== 'manual-crop') {
     state.lastWorkspaceTool = nextToolId
   } else if (previousToolId && previousToolId !== 'manual-crop') {
     state.lastWorkspaceTool = previousToolId
   }
+  if (previousToolId === nextToolId && previousLastWorkspaceTool === state.lastWorkspaceTool) return
   state.activeTool = nextToolId
   emit()
 }

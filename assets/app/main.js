@@ -39,7 +39,7 @@ import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
 import { getFormatCapability } from './services/ztools-bridge.js'
 import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
+import { cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, savePreset, saveSettings, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -171,7 +171,18 @@ function closeSettingsDialog() {
 function updateSettingsDialog(patch) {
   const current = getState().settingsDialog
   if (!current) return
-  setSettingsDialog({ ...current, ...patch })
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  const next = { ...current }
+  let changed = false
+  for (const [key, value] of entries) {
+    if (next[key] !== value) {
+      next[key] = value
+      changed = true
+    }
+  }
+  if (!changed) return
+  setSettingsDialog(next)
 }
 
 function normalizeLoadedPresets(presets = []) {
@@ -206,7 +217,18 @@ function closeConfirmDialog() {
 function updatePresetDialog(patch) {
   const current = getState().presetDialog
   if (!current) return
-  setPresetDialog({ ...current, ...patch })
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  const next = { ...current }
+  let changed = false
+  for (const [key, value] of entries) {
+    if (next[key] !== value) {
+      next[key] = value
+      changed = true
+    }
+  }
+  if (!changed) return
+  setPresetDialog(next)
 }
 
 function normalizeMeasureToggleValue(value, nextUnit) {
@@ -2349,16 +2371,6 @@ function attachGlobalEvents() {
 
     if (action === 'toggle-config-select') {
       toggleConfigSelect(target)
-      return
-    }
-
-    if (action === 'save-all-results') {
-      await saveAllCurrentResults()
-      return
-    }
-
-    if (action === 'save-asset-result') {
-      await saveAssetResult(target.dataset.assetId)
       return
     }
 
