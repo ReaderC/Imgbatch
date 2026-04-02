@@ -258,13 +258,14 @@ export function applyRunResult(result) {
 
     const failed = failedMap.get(asset.id)
     if (failed) {
-      const nextAsset = {
-        ...asset,
+      const nextAsset = mergeAssetPatch(asset, {
         status: 'error',
         error: failed.error || '处理失败',
+      })
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
       }
-      if (!nextAssets) nextAssets = [...state.assets]
-      nextAssets[index] = nextAsset
       continue
     }
   }
@@ -374,8 +375,7 @@ function applyProcessedAsset(asset, processed, result) {
 
   if (result.mode === 'preview-save' || result.mode === 'preview-only') {
     const isBatchResult = result.mode === 'preview-save'
-    return {
-      ...asset,
+    return mergeAssetPatch(asset, {
       status: 'done',
       error: '',
       warning: derivedWarning,
@@ -392,13 +392,12 @@ function applyProcessedAsset(asset, processed, result) {
       runFolderName: isBatchResult ? processed.runFolderName || result.runFolderName || '' : '',
       stagedToolId: result.toolId,
       saveSignature: processed.saveSignature || '',
-    }
+    })
   }
 
   if (result.mode === 'save') {
     const nextSavedPath = processed.savedOutputPath ?? processed.outputPath ?? ''
-    return {
-      ...asset,
+    return mergeAssetPatch(asset, {
       status: 'done',
       error: '',
       warning: derivedWarning,
@@ -412,11 +411,10 @@ function applyProcessedAsset(asset, processed, result) {
       stagedOutputPath: nextSavedPath ? asset.stagedOutputPath : '',
       runId: asset.runId || result.runId || '',
       runFolderName: asset.runFolderName || result.runFolderName || '',
-    }
+    })
   }
 
-  return {
-    ...asset,
+  return mergeAssetPatch(asset, {
     status: 'done',
     outputPath: processed.outputPath || '',
     savedOutputPath: processed.outputPath || '',
@@ -427,7 +425,19 @@ function applyProcessedAsset(asset, processed, result) {
     stagedHeight: processed.height || asset.stagedHeight || 0,
     error: '',
     warning: derivedWarning,
+  })
+}
+
+function mergeAssetPatch(asset, patch) {
+  if (!asset || !patch || typeof patch !== 'object') return asset
+  let changed = false
+  for (const [key, value] of Object.entries(patch)) {
+    if (asset[key] !== value) {
+      changed = true
+      break
+    }
   }
+  return changed ? { ...asset, ...patch } : asset
 }
 
 function buildResultView(result, assets = []) {

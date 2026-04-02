@@ -490,7 +490,7 @@ async function saveAssetResult(assetId) {
     const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
-      refreshResultView()
+      refreshResultViewIfVisible()
     }
     notifyActionResult(result, '保存失败。')
   } catch (error) {
@@ -511,7 +511,7 @@ async function saveAllCurrentResults() {
     const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
-      refreshResultView()
+      refreshResultViewIfVisible()
     }
     notifyActionResult(result, '批量保存失败。')
   } catch (error) {
@@ -610,40 +610,69 @@ function clearAssetsResultState(processedItems) {
   const ids = new Set(processedList.map((item) => item?.assetId).filter(Boolean))
   const replacementMap = new Map(processedList.map((item) => [item.assetId, item]))
   const state = getState()
-  setState({
-    assets: state.assets.map((asset) => {
-      if (!ids.has(asset.id)) return asset
-      const replaced = replacementMap.get(asset.id)
-      const nextSourcePath = String(replaced?.sourcePath || asset.sourcePath || '')
-      const nextName = nextSourcePath ? nextSourcePath.replaceAll('\\', '/').split('/').pop() || asset.name : asset.name
-      const nextExt = nextName.includes('.') ? nextName.split('.').pop().toLowerCase() : asset.ext
-      return {
-        ...asset,
-        sourcePath: nextSourcePath || asset.sourcePath,
-        name: replaced?.name || nextName,
-        ext: replaced?.inputFormat || nextExt,
-        inputFormat: replaced?.inputFormat || nextExt,
-        sizeBytes: Number(replaced?.sizeBytes) || asset.sizeBytes,
-        width: Number(replaced?.width) || asset.width,
-        height: Number(replaced?.height) || asset.height,
-        thumbnailUrl: replaced?.thumbnailUrl || (nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl),
-        listThumbnailUrl: replaced?.listThumbnailUrl || replaced?.thumbnailUrl || asset.listThumbnailUrl || asset.thumbnailUrl,
-        previewStatus: 'idle',
-        previewUrl: '',
-        stagedOutputPath: '',
-        stagedOutputName: '',
-        stagedSizeBytes: 0,
-        stagedWidth: 0,
-        stagedHeight: 0,
-        savedOutputPath: '',
-        outputPath: '',
-        runId: '',
-        runFolderName: '',
-        stagedToolId: '',
-        saveSignature: '',
-      }
-    }),
-  })
+  let nextAssets = null
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    if (!ids.has(asset.id)) continue
+    const replaced = replacementMap.get(asset.id)
+    const nextSourcePath = String(replaced?.sourcePath || asset.sourcePath || '')
+    const nextName = nextSourcePath ? nextSourcePath.replaceAll('\\', '/').split('/').pop() || asset.name : asset.name
+    const nextExt = nextName.includes('.') ? nextName.split('.').pop().toLowerCase() : asset.ext
+    const nextAsset = {
+      ...asset,
+      sourcePath: nextSourcePath || asset.sourcePath,
+      name: replaced?.name || nextName,
+      ext: replaced?.inputFormat || nextExt,
+      inputFormat: replaced?.inputFormat || nextExt,
+      sizeBytes: Number(replaced?.sizeBytes) || asset.sizeBytes,
+      width: Number(replaced?.width) || asset.width,
+      height: Number(replaced?.height) || asset.height,
+      thumbnailUrl: replaced?.thumbnailUrl || (nextSourcePath ? `file:///${encodeURI(nextSourcePath.replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1:'))}` : asset.thumbnailUrl),
+      listThumbnailUrl: replaced?.listThumbnailUrl || replaced?.thumbnailUrl || asset.listThumbnailUrl || asset.thumbnailUrl,
+      previewStatus: 'idle',
+      previewUrl: '',
+      stagedOutputPath: '',
+      stagedOutputName: '',
+      stagedSizeBytes: 0,
+      stagedWidth: 0,
+      stagedHeight: 0,
+      savedOutputPath: '',
+      outputPath: '',
+      runId: '',
+      runFolderName: '',
+      stagedToolId: '',
+      saveSignature: '',
+    }
+    if (
+      nextAsset.sourcePath === asset.sourcePath
+      && nextAsset.name === asset.name
+      && nextAsset.ext === asset.ext
+      && nextAsset.inputFormat === asset.inputFormat
+      && nextAsset.sizeBytes === asset.sizeBytes
+      && nextAsset.width === asset.width
+      && nextAsset.height === asset.height
+      && nextAsset.thumbnailUrl === asset.thumbnailUrl
+      && nextAsset.listThumbnailUrl === asset.listThumbnailUrl
+      && nextAsset.previewStatus === asset.previewStatus
+      && nextAsset.previewUrl === asset.previewUrl
+      && nextAsset.stagedOutputPath === asset.stagedOutputPath
+      && nextAsset.stagedOutputName === asset.stagedOutputName
+      && nextAsset.stagedSizeBytes === asset.stagedSizeBytes
+      && nextAsset.stagedWidth === asset.stagedWidth
+      && nextAsset.stagedHeight === asset.stagedHeight
+      && nextAsset.savedOutputPath === asset.savedOutputPath
+      && nextAsset.outputPath === asset.outputPath
+      && nextAsset.runId === asset.runId
+      && nextAsset.runFolderName === asset.runFolderName
+      && nextAsset.stagedToolId === asset.stagedToolId
+      && nextAsset.saveSignature === asset.saveSignature
+    ) continue
+    if (!nextAssets) nextAssets = [...state.assets]
+    nextAssets[index] = nextAsset
+  }
+  if (nextAssets) {
+    setState({ assets: nextAssets })
+  }
 }
 
 function hasVisibleResultComparison() {
@@ -695,6 +724,11 @@ function refreshResultView() {
     failed: [],
     createdAt: Date.now(),
   })
+}
+
+function refreshResultViewIfVisible() {
+  if (!hasVisibleResultComparison()) return
+  refreshResultView()
 }
 
 function updateColorPreview(toolId, key, value) {
