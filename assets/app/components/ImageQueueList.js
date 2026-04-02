@@ -1,6 +1,12 @@
 import { TOOL_MAP } from '../config/tools.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
+const QUEUE_VIRTUALIZE_THRESHOLD = 40
+const QUEUE_VIRTUAL_OVERSCAN = 8
+const QUEUE_ITEM_ESTIMATED_HEIGHT = {
+  regular: 118,
+  compact: 86,
+}
 const WATERMARK_POSITION_LABELS = {
   'top-left': '左上',
   'top-center': '上方居中',
@@ -13,16 +19,25 @@ const WATERMARK_POSITION_LABELS = {
   'bottom-right': '右下',
 }
 
-export function renderImageQueue(state) {
+export function renderImageQueue(state, viewport = null) {
   const tool = TOOL_MAP[state.activeTool]
   const assets = state.assets
   const compactLayout = isCompactQueueLayout()
+  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, viewport)
+  const visibleAssets = queueWindow
+    ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
+    : assets
 
   return `
     <section class="queue" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
-        <div class="queue-list">
-          ${assets.map((asset, index) => renderQueueItem(asset, tool, state, index, assets.length, compactLayout)).join('')}
+        <div class="queue-list${queueWindow ? ' queue-list--virtual' : ''}">
+          ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.topSpacer}px;" aria-hidden="true"></div>` : ''}
+          ${visibleAssets.map((asset, index) => {
+            const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
+            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout)
+          }).join('')}
+          ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.bottomSpacer}px;" aria-hidden="true"></div>` : ''}
         </div>
       ` : `
         <div class="empty-state empty-state--queue">
@@ -52,6 +67,23 @@ export function renderImageQueue(state) {
       </div>
     </section>
   `
+}
+
+function getQueueRenderWindow(total, compactLayout, viewport) {
+  if (total < QUEUE_VIRTUALIZE_THRESHOLD) return null
+  const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)
+  const viewportHeight = Math.max(0, Number(viewport?.height) || 0)
+  if (!viewportHeight) return null
+  const itemHeight = compactLayout ? QUEUE_ITEM_ESTIMATED_HEIGHT.compact : QUEUE_ITEM_ESTIMATED_HEIGHT.regular
+  const visibleCount = Math.max(1, Math.ceil(viewportHeight / itemHeight))
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - QUEUE_VIRTUAL_OVERSCAN)
+  const endIndex = Math.min(total, startIndex + visibleCount + QUEUE_VIRTUAL_OVERSCAN * 2)
+  return {
+    startIndex,
+    endIndex,
+    topSpacer: startIndex * itemHeight,
+    bottomSpacer: Math.max(0, total - endIndex) * itemHeight,
+  }
 }
 
 function renderQueueItem(asset, tool, state, index, total, compactLayout = false) {

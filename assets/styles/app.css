@@ -252,18 +252,6 @@ html {
   box-sizing: border-box;
 }
 
-body {
-  overflow: hidden;
-}
-
-.app-shell {
-  display: grid;
-  grid-template-columns: clamp(188px, 18vw, 264px) minmax(0, 1fr);
-  grid-template-rows: 72px minmax(0, 1fr);
-  height: 100vh;
-  background: var(--surface);
-}
-
 .sidebar__brand {
   display: flex;
   flex-direction: column;
@@ -1982,18 +1970,6 @@ body {
 
 .result-page__summary,
 .result-page__empty {
-  color: var(--on-surface-variant);
-}
-
-.result-page__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-}
-
-.result-page__summary,
-.result-page__empty {
   font-size: 13px;
   color: var(--on-surface-variant);
 }
@@ -2003,10 +1979,6 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 240px;
-}
-
-.workspace--result {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar__brand {
@@ -2380,27 +2352,6 @@ body {
 .nav-item .material-symbols-outlined,
 .nav-item span {
   pointer-events: none;
-}
-
-.result-page__card,
-.result-info-card,
-.result-info-row {
-  min-height: 0;
-}
-
-.result-page__card > * {
-  min-width: 0;
-}
-
-.result-page__compare,
-.result-info-card__list {
-  min-width: 0;
-}
-
-.result-page__summary,
-.result-info-row__value,
-.result-page__name {
-  word-break: break-word;
 }
 
 .preview-modal__dialog {
@@ -4607,6 +4558,10 @@ body {
   background: #F0F4F8;
 }
 
+.workspace--result {
+  background: #F0F4F8;
+}
+
 .result-page {
   gap: 6px;
 }
@@ -4852,6 +4807,24 @@ body.manual-crop--dragging-handle .manual-handle {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.render-slot {
+  display: contents;
+}
+
+.queue-list--virtual {
+  gap: 0;
+}
+
+.queue-list--virtual .queue-item + .queue-item {
+  margin-top: 14px;
+}
+
+.queue-list__spacer {
+  flex: 0 0 auto;
+  width: 100%;
+  pointer-events: none;
 }
 
 .queue-item {
@@ -5502,6 +5475,40 @@ body.manual-crop--dragging-handle .manual-handle {
   background: #F0F4F8 !important;
   border-bottom: 0 !important;
   backdrop-filter: none !important;
+}
+
+/* Final result overlay override: occupy the full app shell. */
+.app-shell.app-shell--result-overlay {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.app-shell.app-shell--result-overlay > .render-slot[data-root="workspace"] {
+  display: block !important;
+  grid-column: 1 / -1 !important;
+  grid-row: 1 / -1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100vh !important;
+}
+
+.app-shell.app-shell--result-overlay .workspace--result {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100vh !important;
+  background: #F0F4F8 !important;
+}
+
+.app-shell.app-shell--result-overlay .result-page {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 100vh !important;
+  padding: 22px 22px 92px !important;
+  background: #F0F4F8 !important;
 }
 
 .topbar__title {

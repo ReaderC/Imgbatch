@@ -4,33 +4,65 @@ import { renderTopBar } from './TopBar.js'
 import { renderImageQueue } from './ImageQueueList.js'
 import { renderToolPage } from '../pages/index.js'
 
-export function renderAppShell(state) {
+export function getAppShellMode(state) {
   const tool = TOOL_MAP[state.activeTool]
   const isResultView = !!state.resultView?.items?.length
   const isSettingsView = !!state.settingsDialog?.visible
+  if (tool.mode === 'manual' && !isResultView) return 'manual'
+  if (isSettingsView) return 'settings'
+  if (isResultView) return 'result'
+  return 'workspace'
+}
 
-  if (tool.mode === 'manual' && !isResultView) {
-    return renderToolPage(tool.id, state)
+export function renderAppShell(state) {
+  const mode = getAppShellMode(state)
+
+  if (mode === 'manual') {
+    return renderToolPage(TOOL_MAP[state.activeTool].id, state)
   }
 
   return `
-    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}">
-      ${renderSideNav(state.activeTool, state.sidebarCollapsed)}
-      ${renderTopBar(state)}
-      ${isSettingsView
-        ? `<div class="workspace workspace--settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
-        : isResultView
-        ? `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`
-        : `
-          <div class="workspace">
-            ${renderToolPage(tool.id, state)}
-            ${renderImageQueue(state)}
-          </div>
-        `}
-      ${renderPresetModal(state)}
-      ${renderConfirmModal(state.confirmDialog)}
-      ${renderPreviewModal(state.previewModal)}
+    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${mode === 'result' ? 'app-shell--result-overlay' : ''}">
+      <div class="render-slot" data-root="side-nav">${renderShellSideNav(state, mode)}</div>
+      <div class="render-slot" data-root="topbar">${renderShellTopBar(state, mode)}</div>
+      <div class="render-slot" data-root="workspace">${renderShellWorkspace(state, undefined, mode)}</div>
+      <div class="render-slot" data-root="overlays">${renderShellOverlays(state)}</div>
     </div>
+  `
+}
+
+export function renderShellSideNav(state, mode = getAppShellMode(state)) {
+  if (mode === 'result') return ''
+  return renderSideNav(state.activeTool, state.sidebarCollapsed)
+}
+
+export function renderShellTopBar(state, mode = getAppShellMode(state)) {
+  if (mode === 'result') return ''
+  return renderTopBar(state)
+}
+
+export function renderShellWorkspace(state, queueMarkup = null, mode = getAppShellMode(state)) {
+  if (mode === 'settings') {
+    return `<div class="workspace workspace--settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
+  }
+  if (mode === 'result') {
+    return `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`
+  }
+  const queueContent = queueMarkup ?? renderImageQueue(state)
+  const tool = TOOL_MAP[state.activeTool]
+  return `
+    <div class="workspace">
+      ${renderToolPage(tool.id, state)}
+      <div class="render-slot" data-root="queue">${queueContent}</div>
+    </div>
+  `
+}
+
+export function renderShellOverlays(state) {
+  return `
+    ${renderPresetModal(state)}
+    ${renderConfirmModal(state.confirmDialog)}
+    ${renderPreviewModal(state.previewModal)}
   `
 }
 
