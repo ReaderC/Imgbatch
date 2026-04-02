@@ -5388,6 +5388,7 @@ body.manual-crop--dragging-handle .manual-handle {
 .settings-page {
   display: flex;
   flex-direction: column;
+  align-items: center;
   width: 100%;
   min-height: 100%;
   height: 100%;
@@ -5402,20 +5403,25 @@ body.manual-crop--dragging-handle .manual-handle {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  width: min(1040px, 100%);
+  max-width: 1040px;
   margin-bottom: 24px;
 }
 
 .settings-page__content {
   display: grid;
   gap: 20px;
-  width: min(760px, 100%);
-  max-width: 760px;
+  width: min(1040px, 100%);
+  max-width: 1040px;
 }
 
 .settings-page__actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  width: min(1040px, 100%);
+  max-width: 1040px;
+  margin-top: 4px;
 }
 
 .settings-page__action {
