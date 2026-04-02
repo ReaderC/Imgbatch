@@ -2533,7 +2533,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
     const canCopyOriginal = keepsOriginalSize
       && sourceFormat === format
-      && (format === 'png' || quality >= 100)
+      && canSkipSameFormatEncoding(format, quality)
     if (canCopyOriginal) {
       return copyAssetToOutput(asset, outputPath)
     }
