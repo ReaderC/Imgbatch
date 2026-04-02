@@ -1195,7 +1195,10 @@ function diffRenderSnapshot(prev, next) {
   const notificationsChanged = next.notifications !== prev.notifications
   const toolbarChanged = next.activeRun !== prev.activeRun
     || resultViewChanged
-  const queueChanged = next.assets !== prev.assets || toolChanged || modeChanged
+  const queueChanged = next.assets !== prev.assets
+    || toolChanged
+    || modeChanged
+    || next.isProcessing !== prev.isProcessing
   const marqueeChanged = resultViewChanged
     || (next.mode === 'result' && workspaceChanged)
 
@@ -2816,6 +2819,13 @@ function attachGlobalEvents() {
       closeConfirmDialog()
       return
     }
+    if (event.key === 'Escape' && getState().settingsDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closeSettingsDialog()
+      return
+    }
     const preview = getState().previewModal
     if (!preview?.url) return
     if (event.key === 'Escape') {
@@ -2855,6 +2865,12 @@ function attachGlobalEvents() {
       return
     }
     if (getState().confirmDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().settingsDialog?.visible && event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
