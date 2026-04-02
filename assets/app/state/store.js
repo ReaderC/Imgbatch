@@ -40,7 +40,7 @@ const state = {
     corners: { radius: '24px', background: '#ffffff', keepTransparency: false },
     padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100 },
     crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080 },
-    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
+    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff', quality: 100 },
     flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original', quality: 100 },
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'JPEG', quality: 90 },

@@ -309,7 +309,7 @@ function getToolSummary(toolId, state, asset) {
   if (toolId === 'corners') return `圆角 ${formatMeasureValue(config.radius, 'px')} · ${config.keepTransparency ? '透明背景' : config.background}`
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px · ${config.opacity}%`
   if (toolId === 'crop') return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} · ${config.width}×${config.height}`
-  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
+  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}° · 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     const outputFormat = String(config.outputFormat || 'Keep Original')

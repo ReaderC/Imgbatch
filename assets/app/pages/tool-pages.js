@@ -202,7 +202,7 @@ function renderFormatConfig(config) {
     ])}
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
-      ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: mode !== 'quality' || !qualitySupported, hint: qualityHint })}
+      ${renderQualityField({ toolId: 'format', value: config.quality, disabled: mode !== 'quality' || !qualitySupported, hint: qualityHint })}
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
@@ -221,16 +221,7 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
-    ${renderRangeField({
-      label: '输出质量',
-      toolId: 'resize',
-      key: 'quality',
-      min: 1,
-      max: 100,
-      value: Number(config.quality) || 100,
-      suffix: '%',
-      hint: '尺寸转换默认尽量保真。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。',
-    })}
+    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 100, hint: '尺寸转换默认尽量保真。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
@@ -379,6 +370,7 @@ function renderRotateConfig(config) {
         ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
+    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 100, hint: '旋转后的结果会按这里的质量写出。JPEG / WebP / AVIF / TIFF 为重编码质量；PNG 主要影响压缩策略。' })}
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
     ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
@@ -395,7 +387,7 @@ function renderFlipConfig(config) {
       : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
-    ${renderRangeField({ label: '输出质量', toolId: 'flip', key: 'quality', min: 1, max: 100, value: Number(config.quality) || 100, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
+    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 100, disabled: !qualitySupported, hint: qualityHint })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
@@ -430,7 +422,7 @@ function renderMergeImageConfig(config) {
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
-      ${renderRangeField({ label: '输出质量', toolId: 'merge-image', key: 'quality', min: 1, max: 100, value: config.quality || 90, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
+      ${renderQualityField({ toolId: 'merge-image', value: config.quality || 90, disabled: !qualitySupported, hint: qualityHint })}
     `)}
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
@@ -464,6 +456,20 @@ function renderSettingsSection(content) {
       </div>
     </section>
   `
+}
+
+function renderQualityField({ toolId, value, disabled = false, hint = '' }) {
+  return renderRangeField({
+    label: '输出质量',
+    toolId,
+    key: 'quality',
+    min: 1,
+    max: 100,
+    value,
+    suffix: '%',
+    disabled,
+    hint,
+  })
 }
 
 function renderFieldGrid(content) {

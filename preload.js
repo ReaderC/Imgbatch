@@ -91,7 +91,7 @@ function summarizeConfig(toolId, config = {}) {
   }
   if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
   if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height}` : `裁剪 ${config.ratio}`
-  if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
+  if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     const outputFormat = String(config.outputFormat || 'Keep Original')
@@ -790,6 +790,7 @@ function normalizeRunConfig(toolId, config = {}) {
       autoCrop: Boolean(config.autoCrop),
       keepAspectRatio: Boolean(config.keepAspectRatio),
       background: sanitizeText(config.background, '#ffffff'),
+      quality: clampNumber(config.quality, 1, 100, 100),
     }
   }
 
@@ -2150,12 +2151,13 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
   if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2186,7 +2188,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
     transformed = transformed.flatten({ background: solidBackground })
   }
 
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {

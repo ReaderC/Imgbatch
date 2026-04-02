@@ -3448,6 +3448,10 @@ function getToolInputValidationMessage(toolId, config = {}) {
     return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
   }
 
+  if (toolId === 'rotate') {
+    return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
+  }
+
   if (toolId === 'watermark') {
     if (!isPositiveInputValue(config.opacity)) return '水印透明度必须大于 0 后才能开始处理。'
     if (!isNonNegativeInputValue(config.margin)) return '水印边距不能小于 0。'
@@ -3512,7 +3516,7 @@ function describeToolConfig(toolId, config) {
     if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height}`
     return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
   }
-  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
+  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
     const outputFormat = String(config.outputFormat || 'Keep Original')
