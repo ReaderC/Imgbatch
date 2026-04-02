@@ -53,7 +53,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
-const QUEUE_THUMBNAIL_MAX_SIZE = 60
+const QUEUE_THUMBNAIL_MAX_SIZE = 100
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
