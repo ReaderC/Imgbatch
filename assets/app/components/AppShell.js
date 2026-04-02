@@ -44,7 +44,7 @@ export function renderShellTopBar(state, mode = getAppShellMode(state)) {
 
 export function renderShellWorkspace(state, queueMarkup = null, mode = getAppShellMode(state)) {
   if (mode === 'settings') {
-    return `<div class="workspace workspace--settings" data-scroll-role="settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
+    return `<div class="workspace--settings" data-scroll-role="settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
   }
   if (mode === 'result') {
     return `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`

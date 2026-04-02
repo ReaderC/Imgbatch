@@ -1468,8 +1468,9 @@ function queueQueueItemPatch() {
 function syncShellFrame(state) {
   const shell = app?.querySelector?.('.app-shell')
   if (!shell) return
+  const mode = getAppShellMode(state)
   shell.classList.toggle('app-shell--sidebar-collapsed', !!state.sidebarCollapsed)
-  shell.classList.toggle('app-shell--result-overlay', getAppShellMode(state) === 'result')
+  shell.classList.toggle('app-shell--workspace-overlay', mode === 'result' || mode === 'settings')
   shell.classList.toggle('app-shell--processing', !!state.isProcessing)
 }
 
