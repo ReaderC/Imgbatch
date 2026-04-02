@@ -221,7 +221,7 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
-    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 100, hint: '尺寸转换默认尽量保真。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90, hint: '尺寸转换默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
@@ -370,7 +370,7 @@ function renderRotateConfig(config) {
         ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
-    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 100, hint: '旋转后的结果会按这里的质量写出。JPEG / WebP / AVIF / TIFF 为重编码质量；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90, hint: '旋转默认使用 90 质量平衡体积与速度。JPEG / WebP / AVIF / TIFF 为重编码质量；PNG 主要影响压缩策略。' })}
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
     ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
@@ -387,7 +387,7 @@ function renderFlipConfig(config) {
       : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
-    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 100, disabled: !qualitySupported, hint: qualityHint })}
+    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 90, disabled: !qualitySupported, hint: qualityHint })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}

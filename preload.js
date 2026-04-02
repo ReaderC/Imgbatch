@@ -720,7 +720,7 @@ function normalizeRunConfig(toolId, config = {}) {
       width: normalizeMeasure(config.width, 1920, inferMeasureUnit(config.width, 'px')),
       height: normalizeMeasure(config.height, 1080, inferMeasureUnit(config.height, 'px')),
       lockAspectRatio: Boolean(config.lockAspectRatio),
-      quality: clampNumber(config.quality, 1, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -790,7 +790,7 @@ function normalizeRunConfig(toolId, config = {}) {
       autoCrop: Boolean(config.autoCrop),
       keepAspectRatio: Boolean(config.keepAspectRatio),
       background: sanitizeText(config.background, '#ffffff'),
-      quality: clampNumber(config.quality, 1, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -801,7 +801,7 @@ function normalizeRunConfig(toolId, config = {}) {
       preserveMetadata: Boolean(config.preserveMetadata),
       autoCropTransparent: Boolean(config.autoCropTransparent),
       outputFormat: sanitizeText(config.outputFormat, 'Keep Original'),
-      quality: clampNumber(config.quality, 1, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -1725,7 +1725,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
-  const quality = clampNumber(config.quality, 1, 100, 100)
+  const quality = clampNumber(config.quality, 1, 100, 90)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
