@@ -29,16 +29,15 @@ const WATERMARK_POSITION_LABELS = {
 export function renderImageQueue(state, viewport = null) {
   const tool = TOOL_MAP[state.activeTool]
   const assets = state.assets
-  const compactLayout = isCompactQueueLayout()
-  const denseLayout = shouldUseDenseQueueLayout(assets.length, compactLayout)
-  const processingDenseLayout = shouldUseProcessingDenseQueueLayout(state, compactLayout)
+  const layoutFlags = getQueueLayoutFlags(state)
+  const { compactLayout, denseLayout, processingDenseLayout } = layoutFlags
   const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, processingDenseLayout, viewport)
   const visibleAssets = queueWindow
     ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
     : assets
 
   return `
-    <section class="queue${denseLayout ? ' queue--dense' : ''}${processingDenseLayout ? ' queue--processing-dense' : ''}" data-role="drop-surface" data-scroll-role="queue">
+    <section class="${buildQueueClassName(layoutFlags)}" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
         <div class="queue-list${queueWindow ? ' queue-list--virtual' : ''}">
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.topSpacer}px;" aria-hidden="true"></div>` : ''}
@@ -80,6 +79,26 @@ export function renderImageQueue(state, viewport = null) {
 
 export function shouldVirtualizeQueue(total = 0) {
   return Number(total) >= QUEUE_VIRTUALIZE_THRESHOLD
+}
+
+export function getQueueLayoutFlags(state) {
+  const compactLayout = isCompactQueueLayout()
+  const total = Number(state?.assets?.length || 0)
+  const denseLayout = shouldUseDenseQueueLayout(total, compactLayout)
+  const processingDenseLayout = shouldUseProcessingDenseQueueLayout(state, compactLayout)
+  return {
+    compactLayout,
+    denseLayout,
+    processingDenseLayout,
+  }
+}
+
+export function buildQueueClassName(flags = {}) {
+  return `queue${flags.denseLayout ? ' queue--dense' : ''}${flags.processingDenseLayout ? ' queue--processing-dense' : ''}`
+}
+
+export function buildQueueItemClassName(baseClassName, flags = {}) {
+  return `${baseClassName || 'queue-item'}${flags.denseLayout ? ' queue-item--dense' : ''}${flags.processingDenseLayout ? ' queue-item--processing-dense' : ''}`
 }
 
 export function renderQueueItemFragments(asset, tool, state, index, total, compactLayout = isCompactQueueLayout()) {
@@ -184,7 +203,7 @@ function renderQueueItem(asset, tool, state, index, total, compactLayout = false
   const fragments = renderQueueItemFragments(asset, tool, state, index, total, compactLayout)
   const sortableAttrs = ` data-asset-id="${asset.id}"${fragments.draggable ? ' draggable="true"' : ''}`
   return `
-    <article class="${fragments.itemClassName}${denseLayout ? ' queue-item--dense' : ''}${processingDenseLayout ? ' queue-item--processing-dense' : ''}"${sortableAttrs}>
+    <article class="${buildQueueItemClassName(fragments.itemClassName, { denseLayout, processingDenseLayout })}"${sortableAttrs}>
       <div class="queue-item__thumb">
         ${asset.listThumbnailUrl
           ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" fetchpriority="low" draggable="false" width="96" height="72" />`

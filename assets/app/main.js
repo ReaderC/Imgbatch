@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { buildQueueClassName, buildQueueItemClassName, getQueueLayoutFlags, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
 import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
@@ -1418,9 +1418,16 @@ function patchQueueItemsForToolChange(state) {
   if (!root) return false
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return false
-  const compactLayout = typeof window !== 'undefined' && window.innerWidth <= 1040
+  const layoutFlags = getQueueLayoutFlags(state)
+  const { compactLayout } = layoutFlags
   const assetIndexMap = new Map(state.assets.map((asset, index) => [asset.id, index]))
   let changed = false
+
+  const expectedRootClassName = buildQueueClassName(layoutFlags)
+  if (root.className !== expectedRootClassName) {
+    root.className = expectedRootClassName
+    changed = true
+  }
 
   root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
     const assetId = item.getAttribute('data-asset-id') || ''
@@ -1428,9 +1435,10 @@ function patchQueueItemsForToolChange(state) {
     if (assetIndex == null) return
     const asset = state.assets[assetIndex]
     const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout)
+    const expectedItemClassName = buildQueueItemClassName(fragments.itemClassName, layoutFlags)
     const expectedDraggable = fragments.draggable ? 'true' : null
-    if (item.className !== fragments.itemClassName) {
-      item.className = fragments.itemClassName
+    if (item.className !== expectedItemClassName) {
+      item.className = expectedItemClassName
       changed = true
     }
     if ((item.getAttribute('draggable') || null) !== expectedDraggable) {
@@ -1673,6 +1681,18 @@ function render(state) {
     if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
+    const layoutOnlyQueueChange = diff.previousMode === 'workspace'
+      && diff.nextMode === 'workspace'
+      && lastRenderSnapshot.assets === nextSnapshot.assets
+      && !diff.toolChanged
+      && !diff.modeChanged
+      && lastRenderSnapshot.isProcessing !== nextSnapshot.isProcessing
+    if (layoutOnlyQueueChange) {
+      queueQueueItemPatch()
+      effectiveQueueChanged = false
+      lastRenderSnapshot = nextSnapshot
+      return
+    }
     const { root, changed } = renderQueueRoot(state)
     if (!changed) {
       queuePostRenderWork({
