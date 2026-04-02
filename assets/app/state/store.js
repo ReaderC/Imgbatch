@@ -3,9 +3,12 @@ import { DEFAULT_TOOL } from '../config/tools.js'
 const listeners = new Set()
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
+let batchDepth = 0
+let emitQueued = false
 
 const state = {
   activeTool: DEFAULT_TOOL,
+  lastWorkspaceTool: DEFAULT_TOOL,
   searchQuery: '',
   destinationPath: '',
   isProcessing: false,
@@ -17,6 +20,7 @@ const state = {
     saveLocationMode: 'source',
     saveLocationCustomPath: '',
     performanceMode: 'balanced',
+    queueThumbnailSize: '128',
     defaultPresetByTool: {},
   },
   settingsDialog: null,
@@ -30,14 +34,14 @@ const state = {
   notifications: [],
   configs: {
     compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
-    format: { mode: 'convert', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
-    resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 100 },
-    watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
-    corners: { radius: '24px', background: '#ffffff', keepTransparency: false },
-    padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100 },
-    crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080 },
-    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff' },
-    flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original' },
+    format: { mode: 'quality', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
+    resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
+    watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100, quality: 90 },
+    corners: { radius: '24px', background: '#ffffff', keepTransparency: false, quality: 90 },
+    padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100, quality: 90 },
+    crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080, quality: 90 },
+    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff', quality: 90 },
+    flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original', quality: 90 },
     'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
     'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, outputFormat: 'JPEG', quality: 90 },
     'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true, useMaxAssetSize: false },
@@ -76,6 +80,20 @@ export function subscribe(listener) {
   return () => listeners.delete(listener)
 }
 
+export function batchStateUpdates(task) {
+  if (typeof task !== 'function') return
+  batchDepth += 1
+  try {
+    task()
+  } finally {
+    batchDepth = Math.max(0, batchDepth - 1)
+    if (!batchDepth && emitQueued) {
+      emitQueued = false
+      emitNow()
+    }
+  }
+}
+
 export function setState(patch) {
   Object.assign(state, patch)
   emit()
@@ -101,12 +119,14 @@ export function setConfirmDialog(confirmDialog) {
   emit()
 }
 
-export function setToolPresets(toolId, presets) {
+export function setToolPresets(toolId, presets, emitChange = true) {
+  const nextPresets = Array.isArray(presets) ? presets : []
+  if (state.presetsByTool?.[toolId] === nextPresets) return
   state.presetsByTool = {
     ...state.presetsByTool,
-    [toolId]: Array.isArray(presets) ? presets : [],
+    [toolId]: nextPresets,
   }
-  emit()
+  if (emitChange) emit()
 }
 
 export function setPreviewModal(previewModal) {
@@ -120,15 +140,36 @@ export function setResultView(resultView) {
 }
 
 export function updateConfig(toolId, patch) {
-  state.configs[toolId] = { ...state.configs[toolId], ...patch }
+  const currentConfig = state.configs[toolId] || {}
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  const hasConfigChanges = entries.some(([key, value]) => currentConfig[key] !== value)
+  if (!hasConfigChanges) return
+  state.configs[toolId] = { ...currentConfig, ...patch }
   if (PREVIEW_SAVE_TOOLS.has(toolId)) {
-    state.assets = state.assets.map((asset) => markAssetPreviewStale(asset, toolId))
+    let nextAssets = null
+    for (let index = 0; index < state.assets.length; index += 1) {
+      const asset = state.assets[index]
+      const nextAsset = markAssetPreviewStale(asset, toolId)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+    }
+    if (nextAssets) state.assets = nextAssets
   }
   emit()
 }
 
 export function setActiveTool(toolId) {
-  state.activeTool = toolId
+  const nextToolId = String(toolId || '').trim() || DEFAULT_TOOL
+  const previousToolId = state.activeTool
+  if (nextToolId !== 'manual-crop') {
+    state.lastWorkspaceTool = nextToolId
+  } else if (previousToolId && previousToolId !== 'manual-crop') {
+    state.lastWorkspaceTool = previousToolId
+  }
+  state.activeTool = nextToolId
   emit()
 }
 
@@ -193,27 +234,44 @@ export function applyRunResult(result) {
     ? { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
     : state.activeRun
 
-  state.assets = state.assets.map((asset, index) => {
+  let nextAssets = null
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
     const processed = processedMap.get(asset.id)
     if (processed) {
-      return applyProcessedAsset(asset, processed, result)
+      const nextAsset = applyProcessedAsset(asset, processed, result)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+      continue
     }
 
     if (isMergedOutput && index === 0 && result.processed?.[0]) {
-      return applyProcessedAsset(asset, result.processed[0], result)
+      const nextAsset = applyProcessedAsset(asset, result.processed[0], result)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+      continue
     }
 
     const failed = failedMap.get(asset.id)
     if (failed) {
-      return {
+      const nextAsset = {
         ...asset,
         status: 'error',
         error: failed.error || '处理失败',
       }
+      if (!nextAssets) nextAssets = [...state.assets]
+      nextAssets[index] = nextAsset
+      continue
     }
+  }
 
-    return asset
-  })
+  if (nextAssets) {
+    state.assets = nextAssets
+  }
 
   if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
     state.resultView = buildResultView(result, state.assets)
@@ -463,6 +521,14 @@ function getPathFileName(value = '') {
   return normalized.split('/').pop() || ''
 }
 
-function emit() {
+function emitNow() {
   for (const listener of listeners) listener(state)
+}
+
+function emit() {
+  if (batchDepth > 0) {
+    emitQueued = true
+    return
+  }
+  emitNow()
 }

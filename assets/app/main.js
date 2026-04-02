@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { buildQueueClassName, buildQueueItemClassName, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
 import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
@@ -37,14 +37,14 @@ import {
 } from './lib/manual-crop-flow.js'
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
-import { appendAssets, applyRunResult, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
-import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
+import { getFormatCapability } from './services/ztools-bridge.js'
+import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
+import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const MERGE_PREVIEW_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
-const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const MANUAL_CROP_RATIO_ORDER = [
   { label: '1:1', value: '1:1' },
   { label: '4:5', value: '4:5' },
@@ -92,9 +92,13 @@ let pendingProcessingProgress = undefined
 let lastRenderSnapshot = null
 let queueRenderFrame = 0
 let queueItemPatchFrame = 0
+let rotateDialFrame = 0
 let detachedQueueContent = null
+let detachedQueueState = null
 let queueThumbnailPatchFrame = 0
 let pendingQueueScrollRestore = null
+let queueMarkupCacheDirty = false
+let lastQueueViewportRenderSignature = ''
 const pendingQueueThumbnailPatches = new Map()
 const rootMarkupCache = {
   sideNav: '',
@@ -154,6 +158,7 @@ function createSettingsDialogState() {
     saveLocationMode: settings.saveLocationMode || 'source',
     saveLocationCustomPath: settings.saveLocationCustomPath || settings.defaultSavePath || '',
     performanceMode: settings.performanceMode || 'balanced',
+    queueThumbnailSize: settings.queueThumbnailSize || '128',
     settingsSelectOpen: false,
     performanceSelectOpen: false,
   }
@@ -178,11 +183,11 @@ function normalizeLoadedPresets(presets = []) {
   }))
 }
 
-async function ensureToolPresetsLoaded(toolId, force = false) {
+async function ensureToolPresetsLoaded(toolId, force = false, options = {}) {
   const cached = getState().presetsByTool?.[toolId]
   if (!force && Array.isArray(cached)) return cached
   const presets = normalizeLoadedPresets(await loadPresets(toolId))
-  setToolPresets(toolId, presets)
+  setToolPresets(toolId, presets, options.emitChange !== false)
   return presets
 }
 
@@ -227,7 +232,7 @@ function isSameConfigShape(left, right) {
 async function applyDefaultPresetForTool(toolId, silent = false) {
   const defaultPresetId = getDefaultPresetMap()?.[toolId]
   if (!defaultPresetId) return false
-  const presets = await ensureToolPresetsLoaded(toolId)
+  const presets = await ensureToolPresetsLoaded(toolId, false, { emitChange: !silent })
   const preset = presets.find((item) => item.id === defaultPresetId)
   if (!preset?.config) return false
   if (isSameConfigShape(getState().configs?.[toolId], preset.config)) return false
@@ -243,13 +248,18 @@ async function saveSettingsFromDialog() {
     notify({ type: 'info', message: '请先选择自定义保存目录。' })
     return
   }
+  const previousQueueThumbnailSize = getState().settings.queueThumbnailSize || '128'
   const payload = {
     saveLocationMode: dialog.saveLocationMode || 'source',
     saveLocationCustomPath: dialog.saveLocationCustomPath || '',
     performanceMode: dialog.performanceMode || 'balanced',
+    queueThumbnailSize: dialog.queueThumbnailSize || '128',
   }
   const settings = await saveSettings(payload)
   updateSettings(settings)
+  if ((settings.queueThumbnailSize || '128') !== previousQueueThumbnailSize) {
+    void regenerateQueueThumbnails(getState().assets)
+  }
   closeSettingsDialog()
   notify({ type: 'success', message: '已保存默认图片保存位置与性能模式。' })
 }
@@ -729,9 +739,11 @@ function openColorPickerZoom(target) {
 }
 
 function resetActiveResultUi() {
-  closePreviewModal()
-  setResultView(null)
-  setState({ activeRun: null })
+  batchStateUpdates(() => {
+    closePreviewModal()
+    setResultView(null)
+    setState({ activeRun: null })
+  })
 }
 
 function injectResultToolbar() {
@@ -1186,7 +1198,10 @@ function diffRenderSnapshot(prev, next) {
   const notificationsChanged = next.notifications !== prev.notifications
   const toolbarChanged = next.activeRun !== prev.activeRun
     || resultViewChanged
-  const queueChanged = next.assets !== prev.assets || toolChanged || modeChanged
+  const queueChanged = next.assets !== prev.assets
+    || toolChanged
+    || modeChanged
+    || next.isProcessing !== prev.isProcessing
   const marqueeChanged = resultViewChanged
     || (next.mode === 'result' && workspaceChanged)
 
@@ -1320,19 +1335,35 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
   return { root, changed: false }
 }
 
-function detachQueueContent() {
-  const root = getRootNode('queue')
-  const content = root?.firstElementChild || null
-  if (!root || !content) return
-  root.removeChild(content)
-  detachedQueueContent = content
+function canReuseDetachedQueueContent(state) {
+  if (!detachedQueueContent || !detachedQueueState) return false
+  if ((detachedQueueState.activeTool || '') !== String(state?.activeTool || '')) return false
+  return detachedQueueState.assetOrderSignature === getAssetOrderSignature(state?.assets)
 }
 
-function attachDetachedQueueContent() {
+function detachQueueContent(snapshot = null) {
   const root = getRootNode('queue')
-  if (!root || !detachedQueueContent) return false
+  const content = root?.firstElementChild || null
+  if (!root || !content) {
+    detachedQueueContent = null
+    detachedQueueState = null
+    return
+  }
+  root.removeChild(content)
+  detachedQueueContent = content
+  detachedQueueState = {
+    activeTool: snapshot?.activeTool || getState().activeTool,
+    assetOrderSignature: getAssetOrderSignature(snapshot?.assets || getState().assets),
+  }
+}
+
+function attachDetachedQueueContent(state = getState()) {
+  const root = getRootNode('queue')
+  if (!root || !canReuseDetachedQueueContent(state)) return false
   root.replaceChildren(detachedQueueContent)
   detachedQueueContent = null
+  detachedQueueState = null
+  queueMarkupCacheDirty = true
   syncQueueViewportFromDom()
   return true
 }
@@ -1391,9 +1422,16 @@ function patchQueueItemsForToolChange(state) {
   if (!root) return false
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return false
-  const compactLayout = typeof window !== 'undefined' && window.innerWidth <= 1040
+  const layoutFlags = getQueueLayoutFlags(state)
+  const { compactLayout } = layoutFlags
   const assetIndexMap = new Map(state.assets.map((asset, index) => [asset.id, index]))
   let changed = false
+
+  const expectedRootClassName = buildQueueClassName(layoutFlags)
+  if (root.className !== expectedRootClassName) {
+    root.className = expectedRootClassName
+    changed = true
+  }
 
   root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
     const assetId = item.getAttribute('data-asset-id') || ''
@@ -1401,9 +1439,10 @@ function patchQueueItemsForToolChange(state) {
     if (assetIndex == null) return
     const asset = state.assets[assetIndex]
     const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout)
+    const expectedItemClassName = buildQueueItemClassName(fragments.itemClassName, layoutFlags)
     const expectedDraggable = fragments.draggable ? 'true' : null
-    if (item.className !== fragments.itemClassName) {
-      item.className = fragments.itemClassName
+    if (item.className !== expectedItemClassName) {
+      item.className = expectedItemClassName
       changed = true
     }
     if ((item.getAttribute('draggable') || null) !== expectedDraggable) {
@@ -1412,13 +1451,15 @@ function patchQueueItemsForToolChange(state) {
       changed = true
     }
     const content = item.querySelector('.queue-item__content')
-    if (content && content.innerHTML !== fragments.contentMarkup) {
+    if (content && content.dataset.renderSignature !== fragments.contentSignature) {
       content.innerHTML = fragments.contentMarkup
+      content.dataset.renderSignature = fragments.contentSignature
       changed = true
     }
     const controls = item.querySelector('.queue-item__controls')
-    if (controls && controls.innerHTML !== fragments.controlsMarkup) {
+    if (controls && controls.dataset.renderSignature !== fragments.controlsSignature) {
       controls.innerHTML = fragments.controlsMarkup
+      controls.dataset.renderSignature = fragments.controlsSignature
       changed = true
     }
   })
@@ -1433,7 +1474,7 @@ function queueQueueItemPatch() {
     const state = getState()
     if (getAppShellMode(state) !== 'workspace') return
     if (patchQueueItemsForToolChange(state)) {
-      rootMarkupCache.queue = getRootNode('queue')?.innerHTML || rootMarkupCache.queue
+      queueMarkupCacheDirty = true
     }
     restoreQueuedQueueScroll(state)
   })
@@ -1442,8 +1483,9 @@ function queueQueueItemPatch() {
 function syncShellFrame(state) {
   const shell = app?.querySelector?.('.app-shell')
   if (!shell) return
+  const mode = getAppShellMode(state)
   shell.classList.toggle('app-shell--sidebar-collapsed', !!state.sidebarCollapsed)
-  shell.classList.toggle('app-shell--result-overlay', getAppShellMode(state) === 'result')
+  shell.classList.toggle('app-shell--workspace-overlay', mode === 'result' || mode === 'settings')
   shell.classList.toggle('app-shell--processing', !!state.isProcessing)
 }
 
@@ -1465,11 +1507,12 @@ function renderQueueRoot(state, preserveScroll = true) {
   const previousScrollTop = preserveScroll ? queueViewportState.scrollTop : 0
   const markup = renderImageQueue(state, queueViewportState)
   let changed = false
-  if (rootMarkupCache.queue !== markup) {
+  if (queueMarkupCacheDirty || rootMarkupCache.queue !== markup) {
     const detachedThumbs = detachQueueThumbContent(root)
     root.innerHTML = markup
     attachQueueThumbContent(root, detachedThumbs)
     rootMarkupCache.queue = markup
+    queueMarkupCacheDirty = false
     changed = true
   }
   const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
@@ -1477,6 +1520,9 @@ function renderQueueRoot(state, preserveScroll = true) {
     queueNode.scrollTop = previousScrollTop
   }
   syncQueueViewportFromDom()
+  lastQueueViewportRenderSignature = shouldTrackQueueViewport(state)
+    ? getQueueViewportRenderSignature(state, queueViewportState)
+    : ''
   return { root, changed }
 }
 
@@ -1489,6 +1535,11 @@ function getWorkspaceTooltipRoot(mode = getAppShellMode(getState())) {
 
 function scheduleQueueRootRender() {
   if (queueRenderFrame) return
+  const state = getState()
+  if (shouldTrackQueueViewport(state)) {
+    const nextSignature = getQueueViewportRenderSignature(state, queueViewportState)
+    if (nextSignature && nextSignature === lastQueueViewportRenderSignature) return
+  }
   queueRenderFrame = requestAnimationFrame(() => {
     queueRenderFrame = 0
     const state = getState()
@@ -1500,9 +1551,16 @@ function scheduleQueueRootRender() {
       queueChanged: changed,
       toolbarChanged: false,
       marqueeChanged: false,
-      tooltipRoots: changed && root ? [root] : [],
+      tooltipRoots: [],
     })
   })
+}
+
+function shouldPatchQueueInPlace(diff, prevSnapshot, nextSnapshot, state) {
+  if (nextSnapshot.mode !== 'workspace' || diff.previousMode !== 'workspace') return false
+  if (diff.toolChanged || diff.modeChanged) return false
+  if (!hasSameAssetOrder(prevSnapshot.assets, state.assets)) return false
+  return prevSnapshot.assets !== nextSnapshot.assets || prevSnapshot.isProcessing !== nextSnapshot.isProcessing
 }
 
 function canPatchShell(prev, next) {
@@ -1511,30 +1569,69 @@ function canPatchShell(prev, next) {
   return !!app?.querySelector?.('.app-shell')
 }
 
+function shouldCaptureSnapshotForFullShell(prev, next) {
+  if (!prev || !next) return false
+  if (prev.mode === 'manual' || next.mode === 'manual') return false
+  return true
+}
+
+function getAssetOrderSignature(assets = []) {
+  if (!Array.isArray(assets) || !assets.length) return ''
+  return assets.map((asset) => String(asset?.id || '')).join('|')
+}
+
 function renderFullShell(state, snapshot) {
   const mode = getAppShellMode(state)
-  app.innerHTML = renderAppShell(state) + renderNotificationsRoot(state.notifications)
+  const shouldReuseDetachedQueue = mode === 'workspace' && canReuseDetachedQueueContent(state)
+  const queueMarkup = mode === 'workspace'
+    ? (shouldReuseDetachedQueue
+        ? ''
+        : renderImageQueue(state, shouldTrackQueueViewport(state) ? queueViewportState : null))
+    : null
+  app.innerHTML = renderAppShell(state, queueMarkup) + renderNotificationsRoot(state.notifications)
   const sideNavRoot = getRootNode('side-nav')
   const topbarRoot = getRootNode('topbar')
   const workspaceRoot = getRootNode('workspace')
   const panelRoot = getRootNode('panel')
+  const queueRoot = getRootNode('queue')
   const overlaysRoot = getRootNode('overlays')
   const notificationsRoot = getRootNode('notifications')
+  let queueTooltipRoot = null
+  if (shouldReuseDetachedQueue) {
+    if (attachDetachedQueueContent(state)) {
+      if (patchQueueItemsForToolChange(state) && queueRoot) {
+        queueTooltipRoot = queueRoot
+      }
+    } else if (mode === 'workspace') {
+      detachedQueueContent = null
+      detachedQueueState = null
+      renderQueueRoot(state, false)
+    }
+  }
+  restoreQueuedQueueScroll(state)
+  const queueViewportChanged = mode === 'workspace'
+    && shouldTrackQueueViewport(state)
+    && syncQueueViewportFromDom()
   rootMarkupCache.sideNav = sideNavRoot?.innerHTML || ''
   rootMarkupCache.topbar = topbarRoot?.innerHTML || ''
   rootMarkupCache.workspace = workspaceRoot?.innerHTML || ''
   rootMarkupCache.panel = panelRoot?.innerHTML || ''
-  rootMarkupCache.queue = getRootNode('queue')?.innerHTML || ''
+  rootMarkupCache.queue = mode === 'workspace' && !shouldReuseDetachedQueue
+    ? (queueMarkup || '')
+    : ''
+  queueMarkupCacheDirty = mode === 'workspace' && shouldReuseDetachedQueue
+  lastQueueViewportRenderSignature = shouldTrackQueueViewport(state)
+    ? getQueueViewportRenderSignature(state, queueViewportState)
+    : ''
   rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
   rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
-  restoreQueuedQueueScroll(state)
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
-    queueChanged: mode === 'workspace' && shouldTrackQueueViewport(state),
+    queueChanged: queueViewportChanged,
     toolbarChanged: Boolean(state.activeRun || state.resultView),
     marqueeChanged: mode === 'result',
-    tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
+    tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, queueTooltipRoot, overlaysRoot, notificationsRoot].filter(Boolean),
   })
 }
 
@@ -1542,13 +1639,32 @@ function render(state) {
   const nextSnapshot = captureRenderSnapshot(state)
   const fullShellChange = !canPatchShell(lastRenderSnapshot, nextSnapshot)
   if (fullShellChange) {
-    const snapshot = captureUiSnapshot()
+    if (lastRenderSnapshot?.mode === 'workspace' && nextSnapshot.mode === 'manual') {
+      detachQueueContent(lastRenderSnapshot)
+    }
+    const snapshot = shouldCaptureSnapshotForFullShell(lastRenderSnapshot, nextSnapshot)
+      ? captureUiSnapshot()
+      : null
     renderFullShell(state, snapshot)
     lastRenderSnapshot = nextSnapshot
     return
   }
 
   const diff = diffRenderSnapshot(lastRenderSnapshot, nextSnapshot)
+  const progressOnlyTopbarChange = diff.topbarChanged
+    && !diff.shellFrameChanged
+    && !diff.sideNavChanged
+    && !diff.workspaceChanged
+    && !diff.overlaysChanged
+    && !diff.notificationsChanged
+    && !diff.toolbarChanged
+    && !diff.queueChanged
+    && !diff.marqueeChanged
+  if (progressOnlyTopbarChange) {
+    syncTopBarRoot(state, nextSnapshot.mode)
+    lastRenderSnapshot = nextSnapshot
+    return
+  }
   const tooltipRoots = []
   let effectiveQueueChanged = diff.queueChanged
   let shouldCaptureWorkspaceSnapshot = diff.workspaceChanged
@@ -1605,19 +1721,24 @@ function render(state) {
     if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
-    const { root, changed } = renderQueueRoot(state)
-    if (root && changed) tooltipRoots.push(root)
-    if (!changed) {
-      queuePostRenderWork({
-        snapshot: null,
-        activeTool: state.activeTool,
-        queueChanged: false,
-        toolbarChanged: diff.toolbarChanged,
-        marqueeChanged: diff.marqueeChanged,
-        tooltipRoots,
-      })
-      lastRenderSnapshot = nextSnapshot
-      return
+    const shouldPatchQueue = shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
+    if (shouldPatchQueue) {
+      queueQueueItemPatch()
+      effectiveQueueChanged = false
+    } else {
+      const { root, changed } = renderQueueRoot(state)
+      if (!changed) {
+        queuePostRenderWork({
+          snapshot: null,
+          activeTool: state.activeTool,
+          queueChanged: false,
+          toolbarChanged: diff.toolbarChanged,
+          marqueeChanged: diff.marqueeChanged,
+          tooltipRoots,
+        })
+        lastRenderSnapshot = nextSnapshot
+        return
+      }
     }
   }
   if (diff.overlaysChanged) {
@@ -1658,6 +1779,10 @@ function queuePostRenderWork(work) {
   } else {
     pendingPostRenderWork = work
   }
+  if (!hasPendingPostRenderEffects(pendingPostRenderWork)) {
+    pendingPostRenderWork = null
+    return
+  }
   if (postRenderFrame) return
   postRenderFrame = requestAnimationFrame(() => {
     postRenderFrame = 0
@@ -1666,8 +1791,10 @@ function queuePostRenderWork(work) {
     if (!nextWork) return
     if (nextWork.toolbarChanged) injectResultToolbar()
     if (nextWork.snapshot) restoreUiSnapshot(nextWork.snapshot)
-    for (const root of nextWork.tooltipRoots || []) {
-      syncCustomTooltips(root)
+    if ((nextWork.tooltipRoots || []).length && document.querySelector('[title]:not([data-tooltip])')) {
+      for (const root of nextWork.tooltipRoots || []) {
+        syncCustomTooltips(root)
+      }
     }
     if (nextWork.marqueeChanged) queueResultMarqueeSync()
     if (nextWork.queueChanged && shouldTrackQueueViewport(getState()) && syncQueueViewportFromDom()) {
@@ -1677,6 +1804,13 @@ function queuePostRenderWork(work) {
       queueManualCropStageSync()
     }
   })
+}
+
+function hasPendingPostRenderEffects(work) {
+  if (!work) return false
+  if (work.snapshot || work.queueChanged || work.toolbarChanged || work.marqueeChanged) return true
+  if (Array.isArray(work.tooltipRoots) && work.tooltipRoots.length > 0) return true
+  return work.activeTool === 'manual-crop'
 }
 
 function isEditableTarget(target) {
@@ -1841,6 +1975,10 @@ function patchQueueThumbnail(assetId, listThumbnailUrl) {
   image.alt = asset?.name || ''
   image.loading = 'lazy'
   image.decoding = 'async'
+  image.fetchPriority = 'low'
+  image.draggable = false
+  image.width = 96
+  image.height = 72
   thumb.replaceChildren(image)
 }
 
@@ -2096,9 +2234,13 @@ function attachGlobalEvents() {
     if (action === 'activate-tool') {
       event.preventDefault()
       queueQueueScrollRestore()
-      resetActiveResultUi()
-      setActiveTool(target.dataset.toolId)
-      void applyDefaultPresetForTool(target.dataset.toolId, true)
+      batchStateUpdates(() => {
+        resetActiveResultUi()
+        setActiveTool(target.dataset.toolId)
+      })
+      if (target.dataset.applyDefaultPreset !== 'false') {
+        void applyDefaultPresetForTool(target.dataset.toolId, true)
+      }
       return
     }
 
@@ -2151,6 +2293,12 @@ function attachGlobalEvents() {
 
     if (action === 'set-settings-performance-mode') {
       updateSettingsDialog({ performanceMode: target.dataset.value || 'balanced' })
+      closeConfigSelect(target)
+      return
+    }
+
+    if (action === 'set-settings-queue-thumbnail-size') {
+      updateSettingsDialog({ queueThumbnailSize: target.dataset.value || '128' })
       closeConfigSelect(target)
       return
     }
@@ -2711,6 +2859,27 @@ function attachGlobalEvents() {
       queueManualCropConfigUpdate,
       updateConfig,
     })) return
+    if (event.key === 'Escape' && getState().presetDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closePresetDialog()
+      return
+    }
+    if (event.key === 'Escape' && getState().confirmDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closeConfirmDialog()
+      return
+    }
+    if (event.key === 'Escape' && getState().settingsDialog?.visible) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      closeSettingsDialog()
+      return
+    }
     const preview = getState().previewModal
     if (!preview?.url) return
     if (event.key === 'Escape') {
@@ -2743,6 +2912,24 @@ function attachGlobalEvents() {
 
   document.addEventListener('keyup', (event) => {
     if (handleManualCropKeyup(event, { getState })) return
+    if (getState().presetDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().confirmDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
+    if (getState().settingsDialog?.visible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      return
+    }
     if (!getState().previewModal?.url) return
     if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
@@ -3182,12 +3369,31 @@ function handleRotateDrag(event) {
   const nextAngle = signed
   if (nextAngle === context.lastAngle) return
   context.lastAngle = nextAngle
-  updateConfig(context.toolId, {
-    angle: nextAngle,
+  context.pendingAngle = nextAngle
+  if (rotateDialFrame) return
+  rotateDialFrame = requestAnimationFrame(() => {
+    rotateDialFrame = 0
+    const latestContext = DRAG_CONTEXT.rotateDial
+    if (!latestContext || latestContext.pendingAngle == null) return
+    const angle = latestContext.pendingAngle
+    latestContext.pendingAngle = null
+    updateConfig(latestContext.toolId, {
+      angle,
+    })
   })
 }
 
 function endRotateDrag() {
+  if (rotateDialFrame) {
+    cancelAnimationFrame(rotateDialFrame)
+    rotateDialFrame = 0
+  }
+  const context = DRAG_CONTEXT.rotateDial
+  if (context?.pendingAngle != null) {
+    updateConfig(context.toolId, {
+      angle: context.pendingAngle,
+    })
+  }
   DRAG_CONTEXT.rotateDial = null
 }
 
@@ -3277,9 +3483,8 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'format') {
-    if (config.mode !== 'quality') return ''
     const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
-    if (!FORMAT_QUALITY_SUPPORTED.has(targetFormat)) return ''
+    if (!getFormatCapability(targetFormat)?.supportsQuality) return ''
     return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
   }
 
@@ -3289,7 +3494,18 @@ function getToolInputValidationMessage(toolId, config = {}) {
     return ''
   }
 
+  if (toolId === 'flip') {
+    const outputFormat = String(config.outputFormat || 'Keep Original')
+    if (outputFormat !== 'Keep Original' && !getFormatCapability(outputFormat)?.supportsQuality) return ''
+    return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
+  }
+
+  if (toolId === 'rotate') {
+    return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
+  }
+
   if (toolId === 'watermark') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     if (!isPositiveInputValue(config.opacity)) return '水印透明度必须大于 0 后才能开始处理。'
     if (!isNonNegativeInputValue(config.margin)) return '水印边距不能小于 0。'
     if (config.tiled && !isPositiveInputValue(config.density)) return '平铺密度必须大于 0 后才能开始处理。'
@@ -3301,16 +3517,19 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'corners') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     return isPositiveInputValue(config.radius) ? '' : '圆角半径必须大于 0 后才能开始处理。'
   }
 
   if (toolId === 'padding') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     const edges = [config.top, config.right, config.bottom, config.left]
     if (edges.some((value) => !isNonNegativeInputValue(value))) return '留白边距不能小于 0。'
     return edges.some((value) => getNumericInputValue(value) > 0) ? '' : '请至少设置一个大于 0 的留白边距后再开始处理。'
   }
 
   if (toolId === 'crop') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     if (!isNonNegativeInputValue(config.x)) return '开始位置-距离左边不能小于 0。'
     if (!isNonNegativeInputValue(config.y)) return '开始位置-距离顶部不能小于 0。'
     if ((config.mode || 'ratio') === 'ratio' && (config.ratio === 'Custom' || config.useCustomRatio)) {
@@ -3340,28 +3559,34 @@ function getToolInputValidationMessage(toolId, config = {}) {
 
 function describeToolConfig(toolId, config) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
-  if (toolId === 'format') return `输出 ${config.targetFormat}`
+  if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
   if (toolId === 'resize') {
     const width = typeof config.width === 'object' ? `${config.width.value}${config.width.unit}` : config.width
     const height = typeof config.height === 'object' ? `${config.height.value}${config.height.unit}` : config.height
     return `尺寸 ${width} × ${height}`
   }
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position}`
-  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position} / 质量 ${config.quality}%`
+  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit} / 质量 ${config.quality}%`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
   if (toolId === 'crop') {
-    if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height}`
-    return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
+    if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height} / 质量 ${config.quality}%`
+    return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} / 质量 ${config.quality}%`
   }
-  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}°`
+  if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
-    return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
+    const outputFormat = String(config.outputFormat || 'Keep Original')
+    const qualityText = outputFormat === 'Keep Original' || !!getFormatCapability(outputFormat)?.supportsQuality
+      ? ` / 质量 ${config.quality}%`
+      : ''
+    return directions.length
+      ? `${directions.join(' + ')}翻转 / ${outputFormat}${qualityText}`
+      : `未翻转 / ${outputFormat}${qualityText}`
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
-    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
   }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`

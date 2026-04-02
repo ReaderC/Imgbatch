@@ -1,4 +1,5 @@
 ﻿import { TOOL_MAP } from '../config/tools.js'
+import { getFormatCapability } from '../services/ztools-bridge.js'
 
 const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO']
 const FLIP_OUTPUT_OPTIONS = [['Keep Original', '保持原格式'], ...FORMAT_OPTIONS]
@@ -8,8 +9,6 @@ const COLOR_PROFILE_OPTIONS = [
   ['p3', 'Display P3'],
   ['cmyk', 'CMYK'],
 ]
-const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
-const FORMAT_TRANSPARENCY_UNSUPPORTED = new Set(['JPEG', 'JPG', 'BMP'])
 const PDF_MARGIN_OPTIONS = [
   ['none', '无边距'],
   ['narrow', '窄'],
@@ -156,16 +155,19 @@ function renderCompressionConfig(config) {
       ['quality', '按质量'],
       ['target', '按体积'],
     ])}
-    ${renderRangeField({
-      label: '压缩质量',
-      toolId: 'compression',
-      key: 'quality',
-      min: 1,
-      max: 100,
-      value: config.quality,
-      suffix: '%',
-      disabled: !isQualityMode,
-    })}
+    <div class="quality-field">
+      ${renderRangeField({
+        label: '压缩质量',
+        toolId: 'compression',
+        key: 'quality',
+        min: 1,
+        max: 100,
+        value: config.quality,
+        suffix: '%',
+        disabled: !isQualityMode,
+      })}
+      <div class="quality-field__note">该选项对 JPEG / WebP / AVIF / TIFF 的压缩效果更直接；对 PNG 主要影响压缩策略与调色板量化；GIF 不属于同类质量压缩；BMP / ICO 在压缩时通常会改用更适合压缩的输出格式。</div>
+    </div>
     ${renderFieldGrid(`
       ${renderInputField({
         label: '目标大小 KB',
@@ -183,28 +185,22 @@ function renderCompressionConfig(config) {
 }
 
 function renderFormatConfig(config) {
-  const mode = config.mode === 'quality' ? 'quality' : 'convert'
   const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
-  const qualitySupported = FORMAT_QUALITY_SUPPORTED.has(targetFormat)
-  const transparencySupported = !FORMAT_TRANSPARENCY_UNSUPPORTED.has(targetFormat)
-  const qualityHint = mode !== 'quality'
-    ? '仅转换格式时会尽量保持质量，不额外降质。'
-    : !qualitySupported
-    ? `${targetFormat} 输出不支持质量调节，此项不会生效。`
-    : targetFormat === 'PNG'
-      ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
-      : '质量越低，输出体积通常越小。'
+  const targetFormatCapability = getFormatCapability(targetFormat)
+  const qualitySupported = !!targetFormatCapability?.supportsQuality
+  const transparencySupported = !!targetFormatCapability?.supportsTransparency
   const transparencyHint = ''
   return renderSettingsSection(`
-    ${renderSegmented('format', 'mode', mode, [
-      ['convert', '仅转换格式'],
-      ['quality', '调节质量'],
-    ])}
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
-      ${renderRangeField({ label: '输出质量', toolId: 'format', key: 'quality', min: 1, max: 100, value: config.quality, suffix: '%', disabled: mode !== 'quality' || !qualitySupported, hint: qualityHint })}
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
+    <label class="setting-row setting-row--stack">
+      <span class="setting-row__header">
+        <span class="setting-row__label"></span>
+      </span>
+      <span class="setting-row__hint setting-row__hint--compression">CMYK 更适合印刷流程，不适合作为屏幕观感基准；导出为 CMYK 后，颜色在不同看图软件里可能明显偏离 sRGB 显示效果。</span>
+    </label>
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
@@ -212,6 +208,7 @@ function renderFormatConfig(config) {
       </span>
       <span class="setting-row__hint setting-row__hint--compression">目标格式若不支持透明通道，此选项会自动禁用。</span>
     </label>
+    ${renderQualityField({ toolId: 'format', value: Number(config.quality) || 90, disabled: !qualitySupported })}
   `)
 }
 
@@ -221,16 +218,6 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
-    ${renderRangeField({
-      label: '输出质量',
-      toolId: 'resize',
-      key: 'quality',
-      min: 1,
-      max: 100,
-      value: Number(config.quality) || 100,
-      suffix: '%',
-      hint: '尺寸转换默认尽量保真。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。',
-    })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
@@ -238,6 +225,7 @@ function renderResizeConfig(config) {
         ${RESIZE_PRESETS.map((preset) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="apply-resize-preset" data-width="${preset.width}" data-height="${preset.height}">${preset.label}</button>`).join('')}
       </div>
     </div>
+    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -273,13 +261,14 @@ function renderWatermarkConfig(config) {
         <div class="card-label" style="margin-bottom:6px;">锚点位置</div>
         <div class="position-grid">
           ${WATERMARK_POSITIONS.map((position) => `
-            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" title="${WATERMARK_POSITION_LABELS[position] || position}">
+            <button class="position-dot ${config.position === position ? 'is-active' : ''}" data-action="set-config" data-tool-id="watermark" data-key="position" data-value="${position}" data-tooltip="${WATERMARK_POSITION_LABELS[position] || position}" aria-label="${WATERMARK_POSITION_LABELS[position] || position}">
               <span></span>
             </button>
           `).join('')}
         </div>
       </div>
     `}
+    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -296,6 +285,7 @@ function renderCornersConfig(config) {
       </span>
       <span class="setting-row__hint setting-row__hint--compression">原图格式若不支持透明通道，开启后会自动转换为 PNG 输出。</span>
     </label>
+    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -309,7 +299,7 @@ function renderPaddingConfig(config) {
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderInfoRow('总留白', '四边额外扩展画布', `${config.top + config.right + config.bottom + config.left}px`)}
+    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -332,6 +322,7 @@ function renderCropConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1, disabled: mode !== 'size' })}
       ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1, disabled: mode !== 'size' })}
     `)}
+    ${renderQualityField({ toolId: 'crop', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -382,16 +373,20 @@ function renderRotateConfig(config) {
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
     ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
+    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90 })}
   `)
 }
 
 function renderFlipConfig(config) {
+  const outputFormat = String(config.outputFormat || 'Keep Original')
+  const qualitySupported = outputFormat === 'Keep Original' || !!getFormatCapability(outputFormat)?.supportsQuality
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
     ${renderToggleRow('自动裁掉透明边', '', 'flip', 'autoCropTransparent', config.autoCropTransparent)}
+    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 90, disabled: !qualitySupported })}
   `)
 }
 
@@ -408,8 +403,7 @@ function renderMergePdfConfig(config) {
 
 function renderMergeImageConfig(config) {
   const outputFormat = String(config.outputFormat || 'JPEG')
-  const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
-  const qualityHint = qualitySupported ? '质量越低，输出体积通常越小。' : `${outputFormat} 输出不提供质量调节。`
+  const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
   return renderSettingsSection(`
     ${renderSegmented('merge-image', 'direction', config.direction, [
       ['vertical', '纵向'],
@@ -422,7 +416,6 @@ function renderMergeImageConfig(config) {
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
-      ${renderRangeField({ label: '输出质量', toolId: 'merge-image', key: 'quality', min: 1, max: 100, value: config.quality || 90, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
     `)}
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
@@ -432,6 +425,7 @@ function renderMergeImageConfig(config) {
     </label>
     ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
+    ${renderQualityField({ toolId: 'merge-image', value: config.quality || 90, disabled: !qualitySupported })}
   `)
 }
 
@@ -455,6 +449,25 @@ function renderSettingsSection(content) {
         ${content}
       </div>
     </section>
+  `
+}
+
+function renderQualityField({ toolId, value, disabled = false, hint = '' }) {
+  const guidance = hint || '该选项对 JPEG / WebP / AVIF / TIFF 的体积与画质影响通常更明显；对 PNG 主要影响压缩级别与调色板量化，体积和观感变化可能不明显；GIF / BMP / ICO 不支持这类质量调节。'
+  return `
+    <div class="quality-field">
+      ${renderRangeField({
+        label: '输出质量',
+        toolId,
+        key: 'quality',
+        min: 1,
+        max: 100,
+        value,
+        suffix: '%',
+        disabled,
+      })}
+      <div class="quality-field__note">${escapeAttribute(guidance)}</div>
+    </div>
   `
 }
 

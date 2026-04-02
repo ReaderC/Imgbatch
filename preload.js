@@ -15,11 +15,13 @@ const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gi
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
 const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ico'])
+const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PERFORMANCE_MODES = new Set(['compatible', 'balanced', 'max'])
+const QUEUE_THUMBNAIL_SIZE_OPTIONS = new Set(['60', '100', '128', '160', '192'])
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const HEAVY_ASSET_TOOLS = new Set(['compression', 'watermark', 'corners'])
@@ -52,7 +54,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
-const QUEUE_THUMBNAIL_MAX_SIZE = 240
+const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -79,25 +81,31 @@ const TOOL_LABELS = {
 
 function summarizeConfig(toolId, config = {}) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
-  if (toolId === 'format') return `输出 ${config.targetFormat}${config.mode === 'quality' ? ` / 质量 ${config.quality}%` : ' / 仅转换'}`
+  if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position} / 质量 ${config.quality}%`
   if (toolId === 'corners') {
     const radius = String(config.radius ?? '').trim()
     const unit = config.unit || 'px'
-    return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`}`
+    return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`} / 质量 ${config.quality}%`
   }
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
-  if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height}` : `裁剪 ${config.ratio}`
-  if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
+  if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height} / 质量 ${config.quality}%` : `裁剪 ${config.ratio} / 质量 ${config.quality}%`
+  if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
-    return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
+    const outputFormat = String(config.outputFormat || 'Keep Original')
+    const qualityText = outputFormat === 'Keep Original' || isQualityCapableFormat(outputFormat)
+      ? ` / 质量 ${config.quality}%`
+      : ''
+    return directions.length
+      ? `${directions.join(' + ')}翻转 / ${outputFormat}${qualityText}`
+      : `未翻转 / ${outputFormat}${qualityText}`
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
-    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    const qualitySupported = isQualityCapableFormat(outputFormat)
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' / 小图原尺寸' : ''}`
   }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`
@@ -131,6 +139,15 @@ function clampNumber(value, min, max, fallback = min) {
 function sanitizeText(value, fallback = '') {
   const text = typeof value === 'string' ? value.trim() : ''
   return text || fallback
+}
+
+function normalizeQueueThumbnailSize(value) {
+  const normalized = String(value ?? '').trim()
+  return QUEUE_THUMBNAIL_SIZE_OPTIONS.has(normalized) ? normalized : String(DEFAULT_QUEUE_THUMBNAIL_SIZE)
+}
+
+function getQueueThumbnailMaxSize(settings = getAppSettings()) {
+  return Number.parseInt(normalizeQueueThumbnailSize(settings?.queueThumbnailSize), 10) || DEFAULT_QUEUE_THUMBNAIL_SIZE
 }
 
 function pickOption(value, options, fallback) {
@@ -444,7 +461,7 @@ async function createAssetDisplayUrlAsync(filePath, inputFormat = '', sharpLib =
   return nativeUrl
 }
 
-async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib = null, maxDimension = getQueueThumbnailMaxSize()) {
   const format = normalizeImageFormatName(inputFormat)
   const cacheKey = getThumbnailUrlCacheKey(filePath, format, maxDimension)
   if (QUEUE_THUMBNAIL_URL_CACHE.has(cacheKey)) return QUEUE_THUMBNAIL_URL_CACHE.get(cacheKey)
@@ -486,7 +503,7 @@ async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib
   return fallbackUrl
 }
 
-function queueQueueThumbnailGeneration(assetId, filePath, inputFormat = '', sharpLib = null, maxDimension = QUEUE_THUMBNAIL_MAX_SIZE) {
+function queueQueueThumbnailGeneration(assetId, filePath, inputFormat = '', sharpLib = null, maxDimension = getQueueThumbnailMaxSize()) {
   if (!assetId || !filePath) return
   Promise.resolve()
     .then(() => createQueueThumbnailUrlAsync(filePath, inputFormat, sharpLib, maxDimension))
@@ -668,11 +685,13 @@ function buildSettingsPayload(settings = {}) {
   const saveLocationMode = SAVE_LOCATION_MODES.has(settings?.saveLocationMode) ? settings.saveLocationMode : 'source'
   const saveLocationCustomPath = sanitizeText(settings?.saveLocationCustomPath || settings?.defaultSavePath)
   const performanceMode = PERFORMANCE_MODES.has(settings?.performanceMode) ? settings.performanceMode : 'balanced'
+  const queueThumbnailSize = normalizeQueueThumbnailSize(settings?.queueThumbnailSize)
   return {
     defaultSavePath: saveLocationMode === 'custom' ? saveLocationCustomPath : '',
     saveLocationMode,
     saveLocationCustomPath,
     performanceMode,
+    queueThumbnailSize,
     defaultPresetByTool,
   }
 }
@@ -688,7 +707,7 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'format') {
     return {
-      mode: pickOption(config.mode, ['convert', 'quality'], 'convert'),
+      mode: pickOption(config.mode, ['convert', 'quality'], 'quality'),
       targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO'], 'JPEG'),
       quality: clampNumber(config.quality, 1, 100, 90),
       keepTransparency: Boolean(config.keepTransparency),
@@ -701,7 +720,7 @@ function normalizeRunConfig(toolId, config = {}) {
       width: normalizeMeasure(config.width, 1920, inferMeasureUnit(config.width, 'px')),
       height: normalizeMeasure(config.height, 1080, inferMeasureUnit(config.height, 'px')),
       lockAspectRatio: Boolean(config.lockAspectRatio),
-      quality: clampNumber(config.quality, 1, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -719,6 +738,7 @@ function normalizeRunConfig(toolId, config = {}) {
       tiled: Boolean(config.tiled),
       density: clampNumber(config.density, 20, 250, 100),
       imagePath: sanitizeText(config.imagePath),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -728,6 +748,7 @@ function normalizeRunConfig(toolId, config = {}) {
       unit: inferMeasureUnit(config.radius, 'px'),
       background: sanitizeText(config.background, '#ffffff'),
       keepTransparency: Boolean(config.keepTransparency),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -739,6 +760,7 @@ function normalizeRunConfig(toolId, config = {}) {
       left: Math.max(0, toInteger(config.left, 20)),
       color: sanitizeText(config.color, '#ffffff'),
       opacity: clampNumber(config.opacity, 0, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -762,6 +784,7 @@ function normalizeRunConfig(toolId, config = {}) {
         width: Math.max(1, toInteger(config.width, 1920)),
         height: Math.max(1, toInteger(config.height, 1080)),
       },
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -771,6 +794,7 @@ function normalizeRunConfig(toolId, config = {}) {
       autoCrop: Boolean(config.autoCrop),
       keepAspectRatio: Boolean(config.keepAspectRatio),
       background: sanitizeText(config.background, '#ffffff'),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -781,6 +805,7 @@ function normalizeRunConfig(toolId, config = {}) {
       preserveMetadata: Boolean(config.preserveMetadata),
       autoCropTransparent: Boolean(config.autoCropTransparent),
       outputFormat: sanitizeText(config.outputFormat, 'Keep Original'),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -1064,6 +1089,27 @@ function getSharp() {
   }
 }
 
+async function regenerateQueueThumbnails(assets = []) {
+  const sharpLib = getSharp()
+  const queueThumbnailSize = getQueueThumbnailMaxSize()
+  const sourceAssets = Array.isArray(assets) ? assets : []
+  await Promise.all(sourceAssets.map(async (asset) => {
+    const assetId = sanitizeText(asset?.id)
+    const sourcePath = sanitizeText(asset?.sourcePath)
+    if (!assetId || !sourcePath || !fs.existsSync(sourcePath)) return
+    try {
+      const listThumbnailUrl = await createQueueThumbnailUrlAsync(
+        sourcePath,
+        sanitizeText(asset?.inputFormat || asset?.ext),
+        sharpLib,
+        queueThumbnailSize,
+      )
+      if (!listThumbnailUrl) return
+      emitQueueThumbnailReady({ assetId, listThumbnailUrl })
+    } catch {}
+  }))
+}
+
 function ensureDirectory(targetPath) {
   if (!targetPath) return
   fs.mkdirSync(targetPath, { recursive: true })
@@ -1336,9 +1382,47 @@ function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
 
+function isQualityCapableFormat(format) {
+  return QUALITY_CAPABLE_FORMATS.has(normalizeImageFormatName(format))
+}
+
 function supportsTransparentCanvasOutput(format) {
   const normalized = normalizeImageFormatName(format)
   return isAlphaCapableFormat(normalized) && normalized !== 'tiff'
+}
+
+function canSkipSameFormatEncoding(format, quality = 100) {
+  const normalized = normalizeImageFormatName(format)
+  if (!normalized) return false
+  if (!isQualityCapableFormat(normalized)) return true
+  return Math.round(Number(quality) || 0) >= 100
+}
+
+function buildFormatCapabilitiesPayload() {
+  const entries = [
+    ['PNG', 'png', []],
+    ['JPEG', 'jpeg', ['JPG']],
+    ['WEBP', 'webp', ['WebP']],
+    ['TIFF', 'tiff', ['TIF']],
+    ['AVIF', 'avif', []],
+    ['GIF', 'gif', []],
+    ['BMP', 'bmp', []],
+    ['ICO', 'ico', []],
+  ]
+  const formats = {}
+  const aliases = {}
+  for (const [key, canonical, extraAliases] of entries) {
+    formats[key] = {
+      key,
+      canonical,
+      supportsQuality: isQualityCapableFormat(canonical),
+      supportsTransparency: isAlphaCapableFormat(canonical),
+      supportsTransparentCanvasOutput: supportsTransparentCanvasOutput(canonical),
+    }
+    aliases[key] = key
+    for (const alias of extraAliases) aliases[alias] = key
+  }
+  return { formats, aliases }
 }
 
 function getOutputName(asset, toolId, format) {
@@ -1604,7 +1688,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let sourceFormat = normalizeImageFormatName(asset.inputFormat)
   let sourceInput = null
-  const shouldProbeSourceFormat = config.mode !== 'quality'
+  const shouldProbeSourceFormat = Math.round(config.quality) >= 100
     && (sourceFormat === format || !SHARP_INPUT_FORMATS.has(sourceFormat))
 
   if (shouldProbeSourceFormat) {
@@ -1619,7 +1703,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     }
   }
 
-  if (config.mode !== 'quality' && sourceFormat === format) {
+  if (Math.round(config.quality) >= 100 && sourceFormat === format) {
     return copyAssetToOutput(asset, outputPath, sourceInput)
   }
 
@@ -1633,7 +1717,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
     transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
   }
-  const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
+  const quality = Math.round(clampNumber(config.quality, 1, 100, 90))
 
   return writeTransformedAsset(transformed, format, quality, outputPath, {
     width: asset.width,
@@ -1645,14 +1729,14 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
-  const quality = clampNumber(config.quality, 1, 100, 100)
+  const quality = clampNumber(config.quality, 1, 100, 90)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
-  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight) {
+  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight && canSkipSameFormatEncoding(format, quality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (sourceWidth > 0 && sourceHeight > 0 && width === sourceWidth && height === sourceHeight) {
@@ -2060,16 +2144,18 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
 
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
   if (watermarkOpacity <= 0 || isEmptyTextWatermark || isZeroSizeTextWatermark) {
-    if (sourceFormat === format) {
+    if (sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
       return copyAssetToOutput(asset, outputPath)
     }
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath)
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath)
   }
 
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
   const transformed = createTransformer(sharpLib, asset).composite([composite])
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
@@ -2078,12 +2164,13 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
-  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
+  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2114,7 +2201,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
     transformed = transformed.flatten({ background: solidBackground })
   }
 
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
@@ -2126,8 +2213,9 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
-  if (sourceFormat === format && hasNoFlipTransform) {
+  if (sourceFormat === format && hasNoFlipTransform && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (hasNoFlipTransform) {
@@ -2135,7 +2223,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
       transformed = transformed.keepMetadata()
     }
-    return writeTransformedAsset(transformed, format, 90, outputPath, {
+    return writeTransformedAsset(transformed, format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2153,7 +2241,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     transformed = transformed.keepMetadata()
   }
 
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 function buildRoundedRectSvg(width, height, radius, fill) {
@@ -2178,18 +2266,20 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
 
-  if (radius <= 0 && sourceFormat === outputFormat) {
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === outputFormat ? 100 : 90)
+
+  if (radius <= 0 && sourceFormat === outputFormat && canSkipSameFormatEncoding(outputFormat, transformQuality)) {
     return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
   }
   if (radius <= 0) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, 90, outputPath, { width, height })
+    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, transformQuality, outputPath, { width, height })
   }
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
   const rounded = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
   if (config.keepTransparency) {
-    return writeTransformedAsset(rounded, outputFormat, 90, outputPath)
+    return writeTransformedAsset(rounded, outputFormat, transformQuality, outputPath)
   }
 
   const roundedBuffer = await rounded.png().toBuffer()
@@ -2202,7 +2292,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
     },
   }).composite([{ input: roundedBuffer, left: 0, top: 0 }])
 
-  return writeTransformedAsset(transformed, outputFormat, 90, outputPath)
+  return writeTransformedAsset(transformed, outputFormat, transformQuality, outputPath)
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
@@ -2212,11 +2302,13 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
-  if (noPadding && sourceFormat === format) {
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
+  if (noPadding && sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (noPadding) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2230,7 +2322,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
     left: config.left,
     background,
   })
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 function getCropDisplaySize(asset, config, toolId = 'crop') {
@@ -2364,6 +2456,8 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
   const alphaCapable = supportsTransparentCanvasOutput(format)
 
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
   if (toolId !== 'manual-crop'
     && sourceWidth > 0 && sourceHeight > 0
     && sourceFormat === format
@@ -2371,7 +2465,8 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.left === 0
     && box.top === 0
     && box.width === sourceWidth
-    && box.height === sourceHeight) {
+    && box.height === sourceHeight
+    && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (toolId !== 'manual-crop'
@@ -2381,7 +2476,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.top === 0
     && box.width === sourceWidth
     && box.height === sourceHeight) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: sourceWidth,
       height: sourceHeight,
     })
@@ -2414,7 +2509,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
       })
     }
   }
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeMergeImageAsset(sharpLib, payload) {
@@ -2438,7 +2533,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
     const canCopyOriginal = keepsOriginalSize
       && sourceFormat === format
-      && (format === 'png' || quality >= 100)
+      && canSkipSameFormatEncoding(format, quality)
     if (canCopyOriginal) {
       return copyAssetToOutput(asset, outputPath)
     }
@@ -3265,6 +3360,10 @@ const toolsApi = {
     }
   },
 
+  getFormatCapabilities() {
+    return buildFormatCapabilitiesPayload()
+  },
+
   normalizeInput(items = []) {
     const hostApi = getHostApi()
     const seedList = Array.isArray(items) ? items : [items]
@@ -3561,6 +3660,10 @@ const toolsApi = {
 
   saveSettings(settings) {
     return saveAppSettings(settings)
+  },
+
+  regenerateQueueThumbnails(assets = []) {
+    return regenerateQueueThumbnails(assets)
   },
 
   buildStagedItems(assets = []) {
