@@ -186,11 +186,7 @@ function renderFormatConfig(config) {
   const targetFormatCapability = getFormatCapability(targetFormat)
   const qualitySupported = !!targetFormatCapability?.supportsQuality
   const transparencySupported = !!targetFormatCapability?.supportsTransparency
-  const qualityHint = !qualitySupported
-    ? `${targetFormat} 输出不支持质量调节，此项不会生效。`
-    : targetFormat === 'PNG'
-      ? 'PNG 的质量控制对应压缩级别和调色板优化，不是照片压缩质量。'
-      : '质量越低，输出体积通常越小。'
+  const qualityHint = getQualityHint(targetFormat, '质量越低，输出体积通常越小。')
   const transparencyHint = ''
   return renderSettingsSection(`
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
@@ -214,7 +210,7 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
-    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90, hint: '尺寸转换默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90, hint: '尺寸转换默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
@@ -250,7 +246,7 @@ function renderWatermarkConfig(config) {
       ${renderInputField({ label: '边距', toolId: 'watermark', key: 'margin', type: 'number', value: config.margin, min: 0, disabled: config.tiled })}
     `)}
     ${renderRangeField({ label: '透明度', toolId: 'watermark', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90, hint: '水印输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90, hint: '水印输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
     ${renderToggleRow('平铺模式', '', 'watermark', 'tiled', config.tiled)}
     ${config.tiled ? renderRangeField({ label: '平铺密度', toolId: 'watermark', key: 'density', min: 20, max: 250, value: config.density || 100, suffix: '%' }) : ''}
     ${config.tiled ? '' : `
@@ -273,7 +269,7 @@ function renderCornersConfig(config) {
     ${renderFieldGrid(`
       ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), unitMode: getMeasureUnit(config.radius, 'px') })}
     `)}
-    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90, hint: '圆角输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90, hint: config.keepTransparency ? getQualityHint('PNG') : '圆角输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
     ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     <label class="setting-row setting-row--stack">
@@ -295,7 +291,7 @@ function renderPaddingConfig(config) {
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90, hint: '留白输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90, hint: '留白输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
     ${renderInfoRow('总留白', '四边额外扩展画布', `${config.top + config.right + config.bottom + config.left}px`)}
   `)
 }
@@ -319,7 +315,7 @@ function renderCropConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1, disabled: mode !== 'size' })}
       ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1, disabled: mode !== 'size' })}
     `)}
-    ${renderQualityField({ toolId: 'crop', value: Number(config.quality) || 90, hint: '裁剪输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'crop', value: Number(config.quality) || 90, hint: '裁剪输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
   `)
 }
 
@@ -367,7 +363,7 @@ function renderRotateConfig(config) {
         ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
-    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90, hint: '旋转默认使用 90 质量平衡体积与速度。JPEG / WebP / AVIF / TIFF 为重编码质量；PNG 主要影响压缩策略。' })}
+    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90, hint: '旋转默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 为重编码质量；如果输出是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。' })}
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
     ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
@@ -378,10 +374,8 @@ function renderFlipConfig(config) {
   const outputFormat = String(config.outputFormat || 'Keep Original')
   const qualitySupported = outputFormat === 'Keep Original' || !!getFormatCapability(outputFormat)?.supportsQuality
   const qualityHint = outputFormat === 'Keep Original'
-    ? '保持原格式时，若源格式支持质量控制，会按这里的值重新编码；PNG 主要影响压缩策略。'
-    : qualitySupported
-      ? '翻转完成后会按这里的质量写出结果，质量越低通常体积越小。'
-      : `${outputFormat} 输出不提供质量调节。`
+    ? '保持原格式时，若源格式支持质量控制，会按这里的值重新编码。若源格式是 PNG，这里主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。'
+    : getQualityHint(outputFormat, '翻转完成后会按这里的质量写出结果，质量越低通常体积越小。')
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
     ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 90, disabled: !qualitySupported, hint: qualityHint })}
@@ -406,7 +400,7 @@ function renderMergePdfConfig(config) {
 function renderMergeImageConfig(config) {
   const outputFormat = String(config.outputFormat || 'JPEG')
   const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
-  const qualityHint = qualitySupported ? '质量越低，输出体积通常越小。' : `${outputFormat} 输出不提供质量调节。`
+  const qualityHint = getQualityHint(outputFormat, '质量越低，输出体积通常越小。')
   return renderSettingsSection(`
     ${renderSegmented('merge-image', 'direction', config.direction, [
       ['vertical', '纵向'],
@@ -467,6 +461,16 @@ function renderQualityField({ toolId, value, disabled = false, hint = '' }) {
     disabled,
     hint,
   })
+}
+
+function getQualityHint(format, defaultHint = '质量越低，输出体积通常越小。') {
+  const normalizedFormat = String(format || '').toUpperCase()
+  const capability = getFormatCapability(normalizedFormat)
+  if (!capability?.supportsQuality) return `${normalizedFormat || '当前格式'} 输出不提供质量调节。`
+  if (normalizedFormat === 'PNG') {
+    return 'PNG 的输出质量主要影响压缩级别与调色板量化，不是 JPEG 那种有损画质压缩。即使拉到很低，肉眼观感和体积变化也可能不明显。'
+  }
+  return defaultHint
 }
 
 function renderFieldGrid(content) {
