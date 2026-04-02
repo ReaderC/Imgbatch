@@ -81,6 +81,26 @@ export function shouldVirtualizeQueue(total = 0) {
   return Number(total) >= QUEUE_VIRTUALIZE_THRESHOLD
 }
 
+export function getQueueViewportRenderSignature(state, viewport = null) {
+  const assets = state?.assets || []
+  const layoutFlags = getQueueLayoutFlags(state)
+  const queueWindow = getQueueRenderWindow(
+    assets.length,
+    layoutFlags.compactLayout,
+    layoutFlags.denseLayout,
+    layoutFlags.processingDenseLayout,
+    viewport,
+  )
+  if (!queueWindow) return ''
+  return [
+    queueWindow.startIndex,
+    queueWindow.endIndex,
+    layoutFlags.compactLayout ? 1 : 0,
+    layoutFlags.denseLayout ? 1 : 0,
+    layoutFlags.processingDenseLayout ? 1 : 0,
+  ].join(':')
+}
+
 export function getQueueLayoutFlags(state) {
   const compactLayout = isCompactQueueLayout()
   const total = Number(state?.assets?.length || 0)

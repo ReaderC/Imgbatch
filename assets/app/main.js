@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { buildQueueClassName, buildQueueItemClassName, getQueueLayoutFlags, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { buildQueueClassName, buildQueueItemClassName, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
 import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
@@ -97,6 +97,7 @@ let detachedQueueState = null
 let queueThumbnailPatchFrame = 0
 let pendingQueueScrollRestore = null
 let queueMarkupCacheDirty = false
+let lastQueueViewportRenderSignature = ''
 const pendingQueueThumbnailPatches = new Map()
 const rootMarkupCache = {
   sideNav: '',
@@ -1518,6 +1519,9 @@ function renderQueueRoot(state, preserveScroll = true) {
     queueNode.scrollTop = previousScrollTop
   }
   syncQueueViewportFromDom()
+  lastQueueViewportRenderSignature = shouldTrackQueueViewport(state)
+    ? getQueueViewportRenderSignature(state, queueViewportState)
+    : ''
   return { root, changed }
 }
 
@@ -1530,6 +1534,11 @@ function getWorkspaceTooltipRoot(mode = getAppShellMode(getState())) {
 
 function scheduleQueueRootRender() {
   if (queueRenderFrame) return
+  const state = getState()
+  if (shouldTrackQueueViewport(state)) {
+    const nextSignature = getQueueViewportRenderSignature(state, queueViewportState)
+    if (nextSignature && nextSignature === lastQueueViewportRenderSignature) return
+  }
   queueRenderFrame = requestAnimationFrame(() => {
     queueRenderFrame = 0
     const state = getState()
@@ -1610,6 +1619,9 @@ function renderFullShell(state, snapshot) {
     ? (queueMarkup || '')
     : ''
   queueMarkupCacheDirty = mode === 'workspace' && shouldReuseDetachedQueue
+  lastQueueViewportRenderSignature = shouldTrackQueueViewport(state)
+    ? getQueueViewportRenderSignature(state, queueViewportState)
+    : ''
   rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
   rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
   queuePostRenderWork({
