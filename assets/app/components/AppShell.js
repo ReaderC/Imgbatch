@@ -52,7 +52,7 @@ export function renderShellWorkspace(state, queueMarkup = null, mode = getAppShe
   const tool = TOOL_MAP[state.activeTool]
   return `
     <div class="workspace">
-      ${renderToolPage(tool.id, state)}
+      <div class="render-slot" data-root="panel">${renderToolPage(tool.id, state)}</div>
       <div class="render-slot" data-root="queue">${queueContent}</div>
     </div>
   `

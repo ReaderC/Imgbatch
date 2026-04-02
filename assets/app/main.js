@@ -1,6 +1,7 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { renderImageQueue } from './components/ImageQueueList.js'
+import { renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
   clampManualCropArea,
@@ -90,11 +91,16 @@ let processingProgressFrame = 0
 let pendingProcessingProgress = undefined
 let lastRenderSnapshot = null
 let queueRenderFrame = 0
+let queueItemPatchFrame = 0
 let detachedQueueContent = null
+let queueThumbnailPatchFrame = 0
+let pendingQueueScrollRestore = null
+const pendingQueueThumbnailPatches = new Map()
 const rootMarkupCache = {
   sideNav: '',
   topbar: '',
   workspace: '',
+  panel: '',
   queue: '',
   overlays: '',
   notifications: '',
@@ -103,6 +109,11 @@ const queueViewportState = {
   scrollTop: 0,
   height: 0,
 }
+
+function shouldTrackQueueViewport(state) {
+  return getAppShellMode(state) === 'workspace' && shouldVirtualizeQueue(state.assets.length)
+}
+
 const {
   flushManualCropConfigUpdates,
   queueManualCropConfigUpdate,
@@ -115,7 +126,6 @@ subscribe(render)
 render(getState())
 attachProcessingProgressEvents()
 attachGlobalEvents()
-window.addEventListener('resize', queueResultMarqueeSync)
 bootstrapSettings().finally(() => {
   bootstrapLaunchInputs().finally(() => {
     attachLaunchSubscription()
@@ -202,12 +212,25 @@ function normalizeMeasureToggleValue(value, nextUnit) {
   return nextUnit === '%' ? `${numeric}%` : `${numeric}px`
 }
 
+function isSameConfigShape(left, right) {
+  if (left === right) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false
+  }
+  return true
+}
+
 async function applyDefaultPresetForTool(toolId, silent = false) {
   const defaultPresetId = getDefaultPresetMap()?.[toolId]
   if (!defaultPresetId) return false
   const presets = await ensureToolPresetsLoaded(toolId)
   const preset = presets.find((item) => item.id === defaultPresetId)
   if (!preset?.config) return false
+  if (isSameConfigShape(getState().configs?.[toolId], preset.config)) return false
   updateConfig(toolId, preset.config)
   if (!silent) notify({ type: 'success', message: `已应用默认预设：${preset.name}` })
   return true
@@ -1147,6 +1170,7 @@ function diffRenderSnapshot(prev, next) {
   const resultViewChanged = next.resultView !== prev.resultView
   const shellFrameChanged = next.sidebarCollapsed !== prev.sidebarCollapsed
     || modeChanged
+    || next.isProcessing !== prev.isProcessing
   const sideNavChanged = toolChanged
     || next.sidebarCollapsed !== prev.sidebarCollapsed
     || modeChanged
@@ -1183,6 +1207,16 @@ function diffRenderSnapshot(prev, next) {
     queueChanged,
     marqueeChanged,
   }
+}
+
+function hasSameAssetOrder(previousAssets = [], nextAssets = []) {
+  if (previousAssets === nextAssets) return true
+  if (!Array.isArray(previousAssets) || !Array.isArray(nextAssets)) return false
+  if (previousAssets.length !== nextAssets.length) return false
+  for (let index = 0; index < previousAssets.length; index += 1) {
+    if (previousAssets[index]?.id !== nextAssets[index]?.id) return false
+  }
+  return true
 }
 
 function renderNotificationsRoot(items) {
@@ -1303,11 +1337,114 @@ function attachDetachedQueueContent() {
   return true
 }
 
+function detachQueueThumbContent(root) {
+  if (!root) return new Map()
+  const detachedThumbs = new Map()
+  root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
+    const assetId = item.getAttribute('data-asset-id') || ''
+    const thumb = item.querySelector('.queue-item__thumb')
+    const content = thumb?.firstElementChild || null
+    if (!assetId || !thumb || !content) return
+    thumb.removeChild(content)
+    detachedThumbs.set(assetId, content)
+  })
+  return detachedThumbs
+}
+
+function attachQueueThumbContent(root, detachedThumbs) {
+  if (!root || !detachedThumbs?.size) return
+  root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
+    const assetId = item.getAttribute('data-asset-id') || ''
+    const thumb = item.querySelector('.queue-item__thumb')
+    const content = detachedThumbs.get(assetId)
+    if (!assetId || !thumb || !content) return
+    thumb.replaceChildren(content)
+  })
+}
+
+function queueQueueScrollRestore() {
+  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  if (!queueNode) return
+  pendingQueueScrollRestore = {
+    scrollTop: Math.max(0, queueNode.scrollTop || 0),
+    remainingPasses: 3,
+  }
+}
+
+function restoreQueuedQueueScroll(state) {
+  if (!pendingQueueScrollRestore) return
+  if (getAppShellMode(state) !== 'workspace') return
+  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  if (!queueNode) return
+  queueNode.scrollTop = pendingQueueScrollRestore.scrollTop
+  queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
+  queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
+  if ((pendingQueueScrollRestore.remainingPasses || 1) <= 1) {
+    pendingQueueScrollRestore = null
+  } else {
+    pendingQueueScrollRestore.remainingPasses -= 1
+  }
+}
+
+function patchQueueItemsForToolChange(state) {
+  const root = getRootNode('queue')
+  if (!root) return false
+  const tool = TOOL_MAP[state.activeTool]
+  if (!tool) return false
+  const compactLayout = typeof window !== 'undefined' && window.innerWidth <= 1040
+  const assetIndexMap = new Map(state.assets.map((asset, index) => [asset.id, index]))
+  let changed = false
+
+  root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
+    const assetId = item.getAttribute('data-asset-id') || ''
+    const assetIndex = assetIndexMap.get(assetId)
+    if (assetIndex == null) return
+    const asset = state.assets[assetIndex]
+    const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout)
+    const expectedDraggable = fragments.draggable ? 'true' : null
+    if (item.className !== fragments.itemClassName) {
+      item.className = fragments.itemClassName
+      changed = true
+    }
+    if ((item.getAttribute('draggable') || null) !== expectedDraggable) {
+      if (expectedDraggable) item.setAttribute('draggable', expectedDraggable)
+      else item.removeAttribute('draggable')
+      changed = true
+    }
+    const content = item.querySelector('.queue-item__content')
+    if (content && content.innerHTML !== fragments.contentMarkup) {
+      content.innerHTML = fragments.contentMarkup
+      changed = true
+    }
+    const controls = item.querySelector('.queue-item__controls')
+    if (controls && controls.innerHTML !== fragments.controlsMarkup) {
+      controls.innerHTML = fragments.controlsMarkup
+      changed = true
+    }
+  })
+
+  return changed
+}
+
+function queueQueueItemPatch() {
+  if (queueItemPatchFrame) return
+  queueItemPatchFrame = requestAnimationFrame(() => {
+    queueItemPatchFrame = 0
+    const state = getState()
+    if (getAppShellMode(state) !== 'workspace') return
+    if (patchQueueItemsForToolChange(state)) {
+      rootMarkupCache.queue = getRootNode('queue')?.innerHTML || rootMarkupCache.queue
+    }
+    restoreQueuedQueueScroll(state)
+  })
+}
+
 function syncShellFrame(state) {
   const shell = app?.querySelector?.('.app-shell')
   if (!shell) return
   shell.classList.toggle('app-shell--sidebar-collapsed', !!state.sidebarCollapsed)
   shell.classList.toggle('app-shell--result-overlay', getAppShellMode(state) === 'result')
+  shell.classList.toggle('app-shell--processing', !!state.isProcessing)
 }
 
 function syncQueueViewportFromDom() {
@@ -1329,7 +1466,9 @@ function renderQueueRoot(state, preserveScroll = true) {
   const markup = renderImageQueue(state, queueViewportState)
   let changed = false
   if (rootMarkupCache.queue !== markup) {
+    const detachedThumbs = detachQueueThumbContent(root)
     root.innerHTML = markup
+    attachQueueThumbContent(root, detachedThumbs)
     rootMarkupCache.queue = markup
     changed = true
   }
@@ -1341,12 +1480,19 @@ function renderQueueRoot(state, preserveScroll = true) {
   return { root, changed }
 }
 
+function getWorkspaceTooltipRoot(mode = getAppShellMode(getState())) {
+  const workspaceRoot = getRootNode('workspace')
+  if (!workspaceRoot) return null
+  if (mode !== 'workspace') return workspaceRoot
+  return workspaceRoot.querySelector('.panel') || workspaceRoot
+}
+
 function scheduleQueueRootRender() {
   if (queueRenderFrame) return
   queueRenderFrame = requestAnimationFrame(() => {
     queueRenderFrame = 0
     const state = getState()
-    if (getAppShellMode(state) !== 'workspace') return
+    if (!shouldTrackQueueViewport(state)) return
     const { root, changed } = renderQueueRoot(state)
     queuePostRenderWork({
       snapshot: null,
@@ -1370,21 +1516,24 @@ function renderFullShell(state, snapshot) {
   const sideNavRoot = getRootNode('side-nav')
   const topbarRoot = getRootNode('topbar')
   const workspaceRoot = getRootNode('workspace')
+  const panelRoot = getRootNode('panel')
   const overlaysRoot = getRootNode('overlays')
   const notificationsRoot = getRootNode('notifications')
   rootMarkupCache.sideNav = sideNavRoot?.innerHTML || ''
   rootMarkupCache.topbar = topbarRoot?.innerHTML || ''
   rootMarkupCache.workspace = workspaceRoot?.innerHTML || ''
+  rootMarkupCache.panel = panelRoot?.innerHTML || ''
   rootMarkupCache.queue = getRootNode('queue')?.innerHTML || ''
   rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
   rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
+  restoreQueuedQueueScroll(state)
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
     queueChanged: getAppShellMode(state) === 'workspace',
     toolbarChanged: true,
     marqueeChanged: true,
-    tooltipRoots: [sideNavRoot, topbarRoot, workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
+    tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
   })
 }
 
@@ -1400,6 +1549,11 @@ function render(state) {
 
   const diff = diffRenderSnapshot(lastRenderSnapshot, nextSnapshot)
   const tooltipRoots = []
+  let effectiveQueueChanged = diff.queueChanged
+  let shouldCaptureWorkspaceSnapshot = diff.workspaceChanged
+  const canPreserveQueueDuringWorkspaceRefresh = diff.previousMode === 'workspace'
+    && diff.nextMode === 'workspace'
+    && hasSameAssetOrder(lastRenderSnapshot.assets, state.assets)
 
   if (diff.shellFrameChanged) {
     syncShellFrame(state)
@@ -1413,27 +1567,42 @@ function render(state) {
     if (root && changed) tooltipRoots.push(root)
   }
   if (diff.workspaceChanged) {
-    const preserveDetachedQueue = diff.previousMode === 'workspace'
-      && diff.nextMode === 'workspace'
-      && !diff.queueChanged
-    if (diff.previousMode === 'workspace' && (diff.nextMode !== 'workspace' || preserveDetachedQueue)) {
+    const reuseQueueDuringWorkspaceRefresh = canPreserveQueueDuringWorkspaceRefresh
+    const shouldPatchQueueItems = reuseQueueDuringWorkspaceRefresh
+    if (reuseQueueDuringWorkspaceRefresh) {
+      shouldCaptureWorkspaceSnapshot = false
+      const { root, changed } = setRootMarkup('panel', renderToolPage(state.activeTool, state))
+      if (root && changed) tooltipRoots.push(root)
+      if (shouldPatchQueueItems) {
+        queueQueueItemPatch()
+        effectiveQueueChanged = false
+      }
+    } else {
+    if (diff.previousMode === 'workspace' && (diff.nextMode !== 'workspace' || reuseQueueDuringWorkspaceRefresh)) {
       detachQueueContent()
     }
     const workspaceMarkup = renderShellWorkspace(
       state,
-      (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || preserveDetachedQueue
+      (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || reuseQueueDuringWorkspaceRefresh
         ? ''
         : renderImageQueue(state, queueViewportState),
       nextSnapshot.mode,
     )
     const { root, changed } = setRootMarkup('workspace', workspaceMarkup)
     if (root) {
-      const shouldReattachQueue = (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || preserveDetachedQueue
+      const shouldReattachQueue = (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || reuseQueueDuringWorkspaceRefresh
       if (shouldReattachQueue && !attachDetachedQueueContent()) {
         renderQueueRoot(state, false)
+      } else if (shouldReattachQueue && shouldPatchQueueItems) {
+        queueQueueItemPatch()
+        effectiveQueueChanged = false
+      } else if (shouldReattachQueue) {
+        effectiveQueueChanged = false
       }
     }
-    if (root && changed) tooltipRoots.push(root)
+    const tooltipRoot = root && changed ? getWorkspaceTooltipRoot(nextSnapshot.mode) : null
+    if (tooltipRoot) tooltipRoots.push(tooltipRoot)
+    }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
     const { root, changed } = renderQueueRoot(state)
     if (root && changed) tooltipRoots.push(root)
@@ -1458,10 +1627,12 @@ function render(state) {
     setRootMarkup('notifications', renderNotifications(state.notifications))
   }
 
+  restoreQueuedQueueScroll(state)
+
   queuePostRenderWork({
-    snapshot: diff.workspaceChanged ? captureUiSnapshot() : null,
+    snapshot: shouldCaptureWorkspaceSnapshot ? captureUiSnapshot() : null,
     activeTool: state.activeTool,
-    queueChanged: diff.queueChanged || (diff.workspaceChanged && diff.previousMode !== 'workspace'),
+    queueChanged: effectiveQueueChanged || (diff.workspaceChanged && diff.previousMode !== 'workspace'),
     toolbarChanged: diff.toolbarChanged,
     marqueeChanged: diff.marqueeChanged,
     tooltipRoots,
@@ -1498,7 +1669,7 @@ function queuePostRenderWork(work) {
       syncCustomTooltips(root)
     }
     if (nextWork.marqueeChanged) queueResultMarqueeSync()
-    if (nextWork.queueChanged && syncQueueViewportFromDom()) {
+    if (nextWork.queueChanged && shouldTrackQueueViewport(getState()) && syncQueueViewportFromDom()) {
       scheduleQueueRootRender()
     }
     if (nextWork.activeTool === 'manual-crop') {
@@ -1632,8 +1803,44 @@ function isSameProcessingProgress(currentProgress, nextProgress) {
 function attachQueueThumbnailSubscription() {
   subscribeQueueThumbnails(({ assetId, listThumbnailUrl }) => {
     if (!assetId || !listThumbnailUrl) return
-    updateAssetListThumbnail(assetId, listThumbnailUrl)
+    updateAssetListThumbnail(assetId, listThumbnailUrl, false)
+    queueQueueThumbnailPatch(assetId, listThumbnailUrl)
   })
+}
+
+function queueQueueThumbnailPatch(assetId, listThumbnailUrl) {
+  pendingQueueThumbnailPatches.set(String(assetId), listThumbnailUrl)
+  if (queueThumbnailPatchFrame) return
+  queueThumbnailPatchFrame = requestAnimationFrame(() => {
+    queueThumbnailPatchFrame = 0
+    flushQueueThumbnailPatches()
+  })
+}
+
+function flushQueueThumbnailPatches() {
+  if (!pendingQueueThumbnailPatches.size) return
+  for (const [assetId, listThumbnailUrl] of pendingQueueThumbnailPatches.entries()) {
+    patchQueueThumbnail(assetId, listThumbnailUrl)
+  }
+  pendingQueueThumbnailPatches.clear()
+}
+
+function patchQueueThumbnail(assetId, listThumbnailUrl) {
+  const item = app?.querySelector?.(`.queue-item[data-asset-id="${CSS.escape(String(assetId))}"]`)
+  const thumb = item?.querySelector?.('.queue-item__thumb')
+  if (!thumb) return
+  const current = thumb.querySelector('img')
+  if (current) {
+    if (current.getAttribute('src') !== listThumbnailUrl) current.setAttribute('src', listThumbnailUrl)
+    return
+  }
+  const image = document.createElement('img')
+  const asset = getState().assets.find((entry) => entry.id === assetId)
+  image.src = listThumbnailUrl
+  image.alt = asset?.name || ''
+  image.loading = 'lazy'
+  image.decoding = 'async'
+  thumb.replaceChildren(image)
 }
 
 function attachLaunchSubscription() {
@@ -1664,7 +1871,9 @@ function appendImportedAssets(assets, verb = '已导入') {
 
 function captureUiSnapshot() {
   const activeElement = document.activeElement
-  const scrollRoots = app?.querySelectorAll?.('[data-scroll-role]') || []
+  const scrollRoots = Array.from(app?.querySelectorAll?.('[data-scroll-role]') || []).filter((node) => {
+    return node.getAttribute('data-scroll-role') !== 'queue'
+  })
   const activeField = activeElement?.matches?.('[data-action][data-tool-id][data-key], [data-role="search-input"], [data-action="change-preset-name"]')
     ? getElementDescriptor(activeElement)
     : null
@@ -1885,6 +2094,7 @@ function attachGlobalEvents() {
 
     if (action === 'activate-tool') {
       event.preventDefault()
+      queueQueueScrollRestore()
       resetActiveResultUi()
       setActiveTool(target.dataset.toolId)
       void applyDefaultPresetForTool(target.dataset.toolId, true)
@@ -2548,17 +2758,17 @@ function attachGlobalEvents() {
       if (Math.abs(queueViewportState.scrollTop - nextScrollTop) > 1 || Math.abs(queueViewportState.height - nextHeight) > 1) {
         queueViewportState.scrollTop = nextScrollTop
         queueViewportState.height = nextHeight
-        scheduleQueueRootRender()
+        if (shouldTrackQueueViewport(getState())) scheduleQueueRootRender()
       }
     }
   }, true)
   window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)
   window.addEventListener('resize', () => {
     positionTooltip(activeTooltipTarget)
+    syncShellFrame(getState())
     if (document.querySelector('.result-strip__marquee')) queueResultMarqueeSync()
-    if (syncQueueViewportFromDom()) {
-      scheduleQueueRootRender()
-    }
+    const queueViewportChanged = syncQueueViewportFromDom()
+    if (shouldTrackQueueViewport(getState()) && queueViewportChanged) scheduleQueueRootRender()
     if (getState().activeTool === 'manual-crop') {
       queueManualCropStageSync()
     }

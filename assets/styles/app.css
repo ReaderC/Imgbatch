@@ -2133,7 +2133,6 @@ html {
   margin-top: -6px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 18px 0 0 rgba(255, 255, 255, 0.48);
   animation: processing-pulse 1s ease-in-out infinite;
 }
 
@@ -2146,6 +2145,11 @@ html {
     transform: scale(1.08);
     opacity: 1;
   }
+}
+
+.app-shell--processing .topbar {
+  backdrop-filter: none !important;
+  background: #f7f9fc !important;
 }
 
 .icon-button {

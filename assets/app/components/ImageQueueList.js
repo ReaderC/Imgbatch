@@ -69,8 +69,53 @@ export function renderImageQueue(state, viewport = null) {
   `
 }
 
+export function shouldVirtualizeQueue(total = 0) {
+  return Number(total) >= QUEUE_VIRTUALIZE_THRESHOLD
+}
+
+export function renderQueueItemFragments(asset, tool, state, index, total, compactLayout = isCompactQueueLayout()) {
+  const assetFormat = getAssetFormatLabel(asset)
+  const sortable = tool.mode === 'sort'
+  return {
+    itemClassName: `queue-item${sortable ? ' queue-item--sortable' : ''}`,
+    draggable: sortable,
+    contentMarkup: `
+      <p class="queue-item__name" data-tooltip="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
+      <div class="queue-item__subline queue-item__subline--meta">
+        <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
+        <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
+        <span class="queue-pill">${assetFormat}</span>
+      </div>
+      <div class="queue-item__subline queue-item__subline--summary${asset.error ? ' queue-item__subline--summary-error' : ''}">
+        <span class="queue-summary-text">${asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)}</span>
+      </div>
+      ${compactLayout ? renderCompactQueueTicker(asset, tool, state) : ''}
+      ${renderResultMeta(asset, tool)}
+      ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
+      ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
+    `,
+    controlsMarkup: sortable ? `
+      <button class="icon-button" data-action="move-asset" data-direction="up" data-asset-id="${asset.id}" ${index === 0 ? 'disabled' : ''}>
+        <span class="material-symbols-outlined">keyboard_arrow_up</span>
+      </button>
+      <button class="icon-button" data-action="move-asset" data-direction="down" data-asset-id="${asset.id}" ${index === total - 1 ? 'disabled' : ''}>
+        <span class="material-symbols-outlined">keyboard_arrow_down</span>
+      </button>
+      <span class="material-symbols-outlined queue-item__drag" data-tooltip="拖动排序" aria-label="拖动排序">drag_indicator</span>
+      <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    ` : `
+      ${renderPrimaryAction(asset, tool)}
+      <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    `,
+  }
+}
+
 function getQueueRenderWindow(total, compactLayout, viewport) {
-  if (total < QUEUE_VIRTUALIZE_THRESHOLD) return null
+  if (!shouldVirtualizeQueue(total)) return null
   const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)
   const viewportHeight = Math.max(0, Number(viewport?.height) || 0)
   if (!viewportHeight) return null
@@ -87,46 +132,17 @@ function getQueueRenderWindow(total, compactLayout, viewport) {
 }
 
 function renderQueueItem(asset, tool, state, index, total, compactLayout = false) {
-  const assetFormat = getAssetFormatLabel(asset)
-  const sortableAttrs = tool.mode === 'sort'
-    ? ` data-asset-id="${asset.id}" draggable="true"`
-    : ''
+  const fragments = renderQueueItemFragments(asset, tool, state, index, total, compactLayout)
+  const sortableAttrs = ` data-asset-id="${asset.id}"${fragments.draggable ? ' draggable="true"' : ''}`
   return `
-    <article class="queue-item${tool.mode === 'sort' ? ' queue-item--sortable' : ''}"${sortableAttrs}>
+    <article class="${fragments.itemClassName}"${sortableAttrs}>
       <div class="queue-item__thumb">
         ${asset.listThumbnailUrl
           ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" />`
           : '<div class="queue-item__thumb-placeholder" aria-hidden="true"></div>'}
       </div>
-      <div class="queue-item__content">
-        <p class="queue-item__name" data-tooltip="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
-        <div class="queue-item__subline queue-item__subline--meta">
-          <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
-          <span class="queue-pill">${asset.width || '—'} × ${asset.height || '—'}</span>
-          <span class="queue-pill">${assetFormat}</span>
-        </div>
-        <div class="queue-item__subline queue-item__subline--summary${asset.error ? ' queue-item__subline--summary-error' : ''}">
-          <span class="queue-summary-text">${asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)}</span>
-        </div>
-        ${compactLayout ? renderCompactQueueTicker(asset, tool, state) : ''}
-        ${renderResultMeta(asset, tool)}
-        ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
-        ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
-      </div>
-      <div class="queue-item__controls">
-        ${tool.mode === 'sort' ? `
-          <button class="icon-button" data-action="move-asset" data-direction="up" data-asset-id="${asset.id}" ${index === 0 ? 'disabled' : ''}>
-            <span class="material-symbols-outlined">keyboard_arrow_up</span>
-          </button>
-          <button class="icon-button" data-action="move-asset" data-direction="down" data-asset-id="${asset.id}" ${index === total - 1 ? 'disabled' : ''}>
-            <span class="material-symbols-outlined">keyboard_arrow_down</span>
-          </button>
-          <span class="material-symbols-outlined queue-item__drag" data-tooltip="拖动排序" aria-label="拖动排序">drag_indicator</span>
-        ` : renderPrimaryAction(asset, tool)}
-        <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-      </div>
+      <div class="queue-item__content">${fragments.contentMarkup}</div>
+      <div class="queue-item__controls">${fragments.controlsMarkup}</div>
     </article>
   `
 }

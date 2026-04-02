@@ -54,10 +54,10 @@ export function renderManualCropPage(state) {
         <h2 class="manual-title">手动裁剪</h2>
         <div class="manual-header__meta" data-horizontal-scroll>
           <span class="badge">${progressLabel}</span>
-          <button class="icon-button" data-action="toggle-manual-crop-help" title="操作说明" aria-label="操作说明">
+          <button class="icon-button" data-action="toggle-manual-crop-help" data-tooltip="操作说明" aria-label="操作说明">
             <span class="material-symbols-outlined">help</span>
           </button>
-          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" title="关闭" aria-label="关闭">
+          <button class="icon-button" data-action="activate-tool" data-tool-id="compression" data-tooltip="关闭" aria-label="关闭">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -108,13 +108,13 @@ export function renderManualCropPage(state) {
       <footer class="manual-footer">
         <div class="manual-footer__left" data-horizontal-scroll>
           <div class="manual-toolbar manual-toolbar--crop">
-            <button class="icon-button" data-action="open-folder-input" title="选择文件夹" aria-label="选择文件夹">
+            <button class="icon-button" data-action="open-folder-input" data-tooltip="选择文件夹" aria-label="选择文件夹">
               <span class="material-symbols-outlined">folder_open</span>
             </button>
-            <button class="icon-button" data-action="open-file-input" title="选择图片" aria-label="选择图片">
+            <button class="icon-button" data-action="open-file-input" data-tooltip="选择图片" aria-label="选择图片">
               <span class="material-symbols-outlined">add_photo_alternate</span>
             </button>
-            <button class="icon-button" data-action="remove-asset" data-asset-id="${current?.id || ''}" title="删除当前图片" aria-label="删除当前图片" ${!hasCurrent ? 'disabled' : ''}>
+            <button class="icon-button" data-action="remove-asset" data-asset-id="${current?.id || ''}" data-tooltip="删除当前图片" aria-label="删除当前图片" ${!hasCurrent ? 'disabled' : ''}>
               <span class="material-symbols-outlined">delete</span>
             </button>
             <div class="select-shell select-shell--up manual-footer__ratio-shell">
@@ -124,7 +124,7 @@ export function renderManualCropPage(state) {
                 data-action="toggle-config-select"
                 aria-haspopup="listbox"
                 aria-expanded="false"
-                title="裁剪比例"
+                data-tooltip="裁剪比例"
               >
                 <span class="material-symbols-outlined">aspect_ratio</span>
               </button>
@@ -140,22 +140,22 @@ export function renderManualCropPage(state) {
                 `).join('')}
               </div>
             </div>
-            <button class="icon-button" data-action="manual-crop-rotate-left" title="向左旋转 90°" aria-label="向左旋转 90°">
+            <button class="icon-button" data-action="manual-crop-rotate-left" data-tooltip="向左旋转 90°" aria-label="向左旋转 90°">
               <span class="material-symbols-outlined">rotate_90_degrees_ccw</span>
             </button>
-            <button class="icon-button" data-action="manual-crop-rotate-right" title="向右旋转 90°" aria-label="向右旋转 90°">
+            <button class="icon-button" data-action="manual-crop-rotate-right" data-tooltip="向右旋转 90°" aria-label="向右旋转 90°">
               <span class="material-symbols-outlined">rotate_90_degrees_cw</span>
             </button>
-            <button class="icon-button ${currentTransform.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" title="左右翻转" aria-label="左右翻转" aria-pressed="${currentTransform.flipHorizontal ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipHorizontal ? 'is-active' : ''}" data-action="manual-crop-flip-horizontal" data-tooltip="左右翻转" aria-label="左右翻转" aria-pressed="${currentTransform.flipHorizontal ? 'true' : 'false'}">
               <span class="material-symbols-outlined">flip</span>
             </button>
-            <button class="icon-button ${currentTransform.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" title="上下翻转" aria-label="上下翻转" aria-pressed="${currentTransform.flipVertical ? 'true' : 'false'}">
+            <button class="icon-button ${currentTransform.flipVertical ? 'is-active' : ''}" data-action="manual-crop-flip-vertical" data-tooltip="上下翻转" aria-label="上下翻转" aria-pressed="${currentTransform.flipVertical ? 'true' : 'false'}">
               <span class="material-symbols-outlined">swap_vert</span>
             </button>
             <button
               class="icon-button ${config.lockAspectRatio ? 'is-active' : ''}"
               data-action="toggle-manual-crop-lock-aspect"
-              title="${config.lockAspectRatio ? '自由拖动' : '保持比例'}"
+              data-tooltip="${config.lockAspectRatio ? '自由拖动' : '保持比例'}"
               aria-label="${config.lockAspectRatio ? '自由拖动' : '保持比例'}"
               aria-pressed="${config.lockAspectRatio ? 'true' : 'false'}"
             >
@@ -164,7 +164,7 @@ export function renderManualCropPage(state) {
             <button
               class="icon-button ${config.keepOriginalFormat ? 'is-active' : ''}"
               data-action="toggle-manual-crop-keep-format"
-              title="保持原格式"
+              data-tooltip="保持原格式"
               aria-label="保持原格式"
               aria-pressed="${config.keepOriginalFormat ? 'true' : 'false'}"
             >
@@ -173,7 +173,7 @@ export function renderManualCropPage(state) {
             <button
               class="icon-button ${config.snapEnabled ? 'is-active' : ''}"
               data-action="toggle-manual-crop-snap"
-              title="${config.snapEnabled ? '关闭边缘吸附' : '开启边缘吸附'}"
+              data-tooltip="${config.snapEnabled ? '关闭边缘吸附' : '开启边缘吸附'}"
               aria-label="${config.snapEnabled ? '关闭边缘吸附' : '开启边缘吸附'}"
               aria-pressed="${config.snapEnabled ? 'true' : 'false'}"
             >
@@ -186,7 +186,7 @@ export function renderManualCropPage(state) {
                 data-action="toggle-config-select"
                 aria-haspopup="listbox"
                 aria-expanded="false"
-                title="吸附强度"
+                data-tooltip="吸附强度"
                 aria-label="吸附强度"
               >
                 <span class="material-symbols-outlined">tune</span>
@@ -209,7 +209,7 @@ export function renderManualCropPage(state) {
                 data-action="toggle-config-select"
                 aria-haspopup="listbox"
                 aria-expanded="false"
-                title="图片外空白"
+                data-tooltip="图片外空白"
               >
                 <span class="material-symbols-outlined">background_replace</span>
               </button>
@@ -228,13 +228,13 @@ export function renderManualCropPage(state) {
         </div>
         <div class="manual-footer__right">
           <div class="manual-toolbar manual-toolbar--crop manual-toolbar--crop-actions">
-            <button class="icon-button" data-action="manual-crop-prev" title="上一张" aria-label="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
+            <button class="icon-button" data-action="manual-crop-prev" data-tooltip="上一张" aria-label="上一张" ${config.currentIndex <= 0 ? 'disabled' : ''}>
               <span class="material-symbols-outlined">chevron_left</span>
             </button>
             <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="manual-crop-complete" ${!hasCurrent || state.isProcessing ? 'disabled' : ''}>
               ${state.isProcessing ? '剪裁中...' : (isLastImage ? '剪裁并完成' : '剪裁并下一张')}
             </button>
-            <button class="icon-button" data-action="manual-crop-next" title="下一张" aria-label="下一张" ${!hasCurrent || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
+            <button class="icon-button" data-action="manual-crop-next" data-tooltip="下一张" aria-label="下一张" ${!hasCurrent || config.currentIndex >= state.assets.length - 1 ? 'disabled' : ''}>
               <span class="material-symbols-outlined">chevron_right</span>
             </button>
           </div>

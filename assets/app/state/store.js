@@ -160,18 +160,26 @@ export function removeAsset(assetId) {
   emit()
 }
 
-export function updateAssetListThumbnail(assetId, listThumbnailUrl) {
+export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange = true) {
   if (!assetId || !listThumbnailUrl) return
   let changed = false
-  state.assets = state.assets.map((asset) => {
-    if (asset.id !== assetId || asset.listThumbnailUrl === listThumbnailUrl) return asset
-    changed = true
-    return {
-      ...asset,
-      listThumbnailUrl,
+  if (emitChange) {
+    state.assets = state.assets.map((asset) => {
+      if (asset.id !== assetId || asset.listThumbnailUrl === listThumbnailUrl) return asset
+      changed = true
+      return {
+        ...asset,
+        listThumbnailUrl,
+      }
+    })
+  } else {
+    const asset = state.assets.find((entry) => entry.id === assetId)
+    if (asset && asset.listThumbnailUrl !== listThumbnailUrl) {
+      asset.listThumbnailUrl = listThumbnailUrl
+      changed = true
     }
-  })
-  if (changed) emit()
+  }
+  if (changed && emitChange) emit()
 }
 
 export function applyRunResult(result) {
