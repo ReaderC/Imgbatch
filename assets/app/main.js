@@ -1650,6 +1650,20 @@ function render(state) {
   }
 
   const diff = diffRenderSnapshot(lastRenderSnapshot, nextSnapshot)
+  const progressOnlyTopbarChange = diff.topbarChanged
+    && !diff.shellFrameChanged
+    && !diff.sideNavChanged
+    && !diff.workspaceChanged
+    && !diff.overlaysChanged
+    && !diff.notificationsChanged
+    && !diff.toolbarChanged
+    && !diff.queueChanged
+    && !diff.marqueeChanged
+  if (progressOnlyTopbarChange) {
+    syncTopBarRoot(state, nextSnapshot.mode)
+    lastRenderSnapshot = nextSnapshot
+    return
+  }
   const tooltipRoots = []
   let effectiveQueueChanged = diff.queueChanged
   let shouldCaptureWorkspaceSnapshot = diff.workspaceChanged
