@@ -76,9 +76,38 @@ export function shouldVirtualizeQueue(total = 0) {
 export function renderQueueItemFragments(asset, tool, state, index, total, compactLayout = isCompactQueueLayout()) {
   const assetFormat = getAssetFormatLabel(asset)
   const sortable = tool.mode === 'sort'
+  const previewStatus = getToolPreviewStatus(asset, tool.id)
+  const summaryText = asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)
+  const compactTickerText = compactLayout ? getCompactQueueTickerText(asset, tool, state, assetFormat, summaryText) : ''
+  const resultMetaMarkup = renderResultMeta(asset, tool, previewStatus)
+  const primaryActionMarkup = sortable ? '' : renderPrimaryAction(asset, tool, previewStatus)
   return {
     itemClassName: `queue-item${sortable ? ' queue-item--sortable' : ''}`,
     draggable: sortable,
+    contentSignature: [
+      asset.name,
+      asset.sizeBytes,
+      asset.width,
+      asset.height,
+      assetFormat,
+      asset.error || '',
+      summaryText,
+      compactTickerText,
+      previewStatus,
+      asset.stagedSizeBytes,
+      asset.stagedWidth,
+      asset.stagedHeight,
+      asset.savedOutputPath,
+      asset.outputPath,
+      asset.warning || '',
+    ].join('\u0001'),
+    controlsSignature: [
+      tool.id,
+      sortable ? 'sort' : 'preview',
+      previewStatus,
+      index,
+      total,
+    ].join('\u0001'),
     contentMarkup: `
       <p class="queue-item__name" data-tooltip="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
       <div class="queue-item__subline queue-item__subline--meta">
@@ -87,10 +116,10 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
         <span class="queue-pill">${assetFormat}</span>
       </div>
       <div class="queue-item__subline queue-item__subline--summary${asset.error ? ' queue-item__subline--summary-error' : ''}">
-        <span class="queue-summary-text">${asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)}</span>
+        <span class="queue-summary-text">${summaryText}</span>
       </div>
-      ${compactLayout ? renderCompactQueueTicker(asset, tool, state) : ''}
-      ${renderResultMeta(asset, tool)}
+      ${compactLayout ? renderCompactQueueTicker(compactTickerText, !!asset.error) : ''}
+      ${resultMetaMarkup}
       ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
       ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
     `,
@@ -106,7 +135,7 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
         <span class="material-symbols-outlined">close</span>
       </button>
     ` : `
-      ${renderPrimaryAction(asset, tool)}
+      ${primaryActionMarkup}
       <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
         <span class="material-symbols-outlined">close</span>
       </button>
@@ -141,24 +170,24 @@ function renderQueueItem(asset, tool, state, index, total, compactLayout = false
           ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" />`
           : '<div class="queue-item__thumb-placeholder" aria-hidden="true"></div>'}
       </div>
-      <div class="queue-item__content">${fragments.contentMarkup}</div>
-      <div class="queue-item__controls">${fragments.controlsMarkup}</div>
+      <div class="queue-item__content" data-render-signature="${escapeHtml(fragments.contentSignature)}">${fragments.contentMarkup}</div>
+      <div class="queue-item__controls" data-render-signature="${escapeHtml(fragments.controlsSignature)}">${fragments.controlsMarkup}</div>
     </article>
   `
 }
 
-function renderCompactQueueTicker(asset, tool, state) {
-  const assetFormat = getAssetFormatLabel(asset)
-  const isError = Boolean(asset.error)
-  const text = isError
-    ? `错误：${asset.error}`
-    : [
-        assetFormat,
-        getToolSummary(tool.id, state, asset),
-        formatBytes(asset.sizeBytes),
-        `${asset.width || '—'} × ${asset.height || '—'}`,
-        asset.warning || '',
-      ].join(' · ')
+function getCompactQueueTickerText(asset, tool, state, assetFormat = getAssetFormatLabel(asset), summaryText = getToolSummary(tool.id, state, asset)) {
+  if (asset.error) return `错误：${asset.error}`
+  return [
+    assetFormat,
+    summaryText,
+    formatBytes(asset.sizeBytes),
+    `${asset.width || '—'} × ${asset.height || '—'}`,
+    asset.warning || '',
+  ].join(' · ')
+}
+
+function renderCompactQueueTicker(text, isError = false) {
   return `
     <div class="queue-item__compact-ticker${isError ? ' queue-item__compact-ticker--error' : ''}" aria-label="${escapeHtml(text)}">
       <div class="queue-item__compact-track">
@@ -182,12 +211,10 @@ function getAssetFormatLabel(asset) {
   return format.toUpperCase()
 }
 
-function renderPrimaryAction(asset, tool) {
+function renderPrimaryAction(asset, tool, previewStatus = getToolPreviewStatus(asset, tool.id)) {
   if (!PREVIEW_SAVE_TOOLS.has(tool.id)) {
     return `<button class="queue-item__action" data-action="preview-asset" data-asset-id="${asset.id}">预览</button>`
   }
-
-  const previewStatus = getToolPreviewStatus(asset, tool.id)
   if (previewStatus === 'saved') {
     return `
       <div class="queue-item__action-stack">
@@ -201,9 +228,8 @@ function renderPrimaryAction(asset, tool) {
   return `<button class="queue-item__action" data-action="preview-asset" data-asset-id="${asset.id}">${previewStatus === 'stale' ? '重新预览' : '预览'}</button>`
 }
 
-function renderResultMeta(asset, tool) {
+function renderResultMeta(asset, tool, previewStatus = getToolPreviewStatus(asset, tool.id)) {
   if (!PREVIEW_SAVE_TOOLS.has(tool.id)) return ''
-  const previewStatus = getToolPreviewStatus(asset, tool.id)
   if (previewStatus === 'previewed') {
     return `<div class="queue-item__subline queue-item__subline--summary"><span class="queue-summary-text">预览结果：${formatBytes(asset.stagedSizeBytes)} · ${asset.stagedWidth || '—'} × ${asset.stagedHeight || '—'}</span></div>`
   }

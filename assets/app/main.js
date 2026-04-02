@@ -1430,13 +1430,15 @@ function patchQueueItemsForToolChange(state) {
       changed = true
     }
     const content = item.querySelector('.queue-item__content')
-    if (content && content.innerHTML !== fragments.contentMarkup) {
+    if (content && content.dataset.renderSignature !== fragments.contentSignature) {
       content.innerHTML = fragments.contentMarkup
+      content.dataset.renderSignature = fragments.contentSignature
       changed = true
     }
     const controls = item.querySelector('.queue-item__controls')
-    if (controls && controls.innerHTML !== fragments.controlsMarkup) {
+    if (controls && controls.dataset.renderSignature !== fragments.controlsSignature) {
       controls.innerHTML = fragments.controlsMarkup
+      controls.dataset.renderSignature = fragments.controlsSignature
       changed = true
     }
   })
@@ -1721,8 +1723,10 @@ function queuePostRenderWork(work) {
     if (!nextWork) return
     if (nextWork.toolbarChanged) injectResultToolbar()
     if (nextWork.snapshot) restoreUiSnapshot(nextWork.snapshot)
-    for (const root of nextWork.tooltipRoots || []) {
-      syncCustomTooltips(root)
+    if ((nextWork.tooltipRoots || []).length && document.querySelector('[title]:not([data-tooltip])')) {
+      for (const root of nextWork.tooltipRoots || []) {
+        syncCustomTooltips(root)
+      }
     }
     if (nextWork.marqueeChanged) queueResultMarqueeSync()
     if (nextWork.queueChanged && shouldTrackQueueViewport(getState()) && syncQueueViewportFromDom()) {
