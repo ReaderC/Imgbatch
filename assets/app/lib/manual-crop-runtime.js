@@ -80,6 +80,7 @@ export function createManualCropRuntime({ getState, updateConfig }) {
   }
 
   function queueManualCropStageSync() {
+    if (getState().activeTool !== 'manual-crop') return
     if (manualCropStageSyncFrame) cancelAnimationFrame(manualCropStageSyncFrame)
     manualCropStageSyncFrame = requestAnimationFrame(() => {
       manualCropStageSyncFrame = 0

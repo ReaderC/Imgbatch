@@ -1336,6 +1336,11 @@ function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
 
+function supportsTransparentCanvasOutput(format) {
+  const normalized = normalizeImageFormatName(format)
+  return isAlphaCapableFormat(normalized) && normalized !== 'tiff'
+}
+
 function getOutputName(asset, toolId, format) {
   const parsed = path.parse(asset.name || path.basename(asset.sourcePath))
   const outputExtension = format === 'jpeg' ? 'jpg' : format
@@ -2105,7 +2110,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
     })
   }
 
-  if (config.autoCrop && !isAlphaCapableFormat(format)) {
+  if (config.autoCrop && !supportsTransparentCanvasOutput(format)) {
     transformed = transformed.flatten({ background: solidBackground })
   }
 
@@ -2141,7 +2146,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   if (config.horizontal) transformed = transformed.flop()
   if (config.vertical) transformed = transformed.flip()
   if (config.autoCropTransparent) transformed = transformed.ensureAlpha().trim()
-  if (config.autoCropTransparent && !isAlphaCapableFormat(format)) {
+  if (config.autoCropTransparent && !supportsTransparentCanvasOutput(format)) {
     transformed = transformed.flatten({ background: OPAQUE_WHITE_BG })
   }
   if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
@@ -2357,7 +2362,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const hasFlipHorizontal = Boolean(config.flipHorizontal)
   const hasFlipVertical = Boolean(config.flipVertical)
   const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
-  const alphaCapable = isAlphaCapableFormat(format)
+  const alphaCapable = supportsTransparentCanvasOutput(format)
 
   if (toolId !== 'manual-crop'
     && sourceWidth > 0 && sourceHeight > 0

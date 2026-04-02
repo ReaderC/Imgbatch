@@ -1512,6 +1512,7 @@ function canPatchShell(prev, next) {
 }
 
 function renderFullShell(state, snapshot) {
+  const mode = getAppShellMode(state)
   app.innerHTML = renderAppShell(state) + renderNotificationsRoot(state.notifications)
   const sideNavRoot = getRootNode('side-nav')
   const topbarRoot = getRootNode('topbar')
@@ -1530,9 +1531,9 @@ function renderFullShell(state, snapshot) {
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
-    queueChanged: getAppShellMode(state) === 'workspace',
-    toolbarChanged: true,
-    marqueeChanged: true,
+    queueChanged: mode === 'workspace' && shouldTrackQueueViewport(state),
+    toolbarChanged: Boolean(state.activeRun || state.resultView),
+    marqueeChanged: mode === 'result',
     tooltipRoots: [sideNavRoot, topbarRoot, panelRoot || workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
   })
 }
