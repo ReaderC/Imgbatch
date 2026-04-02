@@ -2,6 +2,34 @@ export function hasBridge() {
   return typeof window !== 'undefined' && !!window.imgbatch
 }
 
+const FALLBACK_FORMAT_CAPABILITIES = {
+  formats: {
+    PNG: { key: 'PNG', canonical: 'png', supportsQuality: true, supportsTransparency: true, supportsTransparentCanvasOutput: true },
+    JPEG: { key: 'JPEG', canonical: 'jpeg', supportsQuality: true, supportsTransparency: false, supportsTransparentCanvasOutput: false },
+    WEBP: { key: 'WEBP', canonical: 'webp', supportsQuality: true, supportsTransparency: true, supportsTransparentCanvasOutput: true },
+    TIFF: { key: 'TIFF', canonical: 'tiff', supportsQuality: true, supportsTransparency: true, supportsTransparentCanvasOutput: false },
+    AVIF: { key: 'AVIF', canonical: 'avif', supportsQuality: true, supportsTransparency: true, supportsTransparentCanvasOutput: true },
+    GIF: { key: 'GIF', canonical: 'gif', supportsQuality: false, supportsTransparency: true, supportsTransparentCanvasOutput: true },
+    BMP: { key: 'BMP', canonical: 'bmp', supportsQuality: false, supportsTransparency: false, supportsTransparentCanvasOutput: false },
+    ICO: { key: 'ICO', canonical: 'ico', supportsQuality: false, supportsTransparency: true, supportsTransparentCanvasOutput: true },
+  },
+  aliases: {
+    PNG: 'PNG',
+    JPEG: 'JPEG',
+    JPG: 'JPEG',
+    WEBP: 'WEBP',
+    WebP: 'WEBP',
+    TIFF: 'TIFF',
+    TIF: 'TIFF',
+    AVIF: 'AVIF',
+    GIF: 'GIF',
+    BMP: 'BMP',
+    ICO: 'ICO',
+  },
+}
+
+let cachedFormatCapabilities = null
+
 export async function importItems(items) {
   if (hasBridge()) {
     return window.imgbatch.loadInputs(items)
@@ -194,6 +222,22 @@ export function getEnvironment() {
   }
 
   return window.imgbatch.getEnvironment()
+}
+
+export function getFormatCapabilities() {
+  if (cachedFormatCapabilities) return cachedFormatCapabilities
+  if (hasBridge() && typeof window.imgbatch.getFormatCapabilities === 'function') {
+    cachedFormatCapabilities = window.imgbatch.getFormatCapabilities()
+    return cachedFormatCapabilities
+  }
+  cachedFormatCapabilities = FALLBACK_FORMAT_CAPABILITIES
+  return cachedFormatCapabilities
+}
+
+export function getFormatCapability(format) {
+  const capabilities = getFormatCapabilities()
+  const key = capabilities.aliases?.[String(format || '').trim()] || String(format || '').trim().toUpperCase()
+  return capabilities.formats?.[key] || null
 }
 
 async function browserImportItems(items = []) {

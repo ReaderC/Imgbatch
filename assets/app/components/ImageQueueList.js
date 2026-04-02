@@ -1,4 +1,5 @@
 import { TOOL_MAP } from '../config/tools.js'
+import { getFormatCapability } from '../services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const QUEUE_VIRTUALIZE_THRESHOLD = 40
@@ -266,7 +267,7 @@ function getToolSummary(toolId, state, asset) {
   if (toolId === 'merge-pdf') return `页面 ${config.pageSize} · 边距 ${config.margin}`
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
-    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
     return `${config.direction === 'vertical' ? '纵向' : '横向'} · 宽度 ${config.pageWidth}px · ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' · 小图原尺寸' : ''}`
   }
   if (toolId === 'merge-gif') return `${config.width}×${config.height} · ${config.interval}ms`

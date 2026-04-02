@@ -1,4 +1,5 @@
 ﻿import { TOOL_MAP } from '../config/tools.js'
+import { getFormatCapability } from '../services/ztools-bridge.js'
 
 const FORMAT_OPTIONS = ['PNG', 'JPEG', 'JPG', 'WebP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO']
 const FLIP_OUTPUT_OPTIONS = [['Keep Original', '保持原格式'], ...FORMAT_OPTIONS]
@@ -8,8 +9,6 @@ const COLOR_PROFILE_OPTIONS = [
   ['p3', 'Display P3'],
   ['cmyk', 'CMYK'],
 ]
-const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
-const FORMAT_TRANSPARENCY_UNSUPPORTED = new Set(['JPEG', 'JPG', 'BMP'])
 const PDF_MARGIN_OPTIONS = [
   ['none', '无边距'],
   ['narrow', '窄'],
@@ -185,8 +184,9 @@ function renderCompressionConfig(config) {
 function renderFormatConfig(config) {
   const mode = config.mode === 'quality' ? 'quality' : 'convert'
   const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
-  const qualitySupported = FORMAT_QUALITY_SUPPORTED.has(targetFormat)
-  const transparencySupported = !FORMAT_TRANSPARENCY_UNSUPPORTED.has(targetFormat)
+  const targetFormatCapability = getFormatCapability(targetFormat)
+  const qualitySupported = !!targetFormatCapability?.supportsQuality
+  const transparencySupported = !!targetFormatCapability?.supportsTransparency
   const qualityHint = mode !== 'quality'
     ? '仅转换格式时会尽量保持质量，不额外降质。'
     : !qualitySupported
@@ -408,7 +408,7 @@ function renderMergePdfConfig(config) {
 
 function renderMergeImageConfig(config) {
   const outputFormat = String(config.outputFormat || 'JPEG')
-  const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+  const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
   const qualityHint = qualitySupported ? '质量越低，输出体积通常越小。' : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
     ${renderSegmented('merge-image', 'direction', config.direction, [

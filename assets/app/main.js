@@ -37,6 +37,7 @@ import {
 } from './lib/manual-crop-flow.js'
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
+import { getFormatCapability } from './services/ztools-bridge.js'
 import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
 import { buildStagedItems, cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
@@ -44,7 +45,6 @@ const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermar
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const MERGE_PREVIEW_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 const RESHAPED_PREVIEW_TOOLS = new Set(['resize', 'rotate', 'crop', 'padding', 'flip', 'manual-crop'])
-const FORMAT_QUALITY_SUPPORTED = new Set(['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF'])
 const MANUAL_CROP_RATIO_ORDER = [
   { label: '1:1', value: '1:1' },
   { label: '4:5', value: '4:5' },
@@ -3368,7 +3368,7 @@ function getToolInputValidationMessage(toolId, config = {}) {
   if (toolId === 'format') {
     if (config.mode !== 'quality') return ''
     const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
-    if (!FORMAT_QUALITY_SUPPORTED.has(targetFormat)) return ''
+    if (!getFormatCapability(targetFormat)?.supportsQuality) return ''
     return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
   }
 
@@ -3450,7 +3450,7 @@ function describeToolConfig(toolId, config) {
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
-    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
   }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`

@@ -15,6 +15,7 @@ const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gi
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
 const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ico'])
+const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
@@ -97,7 +98,7 @@ function summarizeConfig(toolId, config = {}) {
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
-    const qualitySupported = outputFormat === 'JPEG' || outputFormat === 'WebP'
+    const qualitySupported = isQualityCapableFormat(outputFormat)
     return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}${config.preventUpscale ? ' / 小图原尺寸' : ''}`
   }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`
@@ -1336,9 +1337,40 @@ function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
 
+function isQualityCapableFormat(format) {
+  return QUALITY_CAPABLE_FORMATS.has(normalizeImageFormatName(format))
+}
+
 function supportsTransparentCanvasOutput(format) {
   const normalized = normalizeImageFormatName(format)
   return isAlphaCapableFormat(normalized) && normalized !== 'tiff'
+}
+
+function buildFormatCapabilitiesPayload() {
+  const entries = [
+    ['PNG', 'png', []],
+    ['JPEG', 'jpeg', ['JPG']],
+    ['WEBP', 'webp', ['WebP']],
+    ['TIFF', 'tiff', ['TIF']],
+    ['AVIF', 'avif', []],
+    ['GIF', 'gif', []],
+    ['BMP', 'bmp', []],
+    ['ICO', 'ico', []],
+  ]
+  const formats = {}
+  const aliases = {}
+  for (const [key, canonical, extraAliases] of entries) {
+    formats[key] = {
+      key,
+      canonical,
+      supportsQuality: isQualityCapableFormat(canonical),
+      supportsTransparency: isAlphaCapableFormat(canonical),
+      supportsTransparentCanvasOutput: supportsTransparentCanvasOutput(canonical),
+    }
+    aliases[key] = key
+    for (const alias of extraAliases) aliases[alias] = key
+  }
+  return { formats, aliases }
 }
 
 function getOutputName(asset, toolId, format) {
@@ -3263,6 +3295,10 @@ const toolsApi = {
       isMacOS: hostApi.isMacOs?.() || hostApi.isMacOS?.() || false,
       isLinux: hostApi.isLinux?.() || false,
     }
+  },
+
+  getFormatCapabilities() {
+    return buildFormatCapabilitiesPayload()
   },
 
   normalizeInput(items = []) {
