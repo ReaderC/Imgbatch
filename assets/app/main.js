@@ -92,6 +92,7 @@ let pendingProcessingProgress = undefined
 let lastRenderSnapshot = null
 let queueRenderFrame = 0
 let queueItemPatchFrame = 0
+let rotateDialFrame = 0
 let detachedQueueContent = null
 let detachedQueueState = null
 let queueThumbnailPatchFrame = 0
@@ -3368,12 +3369,31 @@ function handleRotateDrag(event) {
   const nextAngle = signed
   if (nextAngle === context.lastAngle) return
   context.lastAngle = nextAngle
-  updateConfig(context.toolId, {
-    angle: nextAngle,
+  context.pendingAngle = nextAngle
+  if (rotateDialFrame) return
+  rotateDialFrame = requestAnimationFrame(() => {
+    rotateDialFrame = 0
+    const latestContext = DRAG_CONTEXT.rotateDial
+    if (!latestContext || latestContext.pendingAngle == null) return
+    const angle = latestContext.pendingAngle
+    latestContext.pendingAngle = null
+    updateConfig(latestContext.toolId, {
+      angle,
+    })
   })
 }
 
 function endRotateDrag() {
+  if (rotateDialFrame) {
+    cancelAnimationFrame(rotateDialFrame)
+    rotateDialFrame = 0
+  }
+  const context = DRAG_CONTEXT.rotateDial
+  if (context?.pendingAngle != null) {
+    updateConfig(context.toolId, {
+      angle: context.pendingAngle,
+    })
+  }
   DRAG_CONTEXT.rotateDial = null
 }
 
