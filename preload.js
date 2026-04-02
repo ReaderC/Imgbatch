@@ -2191,6 +2191,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
+  const transformQuality = sourceFormat === format ? 100 : 90
 
   if (sourceFormat === format && hasNoFlipTransform) {
     return copyAssetToOutput(asset, outputPath)
@@ -2200,7 +2201,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
       transformed = transformed.keepMetadata()
     }
-    return writeTransformedAsset(transformed, format, 90, outputPath, {
+    return writeTransformedAsset(transformed, format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2218,7 +2219,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     transformed = transformed.keepMetadata()
   }
 
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 function buildRoundedRectSvg(width, height, radius, fill) {
