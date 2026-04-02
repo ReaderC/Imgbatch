@@ -140,9 +140,23 @@ export function setResultView(resultView) {
 }
 
 export function updateConfig(toolId, patch) {
-  state.configs[toolId] = { ...state.configs[toolId], ...patch }
+  const currentConfig = state.configs[toolId] || {}
+  const entries = Object.entries(patch || {})
+  if (!entries.length) return
+  const hasConfigChanges = entries.some(([key, value]) => currentConfig[key] !== value)
+  if (!hasConfigChanges) return
+  state.configs[toolId] = { ...currentConfig, ...patch }
   if (PREVIEW_SAVE_TOOLS.has(toolId)) {
-    state.assets = state.assets.map((asset) => markAssetPreviewStale(asset, toolId))
+    let nextAssets = null
+    for (let index = 0; index < state.assets.length; index += 1) {
+      const asset = state.assets[index]
+      const nextAsset = markAssetPreviewStale(asset, toolId)
+      if (nextAsset !== asset) {
+        if (!nextAssets) nextAssets = [...state.assets]
+        nextAssets[index] = nextAsset
+      }
+    }
+    if (nextAssets) state.assets = nextAssets
   }
   emit()
 }
