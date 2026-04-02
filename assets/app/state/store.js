@@ -34,7 +34,7 @@ const state = {
   notifications: [],
   configs: {
     compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
-    format: { mode: 'convert', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
+    format: { mode: 'quality', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
     resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
     watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100 },
     corners: { radius: '24px', background: '#ffffff', keepTransparency: false },

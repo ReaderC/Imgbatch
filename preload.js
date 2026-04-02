@@ -81,7 +81,7 @@ const TOOL_LABELS = {
 
 function summarizeConfig(toolId, config = {}) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
-  if (toolId === 'format') return `输出 ${config.targetFormat}${config.mode === 'quality' ? ` / 质量 ${config.quality}%` : ' / 仅转换'}`
+  if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
   if (toolId === 'corners') {
@@ -707,7 +707,7 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'format') {
     return {
-      mode: pickOption(config.mode, ['convert', 'quality'], 'convert'),
+      mode: pickOption(config.mode, ['convert', 'quality'], 'quality'),
       targetFormat: pickOption(String(config.targetFormat || '').toUpperCase(), ['PNG', 'JPEG', 'JPG', 'WEBP', 'TIFF', 'AVIF', 'GIF', 'BMP', 'ICO'], 'JPEG'),
       quality: clampNumber(config.quality, 1, 100, 90),
       keepTransparency: Boolean(config.keepTransparency),
@@ -1684,7 +1684,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
   let sourceFormat = normalizeImageFormatName(asset.inputFormat)
   let sourceInput = null
-  const shouldProbeSourceFormat = config.mode !== 'quality'
+  const shouldProbeSourceFormat = Math.round(config.quality) >= 100
     && (sourceFormat === format || !SHARP_INPUT_FORMATS.has(sourceFormat))
 
   if (shouldProbeSourceFormat) {
@@ -1699,7 +1699,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     }
   }
 
-  if (config.mode !== 'quality' && sourceFormat === format) {
+  if (Math.round(config.quality) >= 100 && sourceFormat === format) {
     return copyAssetToOutput(asset, outputPath, sourceInput)
   }
 
@@ -1713,7 +1713,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
     transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
   }
-  const quality = config.mode === 'quality' ? Math.round(config.quality) : 100
+  const quality = Math.round(clampNumber(config.quality, 1, 100, 90))
 
   return writeTransformedAsset(transformed, format, quality, outputPath, {
     width: asset.width,

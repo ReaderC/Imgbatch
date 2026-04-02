@@ -3430,7 +3430,6 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'format') {
-    if (config.mode !== 'quality') return ''
     const targetFormat = String(config.targetFormat || 'JPEG').toUpperCase()
     if (!getFormatCapability(targetFormat)?.supportsQuality) return ''
     return isPositiveInputValue(config.quality) ? '' : '输出质量必须大于 0 后才能开始处理。'
@@ -3503,7 +3502,7 @@ function getToolInputValidationMessage(toolId, config = {}) {
 
 function describeToolConfig(toolId, config) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
-  if (toolId === 'format') return `输出 ${config.targetFormat}`
+  if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
   if (toolId === 'resize') {
     const width = typeof config.width === 'object' ? `${config.width.value}${config.width.unit}` : config.width
     const height = typeof config.height === 'object' ? `${config.height.value}${config.height.unit}` : config.height
