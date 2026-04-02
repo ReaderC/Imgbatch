@@ -445,7 +445,7 @@ function renderSettingsSection(content) {
 }
 
 function renderQualityField({ toolId, value, disabled = false, hint = '' }) {
-  const guidance = hint || '该选项对 JPEG / WebP / AVIF / TIFF 的体积与画质影响通常更明显；对 PNG 主要影响压缩级别与调色板量化，体积和观感变化可能不明显；GIF / BMP / ICO 不提供这类质量调节。'
+  const guidance = hint || '该选项对 JPEG / WebP / AVIF / TIFF 的体积与画质影响通常更明显；对 PNG 主要影响压缩级别与调色板量化，体积和观感变化可能不明显；GIF / BMP / ICO 不支持这类质量调节。'
   return `
     <div class="quality-field">
       ${renderRangeField({
