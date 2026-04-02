@@ -2746,10 +2746,17 @@ function attachGlobalEvents() {
       const toolId = target.dataset.toolId
       const key = target.dataset.key
       const value = normalizeConfigInputValue(toolId, key, target.value, target.dataset.unitMode)
-      getState().configs[toolId] = { ...getState().configs[toolId], [key]: value }
+      const config = getState().configs[toolId] || {}
+      if (config[key] !== value) {
+        config[key] = value
+      }
 
       if (toolId === 'crop' && key === 'ratio') {
-        getState().configs.crop = { ...getState().configs.crop, ratio: value, useCustomRatio: value === 'Custom' }
+        if (config.ratio !== value) config.ratio = value
+        const useCustomRatio = value === 'Custom'
+        if (config.useCustomRatio !== useCustomRatio) {
+          config.useCustomRatio = useCustomRatio
+        }
       }
     }
   })
