@@ -7,9 +7,11 @@ const QUEUE_VIRTUAL_OVERSCAN = 8
 const QUEUE_VIRTUAL_OVERSCAN_DENSE = 5
 const QUEUE_VIRTUAL_OVERSCAN_COMPACT = 6
 const QUEUE_DENSE_LAYOUT_THRESHOLD = 24
+const QUEUE_PROCESSING_DENSE_LAYOUT_THRESHOLD = 8
 const QUEUE_ITEM_ESTIMATED_HEIGHT = {
   regular: 118,
   dense: 96,
+  processingDense: 76,
   compact: 86,
 }
 const WATERMARK_POSITION_LABELS = {
@@ -29,19 +31,20 @@ export function renderImageQueue(state, viewport = null) {
   const assets = state.assets
   const compactLayout = isCompactQueueLayout()
   const denseLayout = shouldUseDenseQueueLayout(assets.length, compactLayout)
-  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, viewport)
+  const processingDenseLayout = shouldUseProcessingDenseQueueLayout(state, compactLayout)
+  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, processingDenseLayout, viewport)
   const visibleAssets = queueWindow
     ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
     : assets
 
   return `
-    <section class="queue${denseLayout ? ' queue--dense' : ''}" data-role="drop-surface" data-scroll-role="queue">
+    <section class="queue${denseLayout ? ' queue--dense' : ''}${processingDenseLayout ? ' queue--processing-dense' : ''}" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
         <div class="queue-list${queueWindow ? ' queue-list--virtual' : ''}">
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.topSpacer}px;" aria-hidden="true"></div>` : ''}
           ${visibleAssets.map((asset, index) => {
             const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
-            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout, denseLayout)
+            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout, denseLayout, processingDenseLayout)
           }).join('')}
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.bottomSpacer}px;" aria-hidden="true"></div>` : ''}
         </div>
@@ -149,13 +152,15 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
   }
 }
 
-function getQueueRenderWindow(total, compactLayout, denseLayout, viewport) {
+function getQueueRenderWindow(total, compactLayout, denseLayout, processingDenseLayout, viewport) {
   if (!shouldVirtualizeQueue(total)) return null
   const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)
   const viewportHeight = Math.max(0, Number(viewport?.height) || 0)
   if (!viewportHeight) return null
   const itemHeight = compactLayout
     ? QUEUE_ITEM_ESTIMATED_HEIGHT.compact
+    : processingDenseLayout
+      ? QUEUE_ITEM_ESTIMATED_HEIGHT.processingDense
     : denseLayout
       ? QUEUE_ITEM_ESTIMATED_HEIGHT.dense
       : QUEUE_ITEM_ESTIMATED_HEIGHT.regular
@@ -175,11 +180,11 @@ function getQueueRenderWindow(total, compactLayout, denseLayout, viewport) {
   }
 }
 
-function renderQueueItem(asset, tool, state, index, total, compactLayout = false, denseLayout = false) {
+function renderQueueItem(asset, tool, state, index, total, compactLayout = false, denseLayout = false, processingDenseLayout = false) {
   const fragments = renderQueueItemFragments(asset, tool, state, index, total, compactLayout)
   const sortableAttrs = ` data-asset-id="${asset.id}"${fragments.draggable ? ' draggable="true"' : ''}`
   return `
-    <article class="${fragments.itemClassName}${denseLayout ? ' queue-item--dense' : ''}"${sortableAttrs}>
+    <article class="${fragments.itemClassName}${denseLayout ? ' queue-item--dense' : ''}${processingDenseLayout ? ' queue-item--processing-dense' : ''}"${sortableAttrs}>
       <div class="queue-item__thumb">
         ${asset.listThumbnailUrl
           ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" fetchpriority="low" draggable="false" width="96" height="72" />`
@@ -221,6 +226,13 @@ function isCompactQueueLayout() {
 function shouldUseDenseQueueLayout(total = 0, compactLayout = isCompactQueueLayout()) {
   if (compactLayout || typeof window === 'undefined') return false
   return window.innerWidth >= 1200 && Number(total) >= QUEUE_DENSE_LAYOUT_THRESHOLD
+}
+
+function shouldUseProcessingDenseQueueLayout(state, compactLayout = isCompactQueueLayout()) {
+  if (compactLayout || typeof window === 'undefined') return false
+  return window.innerWidth >= 1200
+    && !!state?.isProcessing
+    && Number(state?.assets?.length || 0) >= QUEUE_PROCESSING_DENSE_LAYOUT_THRESHOLD
 }
 
 function getAssetFormatLabel(asset) {

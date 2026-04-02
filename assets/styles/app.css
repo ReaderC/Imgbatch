@@ -3920,6 +3920,53 @@ html {
   display: none;
 }
 
+.queue--processing-dense .queue-item {
+  grid-template-columns: 60px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 10px;
+  contain-intrinsic-size: 72px;
+}
+
+.queue--processing-dense .queue-item__thumb {
+  width: 60px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.queue--processing-dense .queue-item__name {
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.queue--processing-dense .queue-item__subline {
+  gap: 4px;
+  font-size: 11px;
+}
+
+.queue--processing-dense .queue-item__subline--summary,
+.queue--processing-dense .queue-item__subline--hint,
+.queue--processing-dense .queue-item__subline:not(.queue-item__subline--meta):not(.queue-item__subline--summary-error) {
+  display: none;
+}
+
+.queue--processing-dense .queue-item__controls {
+  gap: 6px;
+}
+
+.queue--processing-dense .queue-item__controls .icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.queue--processing-dense .queue-item__action {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.queue--processing-dense .queue-item__action-stack {
+  gap: 4px;
+}
+
 .queue-item--sortable .queue-item__controls {
   gap: 6px;
   flex-wrap: nowrap;
