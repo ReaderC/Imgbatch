@@ -2703,6 +2703,21 @@ html {
   line-height: 1.4;
 }
 
+.quality-field {
+  display: grid;
+  gap: 8px;
+}
+
+.quality-field__note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(89, 96, 178, 0.08);
+  border: 1px solid rgba(89, 96, 178, 0.14);
+}
+
 .input-shell,
 .select-shell {
   position: relative;
