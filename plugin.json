@@ -3,7 +3,7 @@
   "name": "imgbatch",
   "title": "Imgbatch",
   "description": "图片批量处理插件，支持压缩、格式转换、加水印、圆角、补边、裁剪、旋转、翻转，以及合并为 PDF、图片和 GIF。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "index.html",
   "logo": "logo.png",
   "preload": "preload.js",

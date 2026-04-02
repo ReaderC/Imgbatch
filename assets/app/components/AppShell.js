@@ -22,36 +22,38 @@ export function renderAppShell(state) {
   }
 
   return `
-    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}">
-      <div class="render-slot" data-root="side-nav">${renderShellSideNav(state)}</div>
-      <div class="render-slot" data-root="topbar">${renderShellTopBar(state)}</div>
-      <div class="render-slot" data-root="workspace">${renderShellWorkspace(state)}</div>
+    <div class="app-shell ${state.sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${mode === 'result' ? 'app-shell--result-overlay' : ''}">
+      <div class="render-slot" data-root="side-nav">${renderShellSideNav(state, mode)}</div>
+      <div class="render-slot" data-root="topbar">${renderShellTopBar(state, mode)}</div>
+      <div class="render-slot" data-root="workspace">${renderShellWorkspace(state, undefined, mode)}</div>
       <div class="render-slot" data-root="overlays">${renderShellOverlays(state)}</div>
     </div>
   `
 }
 
-export function renderShellSideNav(state) {
+export function renderShellSideNav(state, mode = getAppShellMode(state)) {
+  if (mode === 'result') return ''
   return renderSideNav(state.activeTool, state.sidebarCollapsed)
 }
 
-export function renderShellTopBar(state) {
+export function renderShellTopBar(state, mode = getAppShellMode(state)) {
+  if (mode === 'result') return ''
   return renderTopBar(state)
 }
 
-export function renderShellWorkspace(state, queueMarkup = renderImageQueue(state)) {
-  const mode = getAppShellMode(state)
+export function renderShellWorkspace(state, queueMarkup = null, mode = getAppShellMode(state)) {
   if (mode === 'settings') {
     return `<div class="workspace workspace--settings">${renderSettingsWorkspace(state.settingsDialog)}</div>`
   }
   if (mode === 'result') {
     return `<div class="workspace workspace--result">${renderResultWorkspace(state)}</div>`
   }
+  const queueContent = queueMarkup ?? renderImageQueue(state)
   const tool = TOOL_MAP[state.activeTool]
   return `
     <div class="workspace">
       ${renderToolPage(tool.id, state)}
-      <div class="render-slot" data-root="queue">${queueMarkup}</div>
+      <div class="render-slot" data-root="queue">${queueContent}</div>
     </div>
   `
 }

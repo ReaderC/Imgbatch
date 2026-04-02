@@ -9,7 +9,7 @@ export function renderTopBar(state) {
   return `
     <header class="topbar">
       <div class="topbar__heading">
-        <button type="button" class="icon-button topbar__toggle" data-action="toggle-sidebar" title="${sidebarLabel}">
+        <button type="button" class="icon-button topbar__toggle" data-action="toggle-sidebar" data-tooltip="${sidebarLabel}" aria-label="${sidebarLabel}">
           <span class="material-symbols-outlined">${sidebarIcon}</span>
         </button>
         <div class="topbar__title-block">

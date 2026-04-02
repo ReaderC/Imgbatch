@@ -90,6 +90,15 @@ let processingProgressFrame = 0
 let pendingProcessingProgress = undefined
 let lastRenderSnapshot = null
 let queueRenderFrame = 0
+let detachedQueueContent = null
+const rootMarkupCache = {
+  sideNav: '',
+  topbar: '',
+  workspace: '',
+  queue: '',
+  overlays: '',
+  notifications: '',
+}
 const queueViewportState = {
   scrollTop: 0,
   height: 0,
@@ -1111,6 +1120,7 @@ function captureRenderSnapshot(state) {
   return {
     mode: getAppShellMode(state),
     activeTool: state.activeTool,
+    activeRun: state.activeRun,
     sidebarCollapsed: state.sidebarCollapsed,
     isProcessing: state.isProcessing,
     cancelRequested: state.cancelRequested,
@@ -1126,12 +1136,178 @@ function captureRenderSnapshot(state) {
   }
 }
 
+function diffRenderSnapshot(prev, next) {
+  const toolChanged = next.activeTool !== prev.activeTool
+  const modeChanged = next.mode !== prev.mode
+  const configChanged = next.activeConfig !== prev.activeConfig
+  const workspaceChanged = toolChanged
+    || configChanged
+    || next.settingsDialog !== prev.settingsDialog
+    || next.resultView !== prev.resultView
+  const resultViewChanged = next.resultView !== prev.resultView
+  const shellFrameChanged = next.sidebarCollapsed !== prev.sidebarCollapsed
+    || modeChanged
+  const sideNavChanged = toolChanged
+    || next.sidebarCollapsed !== prev.sidebarCollapsed
+    || modeChanged
+  const topbarChanged = toolChanged
+    || next.sidebarCollapsed !== prev.sidebarCollapsed
+    || modeChanged
+    || next.isProcessing !== prev.isProcessing
+    || next.cancelRequested !== prev.cancelRequested
+    || next.processingProgress !== prev.processingProgress
+  const overlaysChanged = next.presetDialog !== prev.presetDialog
+    || next.confirmDialog !== prev.confirmDialog
+    || next.previewModal !== prev.previewModal
+  const notificationsChanged = next.notifications !== prev.notifications
+  const toolbarChanged = next.activeRun !== prev.activeRun
+    || resultViewChanged
+  const queueChanged = next.assets !== prev.assets || toolChanged || modeChanged
+  const marqueeChanged = resultViewChanged
+    || (next.mode === 'result' && workspaceChanged)
+
+  return {
+    previousMode: prev.mode,
+    nextMode: next.mode,
+    toolChanged,
+    modeChanged,
+    configChanged,
+    resultViewChanged,
+    shellFrameChanged,
+    workspaceChanged,
+    sideNavChanged,
+    topbarChanged,
+    overlaysChanged,
+    notificationsChanged,
+    toolbarChanged,
+    queueChanged,
+    marqueeChanged,
+  }
+}
+
 function renderNotificationsRoot(items) {
   return `<div class="render-slot" data-root="notifications">${renderNotifications(items)}</div>`
 }
 
 function getRootNode(name) {
   return app?.querySelector?.(`[data-root="${name}"]`) || null
+}
+
+function setRootMarkup(name, markup) {
+  const key = String(name || '')
+  if (!key) return { root: null, changed: false }
+  const root = getRootNode(key)
+  if (!root) return { root: null, changed: false }
+  if (rootMarkupCache[key] === markup) {
+    return { root, changed: false }
+  }
+  root.innerHTML = markup
+  rootMarkupCache[key] = markup
+  return { root, changed: true }
+}
+
+function syncSideNavRoot(state, mode = getAppShellMode(state)) {
+  const expectedMarkup = renderShellSideNav(state, mode)
+  const root = getRootNode('side-nav')
+  if (!root) return { root: null, changed: false }
+  if (mode === 'result') return setRootMarkup('side-nav', expectedMarkup)
+
+  const sidebar = root.querySelector('.sidebar')
+  const navItems = Array.from(root.querySelectorAll('.nav-item[data-tool-id]'))
+  if (!sidebar || !navItems.length) {
+    return setRootMarkup('side-nav', expectedMarkup)
+  }
+
+  sidebar.classList.toggle('sidebar--collapsed', !!state.sidebarCollapsed)
+  for (const item of navItems) {
+    const toolId = item.dataset.toolId || ''
+    item.classList.toggle('is-active', toolId === state.activeTool)
+  }
+
+  rootMarkupCache.sideNav = expectedMarkup
+  return { root, changed: false }
+}
+
+function syncTopBarRoot(state, mode = getAppShellMode(state)) {
+  const expectedMarkup = renderShellTopBar(state, mode)
+  if (mode === 'result') return setRootMarkup('topbar', expectedMarkup)
+
+  const root = getRootNode('topbar')
+  if (!root) return { root: null, changed: false }
+
+  const topbar = root.querySelector('.topbar')
+  const toggleButton = root.querySelector('.topbar__toggle')
+  const toggleIcon = toggleButton?.querySelector('.material-symbols-outlined')
+  const titleNode = root.querySelector('.topbar__title')
+  const meta = root.querySelector('.topbar__meta')
+  const processButton = root.querySelector('[data-action="process-current"]')
+  if (!topbar || !toggleButton || !toggleIcon || !titleNode || !meta || !processButton) {
+    return setRootMarkup('topbar', expectedMarkup)
+  }
+
+  const sidebarLabel = state.sidebarCollapsed ? '\u5c55\u5f00\u5bfc\u822a' : '\u6536\u8d77\u5bfc\u822a'
+  const sidebarIcon = state.sidebarCollapsed ? 'right_panel_open' : 'left_panel_close'
+  const toolLabel = TOOL_MAP[state.activeTool]?.label || ''
+  const progress = state.processingProgress
+  const processLabel = state.isProcessing
+    ? `${progress?.completed || 0}/${progress?.total || 0} \u5904\u7406\u4e2d`
+    : '\u5f00\u59cb\u5904\u7406'
+
+  if (titleNode.textContent !== toolLabel) titleNode.textContent = toolLabel
+  if (toggleButton.dataset.tooltip !== sidebarLabel) toggleButton.dataset.tooltip = sidebarLabel
+  if (toggleButton.getAttribute('aria-label') !== sidebarLabel) toggleButton.setAttribute('aria-label', sidebarLabel)
+  if (toggleIcon.textContent !== sidebarIcon) toggleIcon.textContent = sidebarIcon
+
+  let stopButton = root.querySelector('[data-action="cancel-current-run"]')
+  if (state.isProcessing) {
+    const stopLabel = state.cancelRequested ? '\u505c\u6b62\u4e2d...' : '\u505c\u6b62\u4efb\u52a1'
+    if (!stopButton) {
+      stopButton = document.createElement('button')
+      stopButton.className = 'secondary-button topbar__stop-button'
+      stopButton.dataset.action = 'cancel-current-run'
+      meta.insertBefore(stopButton, processButton)
+    }
+    if (stopButton.textContent !== stopLabel) stopButton.textContent = stopLabel
+    stopButton.toggleAttribute('disabled', !!state.cancelRequested)
+    processButton.classList.add('is-processing')
+    processButton.toggleAttribute('disabled', true)
+  } else if (stopButton) {
+    stopButton.remove()
+    stopButton = null
+    processButton.classList.remove('is-processing')
+    processButton.removeAttribute('disabled')
+  } else {
+    processButton.classList.remove('is-processing')
+    processButton.removeAttribute('disabled')
+  }
+
+  if (processButton.textContent !== processLabel) processButton.textContent = processLabel
+  rootMarkupCache.topbar = expectedMarkup
+  return { root, changed: false }
+}
+
+function detachQueueContent() {
+  const root = getRootNode('queue')
+  const content = root?.firstElementChild || null
+  if (!root || !content) return
+  root.removeChild(content)
+  detachedQueueContent = content
+}
+
+function attachDetachedQueueContent() {
+  const root = getRootNode('queue')
+  if (!root || !detachedQueueContent) return false
+  root.replaceChildren(detachedQueueContent)
+  detachedQueueContent = null
+  syncQueueViewportFromDom()
+  return true
+}
+
+function syncShellFrame(state) {
+  const shell = app?.querySelector?.('.app-shell')
+  if (!shell) return
+  shell.classList.toggle('app-shell--sidebar-collapsed', !!state.sidebarCollapsed)
+  shell.classList.toggle('app-shell--result-overlay', getAppShellMode(state) === 'result')
 }
 
 function syncQueueViewportFromDom() {
@@ -1148,14 +1324,21 @@ function syncQueueViewportFromDom() {
 
 function renderQueueRoot(state, preserveScroll = true) {
   const root = getRootNode('queue')
-  if (!root) return
+  if (!root) return { root: null, changed: false }
   const previousScrollTop = preserveScroll ? queueViewportState.scrollTop : 0
-  root.innerHTML = renderImageQueue(state, queueViewportState)
+  const markup = renderImageQueue(state, queueViewportState)
+  let changed = false
+  if (rootMarkupCache.queue !== markup) {
+    root.innerHTML = markup
+    rootMarkupCache.queue = markup
+    changed = true
+  }
   const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
   if (queueNode && preserveScroll) {
     queueNode.scrollTop = previousScrollTop
   }
   syncQueueViewportFromDom()
+  return { root, changed }
 }
 
 function scheduleQueueRootRender() {
@@ -1164,11 +1347,14 @@ function scheduleQueueRootRender() {
     queueRenderFrame = 0
     const state = getState()
     if (getAppShellMode(state) !== 'workspace') return
-    renderQueueRoot(state)
+    const { root, changed } = renderQueueRoot(state)
     queuePostRenderWork({
       snapshot: null,
       activeTool: state.activeTool,
-      queueChanged: true,
+      queueChanged: changed,
+      toolbarChanged: false,
+      marqueeChanged: false,
+      tooltipRoots: changed && root ? [root] : [],
     })
   })
 }
@@ -1176,88 +1362,142 @@ function scheduleQueueRootRender() {
 function canPatchShell(prev, next) {
   if (!prev) return false
   if (prev.mode === 'manual' || next.mode === 'manual') return false
-  if (prev.mode !== next.mode) return false
   return !!app?.querySelector?.('.app-shell')
 }
 
 function renderFullShell(state, snapshot) {
   app.innerHTML = renderAppShell(state) + renderNotificationsRoot(state.notifications)
+  const sideNavRoot = getRootNode('side-nav')
+  const topbarRoot = getRootNode('topbar')
+  const workspaceRoot = getRootNode('workspace')
+  const overlaysRoot = getRootNode('overlays')
+  const notificationsRoot = getRootNode('notifications')
+  rootMarkupCache.sideNav = sideNavRoot?.innerHTML || ''
+  rootMarkupCache.topbar = topbarRoot?.innerHTML || ''
+  rootMarkupCache.workspace = workspaceRoot?.innerHTML || ''
+  rootMarkupCache.queue = getRootNode('queue')?.innerHTML || ''
+  rootMarkupCache.overlays = overlaysRoot?.innerHTML || ''
+  rootMarkupCache.notifications = notificationsRoot?.innerHTML || ''
   queuePostRenderWork({
     snapshot,
     activeTool: state.activeTool,
     queueChanged: getAppShellMode(state) === 'workspace',
+    toolbarChanged: true,
+    marqueeChanged: true,
+    tooltipRoots: [sideNavRoot, topbarRoot, workspaceRoot, overlaysRoot, notificationsRoot].filter(Boolean),
   })
 }
 
 function render(state) {
   const nextSnapshot = captureRenderSnapshot(state)
-  const snapshot = captureUiSnapshot()
-  if (!canPatchShell(lastRenderSnapshot, nextSnapshot)) {
+  const fullShellChange = !canPatchShell(lastRenderSnapshot, nextSnapshot)
+  if (fullShellChange) {
+    const snapshot = captureUiSnapshot()
     renderFullShell(state, snapshot)
     lastRenderSnapshot = nextSnapshot
     return
   }
 
-  const workspaceChanged = nextSnapshot.activeTool !== lastRenderSnapshot.activeTool
-    || nextSnapshot.activeConfig !== lastRenderSnapshot.activeConfig
-    || nextSnapshot.settingsDialog !== lastRenderSnapshot.settingsDialog
-    || nextSnapshot.resultView !== lastRenderSnapshot.resultView
-  const sideNavChanged = workspaceChanged || nextSnapshot.sidebarCollapsed !== lastRenderSnapshot.sidebarCollapsed
-  const topbarChanged = sideNavChanged
-    || nextSnapshot.isProcessing !== lastRenderSnapshot.isProcessing
-    || nextSnapshot.cancelRequested !== lastRenderSnapshot.cancelRequested
-    || nextSnapshot.processingProgress !== lastRenderSnapshot.processingProgress
-  const overlaysChanged = nextSnapshot.presetDialog !== lastRenderSnapshot.presetDialog
-    || nextSnapshot.confirmDialog !== lastRenderSnapshot.confirmDialog
-    || nextSnapshot.previewModal !== lastRenderSnapshot.previewModal
-  const notificationsChanged = nextSnapshot.notifications !== lastRenderSnapshot.notifications
-  const queueChanged = nextSnapshot.assets !== lastRenderSnapshot.assets
-    || workspaceChanged
-  const needsWorkspaceRefresh = workspaceChanged
+  const diff = diffRenderSnapshot(lastRenderSnapshot, nextSnapshot)
+  const tooltipRoots = []
 
-  if (sideNavChanged) {
-    const root = getRootNode('side-nav')
-    if (root) root.innerHTML = renderShellSideNav(state)
+  if (diff.shellFrameChanged) {
+    syncShellFrame(state)
   }
-  if (topbarChanged) {
-    const root = getRootNode('topbar')
-    if (root) root.innerHTML = renderShellTopBar(state)
+  if (diff.sideNavChanged) {
+    const { root, changed } = syncSideNavRoot(state, nextSnapshot.mode)
+    if (root && changed) tooltipRoots.push(root)
   }
-  if (needsWorkspaceRefresh) {
-    const root = getRootNode('workspace')
-    if (root) root.innerHTML = renderShellWorkspace(state, renderImageQueue(state, queueViewportState))
-  } else if (queueChanged && nextSnapshot.mode === 'workspace') {
-    renderQueueRoot(state)
+  if (diff.topbarChanged) {
+    const { root, changed } = syncTopBarRoot(state, nextSnapshot.mode)
+    if (root && changed) tooltipRoots.push(root)
   }
-  if (overlaysChanged) {
-    const root = getRootNode('overlays')
-    if (root) root.innerHTML = renderShellOverlays(state)
+  if (diff.workspaceChanged) {
+    const preserveDetachedQueue = diff.previousMode === 'workspace'
+      && diff.nextMode === 'workspace'
+      && !diff.queueChanged
+    if (diff.previousMode === 'workspace' && (diff.nextMode !== 'workspace' || preserveDetachedQueue)) {
+      detachQueueContent()
+    }
+    const workspaceMarkup = renderShellWorkspace(
+      state,
+      (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || preserveDetachedQueue
+        ? ''
+        : renderImageQueue(state, queueViewportState),
+      nextSnapshot.mode,
+    )
+    const { root, changed } = setRootMarkup('workspace', workspaceMarkup)
+    if (root) {
+      const shouldReattachQueue = (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || preserveDetachedQueue
+      if (shouldReattachQueue && !attachDetachedQueueContent()) {
+        renderQueueRoot(state, false)
+      }
+    }
+    if (root && changed) tooltipRoots.push(root)
+  } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
+    const { root, changed } = renderQueueRoot(state)
+    if (root && changed) tooltipRoots.push(root)
+    if (!changed) {
+      queuePostRenderWork({
+        snapshot: null,
+        activeTool: state.activeTool,
+        queueChanged: false,
+        toolbarChanged: diff.toolbarChanged,
+        marqueeChanged: diff.marqueeChanged,
+        tooltipRoots,
+      })
+      lastRenderSnapshot = nextSnapshot
+      return
+    }
   }
-  if (notificationsChanged) {
-    const root = getRootNode('notifications')
-    if (root) root.innerHTML = renderNotifications(state.notifications)
+  if (diff.overlaysChanged) {
+    const { root, changed } = setRootMarkup('overlays', renderShellOverlays(state))
+    if (root && changed) tooltipRoots.push(root)
+  }
+  if (diff.notificationsChanged) {
+    setRootMarkup('notifications', renderNotifications(state.notifications))
   }
 
   queuePostRenderWork({
-    snapshot: needsWorkspaceRefresh ? snapshot : null,
+    snapshot: diff.workspaceChanged ? captureUiSnapshot() : null,
     activeTool: state.activeTool,
-    queueChanged: queueChanged || needsWorkspaceRefresh,
+    queueChanged: diff.queueChanged || (diff.workspaceChanged && diff.previousMode !== 'workspace'),
+    toolbarChanged: diff.toolbarChanged,
+    marqueeChanged: diff.marqueeChanged,
+    tooltipRoots,
   })
   lastRenderSnapshot = nextSnapshot
 }
 
 function queuePostRenderWork(work) {
-  pendingPostRenderWork = work
-  if (postRenderFrame) cancelAnimationFrame(postRenderFrame)
+  if (pendingPostRenderWork) {
+    const mergedTooltipRoots = [
+      ...(pendingPostRenderWork.tooltipRoots || []),
+      ...(work.tooltipRoots || []),
+    ].filter(Boolean)
+    pendingPostRenderWork = {
+      snapshot: work.snapshot || pendingPostRenderWork.snapshot || null,
+      activeTool: work.activeTool || pendingPostRenderWork.activeTool,
+      queueChanged: Boolean(pendingPostRenderWork.queueChanged || work.queueChanged),
+      toolbarChanged: Boolean(pendingPostRenderWork.toolbarChanged || work.toolbarChanged),
+      marqueeChanged: Boolean(pendingPostRenderWork.marqueeChanged || work.marqueeChanged),
+      tooltipRoots: Array.from(new Set(mergedTooltipRoots)),
+    }
+  } else {
+    pendingPostRenderWork = work
+  }
+  if (postRenderFrame) return
   postRenderFrame = requestAnimationFrame(() => {
     postRenderFrame = 0
     const nextWork = pendingPostRenderWork
     pendingPostRenderWork = null
     if (!nextWork) return
-    injectResultToolbar()
-    restoreUiSnapshot(nextWork.snapshot)
-    syncCustomTooltips(app)
-    queueResultMarqueeSync()
+    if (nextWork.toolbarChanged) injectResultToolbar()
+    if (nextWork.snapshot) restoreUiSnapshot(nextWork.snapshot)
+    for (const root of nextWork.tooltipRoots || []) {
+      syncCustomTooltips(root)
+    }
+    if (nextWork.marqueeChanged) queueResultMarqueeSync()
     if (nextWork.queueChanged && syncQueueViewportFromDom()) {
       scheduleQueueRootRender()
     }
@@ -1284,8 +1524,11 @@ function ensureTooltipElement() {
 
 function syncCustomTooltips(root = app) {
   if (!root) return
+  const hasDirectTitle = root.matches?.('[title]:not([data-tooltip])')
+  const hasNestedTitle = root.querySelector?.('[title]:not([data-tooltip])')
+  if (!hasDirectTitle && !hasNestedTitle) return
   const nodes = []
-  if (root.matches?.('[title]:not([data-tooltip])')) {
+  if (hasDirectTitle) {
     nodes.push(root)
   }
   root.querySelectorAll?.('[title]:not([data-tooltip])').forEach((node) => {
@@ -2312,7 +2555,7 @@ function attachGlobalEvents() {
   window.addEventListener('scroll', () => positionTooltip(activeTooltipTarget), true)
   window.addEventListener('resize', () => {
     positionTooltip(activeTooltipTarget)
-    if (activeTooltipTarget) queueResultMarqueeSync()
+    if (document.querySelector('.result-strip__marquee')) queueResultMarqueeSync()
     if (syncQueueViewportFromDom()) {
       scheduleQueueRootRender()
     }
