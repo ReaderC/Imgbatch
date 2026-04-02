@@ -764,7 +764,7 @@ function injectResultToolbar() {
     return
   }
   const nextSignature = `${hasBatchRun ? 1 : 0}:${hasResultEntries ? 1 : 0}:${hasVisibleResults ? 1 : 0}`
-  const primaryLabel = hasResultEntries ? '打开目录' : '显示结果'
+  const primaryLabel = hasVisibleResults ? '打开目录' : '显示结果'
   if (existing) {
     if (resultToolbarSignature === nextSignature) return
     const primaryButton = existing.querySelector('[data-action="open-current-results"]')
