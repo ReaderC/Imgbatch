@@ -4,6 +4,8 @@ import { getFormatCapability } from '../services/ztools-bridge.js'
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const QUEUE_VIRTUALIZE_THRESHOLD = 40
 const QUEUE_VIRTUAL_OVERSCAN = 8
+const QUEUE_VIRTUAL_OVERSCAN_DENSE = 5
+const QUEUE_VIRTUAL_OVERSCAN_COMPACT = 6
 const QUEUE_DENSE_LAYOUT_THRESHOLD = 24
 const QUEUE_ITEM_ESTIMATED_HEIGHT = {
   regular: 118,
@@ -157,9 +159,14 @@ function getQueueRenderWindow(total, compactLayout, denseLayout, viewport) {
     : denseLayout
       ? QUEUE_ITEM_ESTIMATED_HEIGHT.dense
       : QUEUE_ITEM_ESTIMATED_HEIGHT.regular
+  const overscan = compactLayout
+    ? QUEUE_VIRTUAL_OVERSCAN_COMPACT
+    : denseLayout
+      ? QUEUE_VIRTUAL_OVERSCAN_DENSE
+      : QUEUE_VIRTUAL_OVERSCAN
   const visibleCount = Math.max(1, Math.ceil(viewportHeight / itemHeight))
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - QUEUE_VIRTUAL_OVERSCAN)
-  const endIndex = Math.min(total, startIndex + visibleCount + QUEUE_VIRTUAL_OVERSCAN * 2)
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
+  const endIndex = Math.min(total, startIndex + visibleCount + overscan * 2)
   return {
     startIndex,
     endIndex,
