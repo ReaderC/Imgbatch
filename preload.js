@@ -94,7 +94,13 @@ function summarizeConfig(toolId, config = {}) {
   if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}°`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
-    return directions.length ? `${directions.join(' + ')}翻转` : '未翻转'
+    const outputFormat = String(config.outputFormat || 'Keep Original')
+    const qualityText = outputFormat === 'Keep Original' || isQualityCapableFormat(outputFormat)
+      ? ` / 质量 ${config.quality}%`
+      : ''
+    return directions.length
+      ? `${directions.join(' + ')}翻转 / ${outputFormat}${qualityText}`
+      : `未翻转 / ${outputFormat}${qualityText}`
   }
   if (toolId === 'merge-pdf') return `PDF ${config.pageSize} / ${config.margin}`
   if (toolId === 'merge-image') {
@@ -794,6 +800,7 @@ function normalizeRunConfig(toolId, config = {}) {
       preserveMetadata: Boolean(config.preserveMetadata),
       autoCropTransparent: Boolean(config.autoCropTransparent),
       outputFormat: sanitizeText(config.outputFormat, 'Keep Original'),
+      quality: clampNumber(config.quality, 1, 100, 100),
     }
   }
 
@@ -2191,7 +2198,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
-  const transformQuality = sourceFormat === format ? 100 : 90
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
 
   if (sourceFormat === format && hasNoFlipTransform) {
     return copyAssetToOutput(asset, outputPath)

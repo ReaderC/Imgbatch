@@ -386,8 +386,16 @@ function renderRotateConfig(config) {
 }
 
 function renderFlipConfig(config) {
+  const outputFormat = String(config.outputFormat || 'Keep Original')
+  const qualitySupported = outputFormat === 'Keep Original' || !!getFormatCapability(outputFormat)?.supportsQuality
+  const qualityHint = outputFormat === 'Keep Original'
+    ? '保持原格式时，若源格式支持质量控制，会按这里的值重新编码；PNG 主要影响压缩策略。'
+    : qualitySupported
+      ? '翻转完成后会按这里的质量写出结果，质量越低通常体积越小。'
+      : `${outputFormat} 输出不提供质量调节。`
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
+    ${renderRangeField({ label: '输出质量', toolId: 'flip', key: 'quality', min: 1, max: 100, value: Number(config.quality) || 100, suffix: '%', disabled: !qualitySupported, hint: qualityHint })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
