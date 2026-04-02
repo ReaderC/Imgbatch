@@ -83,14 +83,14 @@ function summarizeConfig(toolId, config = {}) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
   if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
   if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position}`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position} / 质量 ${config.quality}%`
   if (toolId === 'corners') {
     const radius = String(config.radius ?? '').trim()
     const unit = config.unit || 'px'
-    return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`}`
+    return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`} / 质量 ${config.quality}%`
   }
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
-  if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height}` : `裁剪 ${config.ratio}`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
+  if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height} / 质量 ${config.quality}%` : `裁剪 ${config.ratio} / 质量 ${config.quality}%`
   if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
     const directions = [config.horizontal ? '左右' : '', config.vertical ? '上下' : ''].filter(Boolean)
@@ -738,6 +738,7 @@ function normalizeRunConfig(toolId, config = {}) {
       tiled: Boolean(config.tiled),
       density: clampNumber(config.density, 20, 250, 100),
       imagePath: sanitizeText(config.imagePath),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -747,6 +748,7 @@ function normalizeRunConfig(toolId, config = {}) {
       unit: inferMeasureUnit(config.radius, 'px'),
       background: sanitizeText(config.background, '#ffffff'),
       keepTransparency: Boolean(config.keepTransparency),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -758,6 +760,7 @@ function normalizeRunConfig(toolId, config = {}) {
       left: Math.max(0, toInteger(config.left, 20)),
       color: sanitizeText(config.color, '#ffffff'),
       opacity: clampNumber(config.opacity, 0, 100, 100),
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -781,6 +784,7 @@ function normalizeRunConfig(toolId, config = {}) {
         width: Math.max(1, toInteger(config.width, 1920)),
         height: Math.max(1, toInteger(config.height, 1080)),
       },
+      quality: clampNumber(config.quality, 1, 100, 90),
     }
   }
 
@@ -2140,16 +2144,18 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
 
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
   if (watermarkOpacity <= 0 || isEmptyTextWatermark || isZeroSizeTextWatermark) {
-    if (sourceFormat === format) {
+    if (sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
       return copyAssetToOutput(asset, outputPath)
     }
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath)
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath)
   }
 
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
   const transformed = createTransformer(sharpLib, asset).composite([composite])
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
@@ -2260,18 +2266,20 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
 
-  if (radius <= 0 && sourceFormat === outputFormat) {
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === outputFormat ? 100 : 90)
+
+  if (radius <= 0 && sourceFormat === outputFormat && canSkipSameFormatEncoding(outputFormat, transformQuality)) {
     return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
   }
   if (radius <= 0) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, 90, outputPath, { width, height })
+    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, transformQuality, outputPath, { width, height })
   }
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
 
   const rounded = baseTransformer.ensureAlpha().composite([{ input: mask, blend: 'dest-in' }])
   if (config.keepTransparency) {
-    return writeTransformedAsset(rounded, outputFormat, 90, outputPath)
+    return writeTransformedAsset(rounded, outputFormat, transformQuality, outputPath)
   }
 
   const roundedBuffer = await rounded.png().toBuffer()
@@ -2284,7 +2292,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
     },
   }).composite([{ input: roundedBuffer, left: 0, top: 0 }])
 
-  return writeTransformedAsset(transformed, outputFormat, 90, outputPath)
+  return writeTransformedAsset(transformed, outputFormat, transformQuality, outputPath)
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
@@ -2294,11 +2302,13 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const sourceFormat = normalizeImageFormatName(asset.inputFormat)
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
-  if (noPadding && sourceFormat === format) {
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
+  if (noPadding && sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (noPadding) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: asset.width,
       height: asset.height,
     })
@@ -2312,7 +2322,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
     left: config.left,
     background,
   })
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 function getCropDisplaySize(asset, config, toolId = 'crop') {
@@ -2446,6 +2456,8 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
   const alphaCapable = supportsTransparentCanvasOutput(format)
 
+  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+
   if (toolId !== 'manual-crop'
     && sourceWidth > 0 && sourceHeight > 0
     && sourceFormat === format
@@ -2453,7 +2465,8 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.left === 0
     && box.top === 0
     && box.width === sourceWidth
-    && box.height === sourceHeight) {
+    && box.height === sourceHeight
+    && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
   }
   if (toolId !== 'manual-crop'
@@ -2463,7 +2476,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.top === 0
     && box.width === sourceWidth
     && box.height === sourceHeight) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, 90, outputPath, {
+    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
       width: sourceWidth,
       height: sourceHeight,
     })
@@ -2496,7 +2509,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
       })
     }
   }
-  return writeTransformedAsset(transformed, format, 90, outputPath)
+  return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
 
 async function writeMergeImageAsset(sharpLib, payload) {

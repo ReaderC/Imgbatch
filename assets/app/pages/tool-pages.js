@@ -250,6 +250,7 @@ function renderWatermarkConfig(config) {
       ${renderInputField({ label: '边距', toolId: 'watermark', key: 'margin', type: 'number', value: config.margin, min: 0, disabled: config.tiled })}
     `)}
     ${renderRangeField({ label: '透明度', toolId: 'watermark', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
+    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90, hint: '水印输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
     ${renderToggleRow('平铺模式', '', 'watermark', 'tiled', config.tiled)}
     ${config.tiled ? renderRangeField({ label: '平铺密度', toolId: 'watermark', key: 'density', min: 20, max: 250, value: config.density || 100, suffix: '%' }) : ''}
     ${config.tiled ? '' : `
@@ -272,6 +273,7 @@ function renderCornersConfig(config) {
     ${renderFieldGrid(`
       ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), unitMode: getMeasureUnit(config.radius, 'px') })}
     `)}
+    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90, hint: '圆角输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
     ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     <label class="setting-row setting-row--stack">
@@ -293,6 +295,7 @@ function renderPaddingConfig(config) {
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
+    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90, hint: '留白输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
     ${renderInfoRow('总留白', '四边额外扩展画布', `${config.top + config.right + config.bottom + config.left}px`)}
   `)
 }
@@ -316,6 +319,7 @@ function renderCropConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'crop', key: 'width', type: 'number', value: config.width, min: 1, disabled: mode !== 'size' })}
       ${renderInputField({ label: '高度', toolId: 'crop', key: 'height', type: 'number', value: config.height, min: 1, disabled: mode !== 'size' })}
     `)}
+    ${renderQualityField({ toolId: 'crop', value: Number(config.quality) || 90, hint: '裁剪输出默认使用 90 质量平衡体积与速度。JPEG / WEBP / AVIF / TIFF 会按这里的质量写出；PNG 主要影响压缩策略。' })}
   `)
 }
 

@@ -3452,6 +3452,7 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'watermark') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     if (!isPositiveInputValue(config.opacity)) return '水印透明度必须大于 0 后才能开始处理。'
     if (!isNonNegativeInputValue(config.margin)) return '水印边距不能小于 0。'
     if (config.tiled && !isPositiveInputValue(config.density)) return '平铺密度必须大于 0 后才能开始处理。'
@@ -3463,16 +3464,19 @@ function getToolInputValidationMessage(toolId, config = {}) {
   }
 
   if (toolId === 'corners') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     return isPositiveInputValue(config.radius) ? '' : '圆角半径必须大于 0 后才能开始处理。'
   }
 
   if (toolId === 'padding') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     const edges = [config.top, config.right, config.bottom, config.left]
     if (edges.some((value) => !isNonNegativeInputValue(value))) return '留白边距不能小于 0。'
     return edges.some((value) => getNumericInputValue(value) > 0) ? '' : '请至少设置一个大于 0 的留白边距后再开始处理。'
   }
 
   if (toolId === 'crop') {
+    if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
     if (!isNonNegativeInputValue(config.x)) return '开始位置-距离左边不能小于 0。'
     if (!isNonNegativeInputValue(config.y)) return '开始位置-距离顶部不能小于 0。'
     if ((config.mode || 'ratio') === 'ratio' && (config.ratio === 'Custom' || config.useCustomRatio)) {
@@ -3508,12 +3512,12 @@ function describeToolConfig(toolId, config) {
     const height = typeof config.height === 'object' ? `${config.height.value}${config.height.unit}` : config.height
     return `尺寸 ${width} × ${height}`
   }
-  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position}`
-  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit}`
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px`
+  if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position} / 质量 ${config.quality}%`
+  if (toolId === 'corners') return `圆角 ${config.radius}${config.unit} / 质量 ${config.quality}%`
+  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
   if (toolId === 'crop') {
-    if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height}`
-    return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio}`
+    if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height} / 质量 ${config.quality}%`
+    return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} / 质量 ${config.quality}%`
   }
   if (toolId === 'rotate') return `旋转 ${Number(config.angle) || 0}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
