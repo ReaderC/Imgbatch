@@ -259,7 +259,7 @@ export function applyRunResult(result) {
     state.assets = nextAssets
   }
 
-  if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
+  if ((result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') && state.resultView?.items?.length) {
     state.resultView = buildResultView(result, state.assets)
   }
 
