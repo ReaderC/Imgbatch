@@ -3767,6 +3767,7 @@ html {
 }
 
 .queue-item__thumb img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -3872,6 +3873,51 @@ html {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.queue--dense .queue-item {
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 10px 12px;
+  contain-intrinsic-size: 88px;
+}
+
+.queue--dense .queue-item__thumb {
+  width: 72px;
+  height: 54px;
+  border-radius: 12px;
+}
+
+.queue--dense .queue-item__name {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.queue--dense .queue-item__subline {
+  gap: 6px;
+  font-size: 11px;
+}
+
+.queue--dense .queue-item__controls {
+  gap: 8px;
+}
+
+.queue--dense .queue-item__controls .icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.queue--dense .queue-item__action {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.queue--dense .queue-item__action-stack {
+  gap: 6px;
+}
+
+.queue--dense .queue-item__subline--hint {
+  display: none;
 }
 
 .queue-item--sortable .queue-item__controls {

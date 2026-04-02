@@ -4,8 +4,10 @@ import { getFormatCapability } from '../services/ztools-bridge.js'
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const QUEUE_VIRTUALIZE_THRESHOLD = 40
 const QUEUE_VIRTUAL_OVERSCAN = 8
+const QUEUE_DENSE_LAYOUT_THRESHOLD = 24
 const QUEUE_ITEM_ESTIMATED_HEIGHT = {
   regular: 118,
+  dense: 96,
   compact: 86,
 }
 const WATERMARK_POSITION_LABELS = {
@@ -24,19 +26,20 @@ export function renderImageQueue(state, viewport = null) {
   const tool = TOOL_MAP[state.activeTool]
   const assets = state.assets
   const compactLayout = isCompactQueueLayout()
-  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, viewport)
+  const denseLayout = shouldUseDenseQueueLayout(assets.length, compactLayout)
+  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, viewport)
   const visibleAssets = queueWindow
     ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
     : assets
 
   return `
-    <section class="queue" data-role="drop-surface" data-scroll-role="queue">
+    <section class="queue${denseLayout ? ' queue--dense' : ''}" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
         <div class="queue-list${queueWindow ? ' queue-list--virtual' : ''}">
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.topSpacer}px;" aria-hidden="true"></div>` : ''}
           ${visibleAssets.map((asset, index) => {
             const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
-            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout)
+            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout, denseLayout)
           }).join('')}
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.bottomSpacer}px;" aria-hidden="true"></div>` : ''}
         </div>
@@ -144,12 +147,16 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
   }
 }
 
-function getQueueRenderWindow(total, compactLayout, viewport) {
+function getQueueRenderWindow(total, compactLayout, denseLayout, viewport) {
   if (!shouldVirtualizeQueue(total)) return null
   const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)
   const viewportHeight = Math.max(0, Number(viewport?.height) || 0)
   if (!viewportHeight) return null
-  const itemHeight = compactLayout ? QUEUE_ITEM_ESTIMATED_HEIGHT.compact : QUEUE_ITEM_ESTIMATED_HEIGHT.regular
+  const itemHeight = compactLayout
+    ? QUEUE_ITEM_ESTIMATED_HEIGHT.compact
+    : denseLayout
+      ? QUEUE_ITEM_ESTIMATED_HEIGHT.dense
+      : QUEUE_ITEM_ESTIMATED_HEIGHT.regular
   const visibleCount = Math.max(1, Math.ceil(viewportHeight / itemHeight))
   const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - QUEUE_VIRTUAL_OVERSCAN)
   const endIndex = Math.min(total, startIndex + visibleCount + QUEUE_VIRTUAL_OVERSCAN * 2)
@@ -161,14 +168,14 @@ function getQueueRenderWindow(total, compactLayout, viewport) {
   }
 }
 
-function renderQueueItem(asset, tool, state, index, total, compactLayout = false) {
+function renderQueueItem(asset, tool, state, index, total, compactLayout = false, denseLayout = false) {
   const fragments = renderQueueItemFragments(asset, tool, state, index, total, compactLayout)
   const sortableAttrs = ` data-asset-id="${asset.id}"${fragments.draggable ? ' draggable="true"' : ''}`
   return `
-    <article class="${fragments.itemClassName}"${sortableAttrs}>
+    <article class="${fragments.itemClassName}${denseLayout ? ' queue-item--dense' : ''}"${sortableAttrs}>
       <div class="queue-item__thumb">
         ${asset.listThumbnailUrl
-          ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" />`
+          ? `<img src="${asset.listThumbnailUrl}" alt="${escapeHtml(asset.name)}" loading="lazy" decoding="async" fetchpriority="low" draggable="false" width="96" height="72" />`
           : '<div class="queue-item__thumb-placeholder" aria-hidden="true"></div>'}
       </div>
       <div class="queue-item__content" data-render-signature="${escapeHtml(fragments.contentSignature)}">${fragments.contentMarkup}</div>
@@ -202,6 +209,11 @@ function renderCompactQueueTicker(text, isError = false) {
 function isCompactQueueLayout() {
   if (typeof window === 'undefined') return false
   return window.innerWidth <= 1040
+}
+
+function shouldUseDenseQueueLayout(total = 0, compactLayout = isCompactQueueLayout()) {
+  if (compactLayout || typeof window === 'undefined') return false
+  return window.innerWidth >= 1200 && Number(total) >= QUEUE_DENSE_LAYOUT_THRESHOLD
 }
 
 function getAssetFormatLabel(asset) {

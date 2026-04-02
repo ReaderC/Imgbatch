@@ -1911,6 +1911,10 @@ function patchQueueThumbnail(assetId, listThumbnailUrl) {
   image.alt = asset?.name || ''
   image.loading = 'lazy'
   image.decoding = 'async'
+  image.fetchPriority = 'low'
+  image.draggable = false
+  image.width = 96
+  image.height = 72
   thumb.replaceChildren(image)
 }
 
