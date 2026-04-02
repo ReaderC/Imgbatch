@@ -190,7 +190,6 @@ function renderFormatConfig(config) {
   return renderSettingsSection(`
     ${renderSelectField({ label: '目标格式', toolId: 'format', key: 'targetFormat', value: config.targetFormat, options: FORMAT_OPTIONS })}
     ${renderFieldGrid(`
-      ${renderQualityField({ toolId: 'format', value: Number(config.quality) || 90, disabled: !qualitySupported })}
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
@@ -200,6 +199,7 @@ function renderFormatConfig(config) {
       </span>
       <span class="setting-row__hint setting-row__hint--compression">目标格式若不支持透明通道，此选项会自动禁用。</span>
     </label>
+    ${renderQualityField({ toolId: 'format', value: Number(config.quality) || 90, disabled: !qualitySupported })}
   `)
 }
 
@@ -209,7 +209,6 @@ function renderResizeConfig(config) {
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
       ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
     `)}
-    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90 })}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>
@@ -217,6 +216,7 @@ function renderResizeConfig(config) {
         ${RESIZE_PRESETS.map((preset) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="apply-resize-preset" data-width="${preset.width}" data-height="${preset.height}">${preset.label}</button>`).join('')}
       </div>
     </div>
+    ${renderQualityField({ toolId: 'resize', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -245,7 +245,6 @@ function renderWatermarkConfig(config) {
       ${renderInputField({ label: '边距', toolId: 'watermark', key: 'margin', type: 'number', value: config.margin, min: 0, disabled: config.tiled })}
     `)}
     ${renderRangeField({ label: '透明度', toolId: 'watermark', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90 })}
     ${renderToggleRow('平铺模式', '', 'watermark', 'tiled', config.tiled)}
     ${config.tiled ? renderRangeField({ label: '平铺密度', toolId: 'watermark', key: 'density', min: 20, max: 250, value: config.density || 100, suffix: '%' }) : ''}
     ${config.tiled ? '' : `
@@ -260,6 +259,7 @@ function renderWatermarkConfig(config) {
         </div>
       </div>
     `}
+    ${renderQualityField({ toolId: 'watermark', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -268,7 +268,6 @@ function renderCornersConfig(config) {
     ${renderFieldGrid(`
       ${renderInputField({ label: '圆角半径', toolId: 'corners', key: 'radius', value: getMeasureInputValue(config.radius, '24'), unitMode: getMeasureUnit(config.radius, 'px') })}
     `)}
-    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90 })}
     ${renderColorField({ label: '背景填充色', toolId: 'corners', key: 'background', value: config.background })}
     ${renderToggleRow('保留透明背景', '', 'corners', 'keepTransparency', config.keepTransparency)}
     <label class="setting-row setting-row--stack">
@@ -277,6 +276,7 @@ function renderCornersConfig(config) {
       </span>
       <span class="setting-row__hint setting-row__hint--compression">原图格式若不支持透明通道，开启后会自动转换为 PNG 输出。</span>
     </label>
+    ${renderQualityField({ toolId: 'corners', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -290,8 +290,8 @@ function renderPaddingConfig(config) {
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}
-    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90 })}
     ${renderInfoRow('总留白', '四边额外扩展画布', `${config.top + config.right + config.bottom + config.left}px`)}
+    ${renderQualityField({ toolId: 'padding', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -362,10 +362,10 @@ function renderRotateConfig(config) {
         ${[-135, -90, -45, 0, 45, 90, 135, 180].map((angle) => `<button class="secondary-button secondary-button--compact watermark-picker-button" data-action="set-config" data-tool-id="rotate" data-key="angle" data-value="${angle}">${angle}°</button>`).join('')}
       </div>
     </div>
-    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90 })}
     ${renderToggleRow('自动裁切画布', '', 'rotate', 'autoCrop', config.autoCrop)}
     ${renderToggleRow('保持比例', '', 'rotate', 'keepAspectRatio', config.keepAspectRatio)}
     ${renderColorField({ label: '背景色', toolId: 'rotate', key: 'background', value: config.background || '#FFFFFF' })}
+    ${renderQualityField({ toolId: 'rotate', value: Number(config.quality) || 90 })}
   `)
 }
 
@@ -374,11 +374,11 @@ function renderFlipConfig(config) {
   const qualitySupported = outputFormat === 'Keep Original' || !!getFormatCapability(outputFormat)?.supportsQuality
   return renderSettingsSection(`
     ${renderSelectField({ label: '输出格式', toolId: 'flip', key: 'outputFormat', value: config.outputFormat, options: FLIP_OUTPUT_OPTIONS })}
-    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 90, disabled: !qualitySupported })}
     ${renderToggleRow('左右翻转', '', 'flip', 'horizontal', config.horizontal)}
     ${renderToggleRow('上下翻转', '', 'flip', 'vertical', config.vertical)}
     ${renderToggleRow('保留元数据', '', 'flip', 'preserveMetadata', config.preserveMetadata)}
     ${renderToggleRow('自动裁掉透明边', '', 'flip', 'autoCropTransparent', config.autoCropTransparent)}
+    ${renderQualityField({ toolId: 'flip', value: Number(config.quality) || 90, disabled: !qualitySupported })}
   `)
 }
 
@@ -408,7 +408,6 @@ function renderMergeImageConfig(config) {
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
-      ${renderQualityField({ toolId: 'merge-image', value: config.quality || 90, disabled: !qualitySupported })}
     `)}
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
@@ -418,6 +417,7 @@ function renderMergeImageConfig(config) {
     </label>
     ${renderSelectField({ label: '对齐方式', toolId: 'merge-image', key: 'align', value: config.align, options: [['start', '起始对齐'], ['center', '居中对齐']] })}
     ${renderColorField({ label: '背景色', toolId: 'merge-image', key: 'background', value: config.background || '#FFFFFF' })}
+    ${renderQualityField({ toolId: 'merge-image', value: config.quality || 90, disabled: !qualitySupported })}
   `)
 }
 
