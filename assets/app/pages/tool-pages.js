@@ -195,6 +195,12 @@ function renderFormatConfig(config) {
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出色彩空间', toolId: 'format', key: 'colorProfile', value: config.colorProfile, options: COLOR_PROFILE_OPTIONS })}
     `)}
+    <label class="setting-row setting-row--stack">
+      <span class="setting-row__header">
+        <span class="setting-row__label"></span>
+      </span>
+      <span class="setting-row__hint setting-row__hint--compression">CMYK 更适合印刷流程，不适合作为屏幕观感基准；导出为 CMYK 后，颜色在不同看图软件里可能明显偏离 sRGB 显示效果。</span>
+    </label>
     ${renderToggleRow('保留透明通道', transparencyHint, 'format', 'keepTransparency', transparencySupported && config.keepTransparency, !transparencySupported)}
     <label class="setting-row setting-row--stack">
       <span class="setting-row__header">
