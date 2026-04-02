@@ -1543,6 +1543,13 @@ function scheduleQueueRootRender() {
   })
 }
 
+function shouldPatchQueueInPlace(diff, prevSnapshot, nextSnapshot, state) {
+  if (nextSnapshot.mode !== 'workspace' || diff.previousMode !== 'workspace') return false
+  if (diff.toolChanged || diff.modeChanged) return false
+  if (!hasSameAssetOrder(prevSnapshot.assets, state.assets)) return false
+  return prevSnapshot.assets !== nextSnapshot.assets || prevSnapshot.isProcessing !== nextSnapshot.isProcessing
+}
+
 function canPatchShell(prev, next) {
   if (!prev) return false
   if (prev.mode === 'manual' || next.mode === 'manual') return false
@@ -1681,30 +1688,24 @@ function render(state) {
     if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
-    const layoutOnlyQueueChange = diff.previousMode === 'workspace'
-      && diff.nextMode === 'workspace'
-      && lastRenderSnapshot.assets === nextSnapshot.assets
-      && !diff.toolChanged
-      && !diff.modeChanged
-      && lastRenderSnapshot.isProcessing !== nextSnapshot.isProcessing
-    if (layoutOnlyQueueChange) {
+    const shouldPatchQueue = shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
+    if (shouldPatchQueue) {
       queueQueueItemPatch()
       effectiveQueueChanged = false
-      lastRenderSnapshot = nextSnapshot
-      return
-    }
-    const { root, changed } = renderQueueRoot(state)
-    if (!changed) {
-      queuePostRenderWork({
-        snapshot: null,
-        activeTool: state.activeTool,
-        queueChanged: false,
-        toolbarChanged: diff.toolbarChanged,
-        marqueeChanged: diff.marqueeChanged,
-        tooltipRoots,
-      })
-      lastRenderSnapshot = nextSnapshot
-      return
+    } else {
+      const { root, changed } = renderQueueRoot(state)
+      if (!changed) {
+        queuePostRenderWork({
+          snapshot: null,
+          activeTool: state.activeTool,
+          queueChanged: false,
+          toolbarChanged: diff.toolbarChanged,
+          marqueeChanged: diff.marqueeChanged,
+          tooltipRoots,
+        })
+        lastRenderSnapshot = nextSnapshot
+        return
+      }
     }
   }
   if (diff.overlaysChanged) {
