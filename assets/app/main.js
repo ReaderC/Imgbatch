@@ -1715,6 +1715,10 @@ function queuePostRenderWork(work) {
   } else {
     pendingPostRenderWork = work
   }
+  if (!hasPendingPostRenderEffects(pendingPostRenderWork)) {
+    pendingPostRenderWork = null
+    return
+  }
   if (postRenderFrame) return
   postRenderFrame = requestAnimationFrame(() => {
     postRenderFrame = 0
@@ -1736,6 +1740,13 @@ function queuePostRenderWork(work) {
       queueManualCropStageSync()
     }
   })
+}
+
+function hasPendingPostRenderEffects(work) {
+  if (!work) return false
+  if (work.snapshot || work.queueChanged || work.toolbarChanged || work.marqueeChanged) return true
+  if (Array.isArray(work.tooltipRoots) && work.tooltipRoots.length > 0) return true
+  return work.activeTool === 'manual-crop'
 }
 
 function isEditableTarget(target) {
