@@ -1644,7 +1644,10 @@ function syncQueueViewportFromDom() {
 function renderQueueRoot(state, preserveScroll = true) {
   const root = getRootNode('queue')
   if (!root) return { root: null, changed: false }
-  const previousScrollTop = preserveScroll ? queueViewportState.scrollTop : 0
+  const currentQueueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const previousScrollTop = preserveScroll
+    ? Math.max(0, currentQueueNode?.scrollTop ?? queueViewportState.scrollTop ?? 0)
+    : 0
   const markup = renderImageQueue(state, queueViewportState)
   let changed = false
   if (queueMarkupCacheDirty || rootMarkupCache.queue !== markup) {
@@ -1658,6 +1661,7 @@ function renderQueueRoot(state, preserveScroll = true) {
   const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
   if (queueNode && preserveScroll) {
     queueNode.scrollTop = previousScrollTop
+    queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
   }
   syncQueueViewportFromDom()
   lastQueueViewportRenderSignature = shouldTrackQueueViewport(state)
