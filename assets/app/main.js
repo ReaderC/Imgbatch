@@ -1658,7 +1658,13 @@ function patchQueueOrderInPlace(state) {
     if (!item) return false
     orderedItems.push(item)
   }
-  queueList.replaceChildren(...orderedItems)
+  for (let index = 0; index < orderedItems.length; index += 1) {
+    const expectedItem = orderedItems[index]
+    const currentItem = queueList.children[index] || null
+    if (currentItem !== expectedItem) {
+      queueList.insertBefore(expectedItem, currentItem)
+    }
+  }
   queueList.scrollTop = previousScrollTop
   queueList.scrollLeft = previousScrollLeft
   queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
