@@ -117,6 +117,10 @@ const queueViewportState = {
   height: 0,
 }
 
+function getQueueScrollNode(root = app) {
+  return root?.querySelector?.('.queue-list') || null
+}
+
 function shouldTrackQueueViewport(state) {
   return getAppShellMode(state) === 'workspace'
     && TOOL_MAP[state.activeTool]?.mode !== 'sort'
@@ -1542,7 +1546,7 @@ function patchQueueRootMarkup(root, markup) {
 }
 
 function queueQueueScrollRestore() {
-  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const queueNode = getQueueScrollNode()
   if (!queueNode) return
   pendingQueueScrollRestore = {
     scrollTop: Math.max(0, queueNode.scrollTop || 0),
@@ -1551,7 +1555,7 @@ function queueQueueScrollRestore() {
 }
 
 function captureQueueScrollPosition() {
-  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const queueNode = getQueueScrollNode()
   if (!queueNode) return
   queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
   queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
@@ -1565,7 +1569,7 @@ function preserveQueueScrollForReorder() {
 function restoreQueuedQueueScroll(state) {
   if (!pendingQueueScrollRestore) return
   if (getAppShellMode(state) !== 'workspace') return
-  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const queueNode = getQueueScrollNode()
   if (!queueNode) return
   queueNode.scrollTop = pendingQueueScrollRestore.scrollTop
   queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
@@ -1653,7 +1657,7 @@ function syncShellFrame(state) {
 }
 
 function syncQueueViewportFromDom() {
-  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const queueNode = getQueueScrollNode()
   if (!queueNode) return false
   const nextHeight = Math.max(0, queueNode.clientHeight || 0)
   const nextScrollTop = Math.max(0, queueNode.scrollTop || 0)
@@ -1667,7 +1671,7 @@ function syncQueueViewportFromDom() {
 function renderQueueRoot(state, preserveScroll = true) {
   const root = getRootNode('queue')
   if (!root) return { root: null, changed: false }
-  const currentQueueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const currentQueueNode = getQueueScrollNode()
   const previousScrollTop = preserveScroll
     ? Math.max(0, currentQueueNode?.scrollTop ?? queueViewportState.scrollTop ?? 0)
     : 0
@@ -1679,7 +1683,7 @@ function renderQueueRoot(state, preserveScroll = true) {
     queueMarkupCacheDirty = false
     changed = true
   }
-  const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
+  const queueNode = getQueueScrollNode()
   if (queueNode && preserveScroll) {
     queueNode.scrollTop = previousScrollTop
     queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
