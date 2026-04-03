@@ -136,15 +136,17 @@ export function getQueueLayoutFlags(state) {
   const total = Number(state?.assets?.length || 0)
   const denseLayout = shouldUseDenseQueueLayout(total, compactLayout)
   const processingDenseLayout = shouldUseProcessingDenseQueueLayout(state, compactLayout)
+  const sortLayout = TOOL_MAP[state?.activeTool]?.mode === 'sort'
   return {
     compactLayout,
     denseLayout,
     processingDenseLayout,
+    sortLayout,
   }
 }
 
 export function buildQueueClassName(flags = {}) {
-  return `queue${flags.denseLayout ? ' queue--dense' : ''}${flags.processingDenseLayout ? ' queue--processing-dense' : ''}`
+  return `queue${flags.denseLayout ? ' queue--dense' : ''}${flags.processingDenseLayout ? ' queue--processing-dense' : ''}${flags.sortLayout ? ' queue--sort' : ''}`
 }
 
 export function buildQueueItemClassName(baseClassName, flags = {}) {

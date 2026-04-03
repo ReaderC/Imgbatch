@@ -2008,9 +2008,13 @@ html {
 .sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   overflow: auto;
   padding-right: 4px;
+}
+
+.app-shell:not(.app-shell--sidebar-collapsed) .sidebar__nav {
+  gap: 0 !important;
 }
 
 .nav-item {
@@ -3647,8 +3651,13 @@ html {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
   padding-right: 4px;
   contain: layout paint style;
+}
+
+.queue--sort .queue-list {
+  padding-bottom: 96px;
 }
 
 .queue-footer {
@@ -4407,7 +4416,7 @@ html {
   .sidebar__nav {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0;
     overflow: auto;
     padding-right: 0;
     scrollbar-width: none;

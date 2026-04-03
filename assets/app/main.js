@@ -102,6 +102,7 @@ let queueThumbnailPatchFrame = 0
 let pendingQueueScrollRestore = null
 let queueMarkupCacheDirty = false
 let lastQueueViewportRenderSignature = ''
+let pendingAdjacentQueueMove = null
 const pendingQueueThumbnailPatches = new Map()
 const rootMarkupCache = {
   sideNav: '',
@@ -1583,6 +1584,43 @@ function captureQueueScrollPosition() {
   queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
 }
 
+function captureQueueAnchor(queueNode = getQueueScrollNode()) {
+  if (!queueNode) return null
+  const queueRect = queueNode.getBoundingClientRect()
+  const anchorItem = Array.from(queueNode.querySelectorAll('.queue-item[data-asset-id]'))
+    .find((item) => item.getBoundingClientRect().bottom > queueRect.top + 1)
+  if (!anchorItem) {
+    return {
+      assetId: '',
+      offset: 0,
+      scrollTop: Math.max(0, queueNode.scrollTop || 0),
+    }
+  }
+  return {
+    assetId: anchorItem.getAttribute('data-asset-id') || '',
+    offset: anchorItem.getBoundingClientRect().top - queueRect.top,
+    scrollTop: Math.max(0, queueNode.scrollTop || 0),
+  }
+}
+
+function restoreQueueAnchor(anchor, queueNode = getQueueScrollNode()) {
+  if (!anchor || !queueNode) return
+  const queueRect = queueNode.getBoundingClientRect()
+  if (anchor.assetId) {
+    const anchorItem = queueNode.querySelector(`.queue-item[data-asset-id="${CSS.escape(anchor.assetId)}"]`)
+    if (anchorItem) {
+      const nextOffset = anchorItem.getBoundingClientRect().top - queueRect.top
+      queueNode.scrollTop += nextOffset - (Number(anchor.offset) || 0)
+    } else {
+      queueNode.scrollTop = Number(anchor.scrollTop) || 0
+    }
+  } else {
+    queueNode.scrollTop = Number(anchor.scrollTop) || 0
+  }
+  queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
+  queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
+}
+
 function blurFocusedQueueSortControl() {
   const activeElement = document.activeElement
   if (!activeElement?.closest?.('.queue-item__controls')) return
@@ -1676,8 +1714,15 @@ function patchQueueOrderInPlace(state) {
   if (!root) return false
   const queueList = root.querySelector('.queue-list')
   if (!queueList) return false
-  const previousScrollTop = Math.max(0, queueList.scrollTop || 0)
+  const anchor = captureQueueAnchor(queueList)
   const previousScrollLeft = Math.max(0, queueList.scrollLeft || 0)
+  if (patchAdjacentQueueMoveInPlace(queueList, state)) {
+    queueList.scrollLeft = previousScrollLeft
+    restoreQueueAnchor(anchor, queueList)
+    rootMarkupCache.queue = renderImageQueue(state, null)
+    queueMarkupCacheDirty = false
+    return true
+  }
   const currentItems = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
   if (currentItems.length !== state.assets.length) return false
   const itemMap = new Map(currentItems.map((item) => [item.getAttribute('data-asset-id') || '', item]))
@@ -1687,18 +1732,16 @@ function patchQueueOrderInPlace(state) {
     if (!item) return false
     orderedItems.push(item)
   }
-  for (let index = 0; index < orderedItems.length; index += 1) {
+  for (let index = orderedItems.length - 1; index >= 0; index -= 1) {
     const expectedItem = orderedItems[index]
     const currentItem = queueList.children[index] || null
     if (currentItem !== expectedItem) {
-      queueList.insertBefore(expectedItem, currentItem)
+      queueList.insertBefore(expectedItem, currentItem ? currentItem.nextSibling : null)
     }
   }
-  queueList.scrollTop = previousScrollTop
   queueList.scrollLeft = previousScrollLeft
-  queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
-  queueViewportState.height = Math.max(0, queueList.clientHeight || 0)
   patchQueueSortControlsInPlace(queueList, state)
+  restoreQueueAnchor(anchor, queueList)
   rootMarkupCache.queue = renderImageQueue(state, null)
   queueMarkupCacheDirty = false
   return true
@@ -1717,6 +1760,29 @@ function patchQueueSortControlsInPlace(queueList, state) {
   })
 }
 
+function patchAdjacentQueueMoveInPlace(queueList, state) {
+  if (!pendingAdjacentQueueMove) return false
+  const { assetId, direction } = pendingAdjacentQueueMove
+  pendingAdjacentQueueMove = null
+  const item = queueList.querySelector(`.queue-item[data-asset-id="${CSS.escape(String(assetId))}"]`)
+  if (!item) return false
+  if (direction === 'down') {
+    const nextItem = item.nextElementSibling
+    if (!nextItem?.matches?.('.queue-item[data-asset-id]')) return false
+    queueList.insertBefore(nextItem, item)
+    patchQueueSortControlsInPlace(queueList, state)
+    return true
+  }
+  if (direction === 'up') {
+    const previousItem = item.previousElementSibling
+    if (!previousItem?.matches?.('.queue-item[data-asset-id]')) return false
+    queueList.insertBefore(item, previousItem)
+    patchQueueSortControlsInPlace(queueList, state)
+    return true
+  }
+  return false
+}
+
 function appendQueueItemsInPlace(state, previousAssets) {
   const root = getRootNode('queue')
   if (!root) return false
@@ -1725,17 +1791,15 @@ function appendQueueItemsInPlace(state, previousAssets) {
   const previousCount = Array.isArray(previousAssets) ? previousAssets.length : 0
   const currentItems = queueList.querySelectorAll('.queue-item[data-asset-id]')
   if (currentItems.length !== previousCount) return false
-  const previousScrollTop = Math.max(0, queueList.scrollTop || 0)
+  const anchor = captureQueueAnchor(queueList)
   const previousScrollLeft = Math.max(0, queueList.scrollLeft || 0)
   const markup = renderQueueItemsMarkup(state, previousCount)
   if (markup) {
     queueList.insertAdjacentHTML('beforeend', markup)
   }
-  queueList.scrollTop = previousScrollTop
   queueList.scrollLeft = previousScrollLeft
-  queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
-  queueViewportState.height = Math.max(0, queueList.clientHeight || 0)
   patchQueueSortControlsInPlace(queueList, state)
+  restoreQueueAnchor(anchor, queueList)
   rootMarkupCache.queue = renderImageQueue(state, null)
   queueMarkupCacheDirty = false
   return true
@@ -2016,11 +2080,41 @@ function render(state) {
     const shouldPatchQueueOrder = shouldPatchQueueOrderInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
     const shouldPatchQueue = !shouldAppendQueue && !shouldPatchQueueOrder && shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
     if (shouldAppendQueue) {
-      appendQueueItemsInPlace(state, lastRenderSnapshot.assets)
-      effectiveQueueChanged = false
+      if (appendQueueItemsInPlace(state, lastRenderSnapshot.assets)) {
+        effectiveQueueChanged = false
+      } else {
+        const { root, changed } = renderQueueRoot(state)
+        if (!changed) {
+          queuePostRenderWork({
+            snapshot: null,
+            activeTool: state.activeTool,
+            queueChanged: false,
+            toolbarChanged: diff.toolbarChanged,
+            marqueeChanged: diff.marqueeChanged,
+            tooltipRoots,
+          })
+          lastRenderSnapshot = nextSnapshot
+          return
+        }
+      }
     } else if (shouldPatchQueueOrder) {
-      patchQueueOrderInPlace(state)
-      effectiveQueueChanged = false
+      if (patchQueueOrderInPlace(state)) {
+        effectiveQueueChanged = false
+      } else {
+        const { root, changed } = renderQueueRoot(state)
+        if (!changed) {
+          queuePostRenderWork({
+            snapshot: null,
+            activeTool: state.activeTool,
+            queueChanged: false,
+            toolbarChanged: diff.toolbarChanged,
+            marqueeChanged: diff.marqueeChanged,
+            tooltipRoots,
+          })
+          lastRenderSnapshot = nextSnapshot
+          return
+        }
+      }
     } else if (shouldPatchQueue) {
       queueQueueItemPatch()
       effectiveQueueChanged = false
@@ -2460,6 +2554,9 @@ function attachGlobalEvents() {
       return
     }
     if (!target) return
+    if (target.dataset.action === 'move-asset' && event.button === 0) {
+      event.preventDefault()
+    }
     if (target.dataset.action === 'drag-preview-compare') {
       beginPreviewCompareDrag(event, target)
       return
@@ -2663,6 +2760,10 @@ function attachGlobalEvents() {
 
     if (action === 'move-asset') {
       blurFocusedQueueSortControl()
+      pendingAdjacentQueueMove = {
+        assetId: target.dataset.assetId || '',
+        direction: target.dataset.direction || 'down',
+      }
       captureQueueScrollPosition()
       moveAsset(target.dataset.assetId, target.dataset.direction)
       return
