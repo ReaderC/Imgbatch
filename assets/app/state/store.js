@@ -296,8 +296,8 @@ export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange =
 export function applyRunResult(result) {
   if (!result) return
 
-  const processedMap = new Map((result.processed || []).map((item) => [item.assetId, item]))
-  const failedMap = new Map((result.failed || []).map((item) => [item.assetId, item]))
+  const processedMap = buildAssetResultMap(result.processed)
+  const failedMap = buildAssetResultMap(result.failed)
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result.toolId)
   let changed = false
 
@@ -520,7 +520,8 @@ function applyProcessedAsset(asset, processed, result) {
 function mergeAssetPatch(asset, patch) {
   if (!asset || !patch || typeof patch !== 'object') return asset
   let changed = false
-  for (const [key, value] of Object.entries(patch)) {
+  for (const key of Object.keys(patch)) {
+    const value = patch[key]
     if (asset[key] !== value) {
       changed = true
       break
@@ -533,7 +534,7 @@ function buildResultView(result, assets = []) {
   const processed = Array.isArray(result?.processed) ? result.processed : []
   const failed = Array.isArray(result?.failed) ? result.failed : []
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
-  const assetMap = isMergedOutput ? null : new Map((assets || []).map((asset) => [asset.id, asset]))
+  const assetMap = isMergedOutput ? null : buildAssetIndexMap(assets)
   const items = []
   let totalSourceSizeBytes = 0
   let totalResultSizeBytes = 0
@@ -559,6 +560,26 @@ function buildResultView(result, assets = []) {
     totalResultSizeBytes,
     createdAt: Date.now(),
   }
+}
+
+function buildAssetResultMap(items) {
+  const next = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    const assetId = item?.assetId
+    if (!assetId) continue
+    next.set(assetId, item)
+  }
+  return next
+}
+
+function buildAssetIndexMap(assets) {
+  const next = new Map()
+  for (const asset of Array.isArray(assets) ? assets : []) {
+    const assetId = asset?.id
+    if (!assetId) continue
+    next.set(assetId, asset)
+  }
+  return next
 }
 
 function areResultViewsEquivalent(current, next) {
