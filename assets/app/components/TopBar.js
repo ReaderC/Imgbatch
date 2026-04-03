@@ -1,8 +1,19 @@
 import { TOOL_MAP } from '../config/tools.js'
 
+const SINGLE_RUN_PROCESS_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
+
+function getProcessButtonLabel(state) {
+  if (!state.isProcessing) return '开始处理'
+  const progress = state.processingProgress
+  const toolId = progress?.toolId || state.activeTool
+  if (SINGLE_RUN_PROCESS_TOOLS.has(toolId)) {
+    return '合并中'
+  }
+  return `${progress?.completed || 0}/${progress?.total || 0} 处理中`
+}
+
 export function renderTopBar(state) {
   const tool = TOOL_MAP[state.activeTool]
-  const progress = state.processingProgress
   const sidebarLabel = state.sidebarCollapsed ? '展开导航' : '收起导航'
   const sidebarIcon = state.sidebarCollapsed ? 'right_panel_open' : 'left_panel_close'
 
@@ -20,13 +31,11 @@ export function renderTopBar(state) {
         <div class="topbar__meta">
           ${state.isProcessing
             ? `<button class="secondary-button topbar__stop-button" data-action="cancel-current-run" ${state.cancelRequested ? 'disabled' : ''}>
-                ${state.cancelRequested ? '停止中' : '停止任务'}
+                ${state.cancelRequested ? '停止中...' : '停止任务'}
               </button>`
             : ''}
           <button class="primary-button ${state.isProcessing ? 'is-processing' : ''}" data-action="process-current" ${state.isProcessing ? 'disabled' : ''}>
-            ${state.isProcessing
-              ? `${progress?.completed || 0}/${progress?.total || 0} 处理中`
-              : '开始处理'}
+            ${getProcessButtonLabel(state)}
           </button>
         </div>
       </div>
