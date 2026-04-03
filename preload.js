@@ -2,7 +2,7 @@ const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync } = require('child_process')
+const { execFileSync, fork } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -41,7 +41,7 @@ const ASSET_TOOL_HANDLERS = {
 }
 const MERGE_TOOL_HANDLERS = {
   'merge-image': writeMergeImageAsset,
-  'merge-pdf': writeMergePdfAssetReal,
+  'merge-pdf': writeMergePdfAssetResponsive,
   'merge-gif': writeMergeGifAsset,
 }
 const WATERMARK_IMAGE_CACHE = new Map()
@@ -54,6 +54,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
+const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -1133,6 +1134,13 @@ function cancelRun(runId) {
   const normalized = String(runId || '').trim()
   if (!normalized) return false
   CANCELLED_RUNS.add(normalized)
+  const worker = ACTIVE_MERGE_WORKERS.get(normalized)
+  if (worker) {
+    ACTIVE_MERGE_WORKERS.delete(normalized)
+    try {
+      worker.kill()
+    } catch {}
+  }
   return true
 }
 
