@@ -1763,6 +1763,20 @@ function getSingleAssetOutputPath(destinationPath, asset, toolId, format, option
   return options.unique ? resolveUniqueOutputPath(rawOutputPath) : rawOutputPath
 }
 
+function canCopyWithoutTransform(sourceFormat, outputFormat, transformQuality) {
+  return normalizeImageFormatName(sourceFormat) === normalizeImageFormatName(outputFormat)
+    && canSkipSameFormatEncoding(outputFormat, transformQuality)
+}
+
+async function writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, transformQuality, options = {}) {
+  const sourceFormat = normalizeImageFormatName(options.sourceFormat || asset?.inputFormat || asset?.ext)
+  const fallback = options.fallback
+  if (canCopyWithoutTransform(sourceFormat, outputFormat, transformQuality)) {
+    return copyAssetToOutput(asset, outputPath, null, fallback || asset)
+  }
+  return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, transformQuality, outputPath, fallback || {})
+}
+
 function resolveUniqueOutputPath(outputPath) {
   if (!fs.existsSync(outputPath)) return outputPath
   const parsed = path.parse(outputPath)
@@ -2485,10 +2499,7 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (watermarkOpacity <= 0 || isEmptyTextWatermark || isZeroSizeTextWatermark) {
-    if (sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
-      return copyAssetToOutput(asset, outputPath)
-    }
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath)
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, { sourceFormat })
   }
 
   const composite = await buildWatermarkComposite(sharpLib, asset, config)
@@ -2504,13 +2515,13 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
-  if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop && canSkipSameFormatEncoding(format, transformQuality)) {
-    return copyAssetToOutput(asset, outputPath)
-  }
   if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
+      sourceFormat,
+      fallback: {
       width: asset.width,
       height: asset.height,
+      },
     })
   }
 
@@ -2553,13 +2564,13 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
-  if (sourceFormat === format && hasNoFlipTransform && canSkipSameFormatEncoding(format, transformQuality)) {
-    return copyAssetToOutput(asset, outputPath)
-  }
   if (hasNoFlipTransform) {
     let transformed = createTransformer(sharpLib, asset)
     if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
       transformed = transformed.keepMetadata()
+    }
+    if (canCopyWithoutTransform(sourceFormat, format, transformQuality)) {
+      return copyAssetToOutput(asset, outputPath)
     }
     return writeTransformedAsset(transformed, format, transformQuality, outputPath, {
       width: asset.width,
@@ -2605,11 +2616,11 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 
   const transformQuality = getTransformQuality(config.quality, sourceFormat, outputFormat)
 
-  if (radius <= 0 && sourceFormat === outputFormat && canSkipSameFormatEncoding(outputFormat, transformQuality)) {
-    return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
-  }
   if (radius <= 0) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, transformQuality, outputPath, { width, height })
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, transformQuality, {
+      sourceFormat,
+      fallback: { ...asset, width, height },
+    })
   }
 
   const mask = buildRoundedRectSvg(width, height, radius, '#ffffff')
@@ -2641,13 +2652,13 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
 
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
-  if (noPadding && sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
-    return copyAssetToOutput(asset, outputPath)
-  }
   if (noPadding) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
+      sourceFormat,
+      fallback: {
       width: asset.width,
       height: asset.height,
+      },
     })
   }
 
@@ -2796,25 +2807,17 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
 
   if (toolId !== 'manual-crop'
     && sourceWidth > 0 && sourceHeight > 0
-    && sourceFormat === format
-    && !hasTransform
-    && box.left === 0
-    && box.top === 0
-    && box.width === sourceWidth
-    && box.height === sourceHeight
-    && canSkipSameFormatEncoding(format, transformQuality)) {
-    return copyAssetToOutput(asset, outputPath)
-  }
-  if (toolId !== 'manual-crop'
-    && sourceWidth > 0 && sourceHeight > 0
     && !hasTransform
     && box.left === 0
     && box.top === 0
     && box.width === sourceWidth
     && box.height === sourceHeight) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, transformQuality, outputPath, {
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
+      sourceFormat,
+      fallback: {
       width: sourceWidth,
       height: sourceHeight,
+      },
     })
   }
 
