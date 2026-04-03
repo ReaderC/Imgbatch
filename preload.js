@@ -1047,15 +1047,6 @@ function yieldToEventLoop() {
   })
 }
 
-function detectDirectEmbedKind(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return ''
-  if (buffer.length >= 8
-    && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
-    && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) return 'png'
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpg'
-  return ''
-}
-
 async function prepareMergePdfChildPayload(sharpLib, payload) {
   const sourceAssets = Array.isArray(payload?.assets) ? payload.assets : []
   if (!sourceAssets.length) return payload
@@ -1064,12 +1055,18 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
 
   try {
     for (const asset of sourceAssets) {
+      throwIfRunCancelled(payload.runId)
       const nextAsset = { ...asset }
       nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
-      const sourceBuffer = fs.readFileSync(nextAsset.sourcePath)
-      const directKind = detectDirectEmbedKind(sourceBuffer)
+      const directKind = (() => {
+        const directFormat = detectImageFormatFromFile(nextAsset.sourcePath)
+        if (directFormat === 'png') return 'png'
+        if (directFormat === 'jpeg' || directFormat === 'jpg') return 'jpg'
+        return ''
+      })()
       if (directKind) {
         preparedAssets.push(nextAsset)
+        await yieldToEventLoop()
         continue
       }
 
@@ -1086,6 +1083,7 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         ext: outputKind,
         inputFormat: outputKind,
       })
+      await yieldToEventLoop()
     }
 
     return {
