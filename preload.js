@@ -552,6 +552,18 @@ function applyOptionalMetadataPreservation(transformer, enabled) {
   return transformer.keepMetadata()
 }
 
+function applyFormatOutputSettings(transformer, outputFormat, options = {}) {
+  let nextTransformer = transformer
+  if (typeof nextTransformer?.withIccProfile === 'function') {
+    nextTransformer = nextTransformer.withIccProfile(options.colorProfile || 'srgb')
+  }
+  const keepTransparency = options.keepTransparency && isAlphaCapableFormat(outputFormat)
+  if (!keepTransparency) {
+    nextTransformer = nextTransformer.flatten({ background: hexToRgbaObject('#ffffff', 1) })
+  }
+  return nextTransformer
+}
+
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
@@ -2137,13 +2149,10 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const baseTransformer = sourceInput
     ? createTransformerFromInput(sharpLib, sourceInput, effectiveSourceFormat)
     : createTransformer(sharpLib, asset)
-  let transformed = baseTransformer
-  if (typeof transformed.withIccProfile === 'function') {
-    transformed = transformed.withIccProfile(config.colorProfile || 'srgb')
-  }
-  if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
-    transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
-  }
+  const transformed = applyFormatOutputSettings(baseTransformer, format, {
+    colorProfile: config.colorProfile,
+    keepTransparency: config.keepTransparency,
+  })
   const quality = getTransformQuality(config.quality, sourceFormat, format)
 
   return writeTransformedAsset(transformed, format, quality, outputPath, {
