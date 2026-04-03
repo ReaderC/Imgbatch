@@ -103,6 +103,11 @@ function findAssetIndexById(assetId) {
   return assetIndexById.has(assetId) ? assetIndexById.get(assetId) : -1
 }
 
+export function getAssetById(assetId) {
+  const assetIndex = findAssetIndexById(assetId)
+  return assetIndex === -1 ? null : state.assets[assetIndex]
+}
+
 export function subscribe(listener) {
   listeners.add(listener)
   return () => listeners.delete(listener)

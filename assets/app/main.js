@@ -38,7 +38,7 @@ import {
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
 import { getFormatCapability } from './services/ztools-bridge.js'
-import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, replaceConfig, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getAssetById, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, replaceConfig, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
 import { cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, savePreset, saveSettings, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -468,7 +468,7 @@ function confirmReplaceAssetOriginal(assetId) {
     notify({ type: 'info', message: '当前图片还没有可替换回原图的处理结果。' })
     return
   }
-  const asset = getState().assets.find((item) => item.id === assetId)
+  const asset = getAssetById(assetId)
   if (!asset) return
   openConfirmDialog({
     title: '替换原图',
@@ -501,7 +501,7 @@ function isPreviewableTool(toolId) {
 
 async function saveAssetResult(assetId) {
   const state = getState()
-  const asset = state.assets.find((item) => item.id === assetId)
+  const asset = getAssetById(assetId)
   const stagedItem = asset?.stagedOutputPath && asset.previewStatus === 'staged' && asset.stagedToolId === state.activeTool
     ? {
         assetId: asset.id,
@@ -614,7 +614,7 @@ function normalizeAssetPath(value = '') {
 
 function getReplaceEntry(assetId) {
   const state = getState()
-  const asset = state.assets.find((item) => item.id === assetId)
+  const asset = getAssetById(assetId)
   if (!asset?.sourcePath) return null
   const resultItem = state.resultView?.items?.find((item) => item.assetId === assetId)
   const resultPath = normalizeAssetPath(
@@ -2854,7 +2854,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-asset-result') {
-      const asset = getState().assets.find((item) => item.id === target.dataset.assetId)
+      const asset = getAssetById(target.dataset.assetId)
       const targetPath = asset ? getLatestAssetResultPath(asset) : ''
       if (!targetPath) {
         notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
@@ -3578,7 +3578,7 @@ function restoreMainWindowAfterDialog() {
 
 async function previewAsset(assetId, skipResizePercentConfirm = false) {
   const state = getState()
-  const asset = state.assets.find((item) => item.id === assetId)
+  const asset = getAssetById(assetId)
   if (!asset) {
     notify({ type: 'error', message: '未找到要预览的图片。' })
     return
