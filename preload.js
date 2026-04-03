@@ -41,7 +41,7 @@ const ASSET_TOOL_HANDLERS = {
 }
 const MERGE_TOOL_HANDLERS = {
   'merge-image': writeMergeImageAsset,
-  'merge-pdf': writeMergePdfAssetResponsive,
+  'merge-pdf': writeMergePdfAssetReal,
   'merge-gif': writeMergeGifAsset,
 }
 const WATERMARK_IMAGE_CACHE = new Map()
