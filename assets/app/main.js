@@ -550,13 +550,14 @@ async function openResultPath(targetPath) {
 }
 
 function getDistinctSourceDirectories() {
-  return Array.from(new Set(
-    getState().assets
-      .map((asset) => String(asset?.sourcePath || '').trim())
-      .filter(Boolean)
-      .map((sourcePath) => sourcePath.replaceAll('\\', '/').replace(/\/[^/]+$/, '').replaceAll('/', '\\'))
-      .filter(Boolean),
-  ))
+  const directories = new Set()
+  for (const asset of getState().assets) {
+    const sourcePath = String(asset?.sourcePath || '').trim()
+    if (!sourcePath) continue
+    const directory = sourcePath.replaceAll('\\', '/').replace(/\/[^/]+$/, '').replaceAll('/', '\\')
+    if (directory) directories.add(directory)
+  }
+  return Array.from(directories)
 }
 
 async function openSourceDirectories(paths = []) {
@@ -717,35 +718,34 @@ function hasVisibleResultComparison() {
 
 function refreshResultView() {
   const state = getState()
-  const items = state.assets
-    .filter((asset) => getSavedOutputPath(asset) || getPreviewOutputPath(asset))
-    .map((asset) => {
-      const resultSizeBytes = asset.stagedSizeBytes || asset.sizeBytes || 0
-      const resultWidth = asset.stagedWidth || asset.width || 0
-      const resultHeight = asset.stagedHeight || asset.height || 0
-      const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
-      const normalizedOutputPath = String(outputPath || '').replaceAll('\\', '/')
-      const resultName = normalizedOutputPath.split('/').pop() || asset.name || ''
-      return {
-        assetId: asset.id,
-        name: asset.name,
-        outputPath,
-        source: {
-          name: asset.name || '',
-          sizeBytes: asset.sizeBytes || 0,
-          width: asset.width || 0,
-          height: asset.height || 0,
-        },
-        result: {
-          name: resultName,
-          sizeBytes: resultSizeBytes,
-          width: resultWidth,
-          height: resultHeight,
-        },
-        summary: getPreviewMessage(asset),
-      }
+  const items = []
+  for (const asset of state.assets) {
+    const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
+    if (!outputPath) continue
+    const resultSizeBytes = asset.stagedSizeBytes || asset.sizeBytes || 0
+    const resultWidth = asset.stagedWidth || asset.width || 0
+    const resultHeight = asset.stagedHeight || asset.height || 0
+    const normalizedOutputPath = String(outputPath || '').replaceAll('\\', '/')
+    const resultName = normalizedOutputPath.split('/').pop() || asset.name || ''
+    items.push({
+      assetId: asset.id,
+      name: asset.name,
+      outputPath,
+      source: {
+        name: asset.name || '',
+        sizeBytes: asset.sizeBytes || 0,
+        width: asset.width || 0,
+        height: asset.height || 0,
+      },
+      result: {
+        name: resultName,
+        sizeBytes: resultSizeBytes,
+        width: resultWidth,
+        height: resultHeight,
+      },
+      summary: getPreviewMessage(asset),
     })
-    .filter((item) => item.outputPath)
+  }
 
   if (!items.length) {
     setResultView(null)
