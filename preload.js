@@ -1810,7 +1810,10 @@ async function writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, t
   if (canCopyWithoutTransform(sourceFormat, outputFormat, transformQuality)) {
     return copyAssetToOutput(asset, outputPath, null, fallback || asset)
   }
-  return writeTransformedAsset(createTransformer(sharpLib, asset), outputFormat, transformQuality, outputPath, fallback || {})
+  const transformer = typeof options.buildTransformer === 'function'
+    ? options.buildTransformer()
+    : createTransformer(sharpLib, asset)
+  return writeTransformedAsset(transformer, outputFormat, transformQuality, outputPath, fallback || {})
 }
 
 function resolveUniqueOutputPath(outputPath) {
@@ -2621,16 +2624,19 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (hasNoFlipTransform) {
-    let transformed = createTransformer(sharpLib, asset)
-    if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
-      transformed = transformed.keepMetadata()
-    }
-    if (canCopyWithoutTransform(sourceFormat, format, transformQuality)) {
-      return copyAssetToOutput(asset, outputPath)
-    }
-    return writeTransformedAsset(transformed, format, transformQuality, outputPath, {
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
+      sourceFormat,
+      buildTransformer: () => {
+        let transformed = createTransformer(sharpLib, asset)
+        if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
+          transformed = transformed.keepMetadata()
+        }
+        return transformed
+      },
+      fallback: {
       width: asset.width,
       height: asset.height,
+      },
     })
   }
 
