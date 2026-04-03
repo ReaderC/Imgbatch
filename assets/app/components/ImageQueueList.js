@@ -32,10 +32,7 @@ export function renderImageQueue(state, viewport = null) {
   const layoutFlags = getQueueLayoutFlags(state)
   const { compactLayout, denseLayout, processingDenseLayout } = layoutFlags
   const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, processingDenseLayout, viewport)
-  const visibleAssets = queueWindow
-    ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
-    : assets
-  const queueItemsMarkup = renderVisibleQueueItems(visibleAssets, queueWindow, tool, state, assets.length, compactLayout, denseLayout, processingDenseLayout)
+  const queueItemsMarkup = renderVisibleQueueItems(assets, queueWindow, tool, state, compactLayout, denseLayout, processingDenseLayout)
 
   return `
     <section class="${buildQueueClassName(layoutFlags)}" data-role="drop-surface" data-scroll-role="queue">
@@ -75,12 +72,13 @@ export function renderImageQueue(state, viewport = null) {
   `
 }
 
-function renderVisibleQueueItems(visibleAssets, queueWindow, tool, state, total, compactLayout, denseLayout, processingDenseLayout) {
+function renderVisibleQueueItems(assets, queueWindow, tool, state, compactLayout, denseLayout, processingDenseLayout) {
   let markup = ''
-  for (let index = 0; index < visibleAssets.length; index += 1) {
-    const asset = visibleAssets[index]
-    const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
-    markup += renderQueueItem(asset, tool, state, absoluteIndex, total, compactLayout, denseLayout, processingDenseLayout)
+  const startIndex = queueWindow ? queueWindow.startIndex : 0
+  const endIndex = queueWindow ? queueWindow.endIndex : assets.length
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const asset = assets[index]
+    markup += renderQueueItem(asset, tool, state, index, assets.length, compactLayout, denseLayout, processingDenseLayout)
   }
   return markup
 }
