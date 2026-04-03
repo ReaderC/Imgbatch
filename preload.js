@@ -3030,27 +3030,17 @@ async function writeMergeImageAsset(sharpLib, payload) {
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && Number(asset.width) <= targetSpan) || Number(asset.width) === targetSpan)
       : ((preventUpscale && Number(asset.height) <= targetSpan) || Number(asset.height) === targetSpan)
-    const canCopyOriginal = keepsOriginalSize
-      && sourceFormat === format
-      && canSkipSameFormatEncoding(format, quality)
-    if (canCopyOriginal) {
+    if (keepsOriginalSize && canCopyWithoutTransform(sourceFormat, format, quality)) {
       return copyAssetToOutput(asset, outputPath)
     }
-    const info = await withOutputFormat(createTransformer(sharpLib, asset)
+    return writeTransformedAsset(createTransformer(sharpLib, asset)
       .resize({
         width: fitWidth,
         height: fitHeight,
         fit: 'contain',
         background,
         withoutEnlargement: preventUpscale,
-      }), format, quality)
-      .toFile(outputPath)
-    return {
-      outputPath,
-      outputSizeBytes: info.size || 0,
-      width: info.width || 0,
-      height: info.height || 0,
-    }
+      }), format, quality, outputPath)
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
