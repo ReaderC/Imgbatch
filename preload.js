@@ -547,6 +547,11 @@ function getAssetDimensionFallback(asset, width = asset?.width, height = asset?.
   }
 }
 
+function applyOptionalMetadataPreservation(transformer, enabled) {
+  if (!enabled || !transformer || typeof transformer.keepMetadata !== 'function') return transformer
+  return transformer.keepMetadata()
+}
+
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
@@ -2630,13 +2635,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   if (hasNoFlipTransform) {
     return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
       sourceFormat,
-      buildTransformer: () => {
-        let transformed = createTransformer(sharpLib, asset)
-        if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
-          transformed = transformed.keepMetadata()
-        }
-        return transformed
-      },
+      buildTransformer: () => applyOptionalMetadataPreservation(createTransformer(sharpLib, asset), config.preserveMetadata),
       fallback: getAssetDimensionFallback(asset),
     })
   }
@@ -2649,9 +2648,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   if (config.autoCropTransparent && !supportsTransparentCanvasOutput(format)) {
     transformed = transformed.flatten({ background: OPAQUE_WHITE_BG })
   }
-  if (config.preserveMetadata && typeof transformed.keepMetadata === 'function') {
-    transformed = transformed.keepMetadata()
-  }
+  transformed = applyOptionalMetadataPreservation(transformed, config.preserveMetadata)
 
   return writeTransformedAsset(transformed, format, transformQuality, outputPath)
 }
