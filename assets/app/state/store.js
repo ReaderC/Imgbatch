@@ -234,8 +234,10 @@ export function appendAssets(assets) {
 }
 
 export function removeAsset(assetId) {
-  const nextAssets = state.assets.filter((item) => item.id !== assetId)
-  if (nextAssets.length === state.assets.length) return
+  const assetIndex = state.assets.findIndex((item) => item.id === assetId)
+  if (assetIndex === -1) return
+  const nextAssets = [...state.assets]
+  nextAssets.splice(assetIndex, 1)
   state.assets = nextAssets
   emit()
 }
@@ -244,14 +246,16 @@ export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange =
   if (!assetId || !listThumbnailUrl) return
   let changed = false
   if (emitChange) {
-    state.assets = state.assets.map((asset) => {
-      if (asset.id !== assetId || asset.listThumbnailUrl === listThumbnailUrl) return asset
-      changed = true
-      return {
-        ...asset,
+    const assetIndex = state.assets.findIndex((asset) => asset.id === assetId)
+    if (assetIndex !== -1 && state.assets[assetIndex]?.listThumbnailUrl !== listThumbnailUrl) {
+      const nextAssets = [...state.assets]
+      nextAssets[assetIndex] = {
+        ...state.assets[assetIndex],
         listThumbnailUrl,
       }
-    })
+      state.assets = nextAssets
+      changed = true
+    }
   } else {
     const asset = state.assets.find((entry) => entry.id === assetId)
     if (asset && asset.listThumbnailUrl !== listThumbnailUrl) {
