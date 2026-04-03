@@ -909,7 +909,13 @@ async function openCurrentResultsDirectory() {
     await openSourceDirectories(sourceDirectories)
     return
   }
-  const asset = state.assets.find((item) => getSavedOutputPath(item) || getPreviewOutputPath(item) || item.outputPath)
+  let asset = null
+  for (const item of state.assets) {
+    if (getSavedOutputPath(item) || getPreviewOutputPath(item) || item.outputPath) {
+      asset = item
+      break
+    }
+  }
   if (!asset) {
     notify({ type: 'info', message: '当前没有可打开的结果目录。' })
     return
@@ -1151,7 +1157,9 @@ async function previewWithRunner(tool, asset) {
     throw new Error(result?.message || '预览失败。')
   }
   const nextAsset = getState().assets.find((item) => item.id === asset.id)
-  const processed = (result?.processed || []).find((item) => item.assetId === asset.id)
+  const processed = result?.processed?.[0]?.assetId === asset.id
+    ? result.processed[0]
+    : (result?.processed || []).find((item) => item.assetId === asset.id)
   const previewedAsset = nextAsset?.previewUrl
     ? nextAsset
     : processed
