@@ -4023,7 +4023,8 @@ function describeToolConfig(toolId, config) {
   if (toolId === 'merge-image') {
     const outputFormat = String(config.outputFormat || 'JPEG')
     const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
-    return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
+    const spanLabel = config.direction === 'vertical' ? '宽度' : '高度'
+    return `${config.direction === 'vertical' ? '纵向' : '横向'}拼接 ${spanLabel} ${config.pageWidth}px / ${outputFormat}${qualitySupported ? ` ${config.quality}%` : ''}`
   }
   if (toolId === 'merge-gif') return `GIF ${config.width}×${config.height} / ${config.interval}ms`
   if (toolId === 'manual-crop') return `手动裁剪 ${config.ratio}`
