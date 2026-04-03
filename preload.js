@@ -1050,7 +1050,7 @@ function yieldToEventLoop() {
 async function prepareMergePdfChildPayload(sharpLib, payload) {
   const sourceAssets = Array.isArray(payload?.assets) ? payload.assets : []
   if (!sourceAssets.length) return payload
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
+  let tempDir = ''
   const preparedAssets = []
 
   try {
@@ -1070,6 +1070,9 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
 
       nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
       const outputKind = isAlphaCapableFormat(nextAsset.inputFormat) ? 'png' : 'jpeg'
+      if (!tempDir) {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
+      }
       const parsed = path.parse(nextAsset.sourcePath)
       const tempPath = path.join(tempDir, `${parsed.name || 'asset'}-${preparedAssets.length + 1}.${outputKind === 'jpeg' ? 'jpg' : 'png'}`)
       const transformed = outputKind === 'png'
@@ -1088,12 +1091,14 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
     return {
       ...payload,
       assets: preparedAssets,
-      mergePdfTempDir: tempDir,
+      mergePdfTempDir: tempDir || '',
     }
   } catch (error) {
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    } catch {}
+    if (tempDir) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch {}
+    }
     throw error
   }
 }
