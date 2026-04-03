@@ -3174,11 +3174,11 @@ async function writeMergeGifAsset(sharpLib, payload) {
 
   encoder.finish()
   throwIfRunCancelled(payload.runId)
-  const bytes = encoder.bytes()
+  const bytes = encoder.bytesView()
   fs.writeFileSync(outputPath, bytes)
   return {
     outputPath,
-    outputSizeBytes: bytes.length,
+    outputSizeBytes: bytes.byteLength,
   }
 }
 
