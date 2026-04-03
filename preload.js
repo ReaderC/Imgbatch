@@ -2,7 +2,7 @@ const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync } = require('child_process')
+const { execFileSync, fork } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -41,7 +41,7 @@ const ASSET_TOOL_HANDLERS = {
 }
 const MERGE_TOOL_HANDLERS = {
   'merge-image': writeMergeImageAsset,
-  'merge-pdf': writeMergePdfAssetReal,
+  'merge-pdf': writeMergePdfAssetIsolated,
   'merge-gif': writeMergeGifAsset,
 }
 const WATERMARK_IMAGE_CACHE = new Map()
@@ -54,6 +54,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
+const ACTIVE_MERGE_CHILDREN = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -1049,10 +1050,67 @@ function emitQueueThumbnailReady(detail = {}) {
   }
 }
 
+function runMergePdfChild(payload) {
+  return new Promise((resolve, reject) => {
+    const child = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    })
+    const runId = String(payload?.runId || '').trim()
+    let settled = false
+    const cleanup = () => {
+      if (runId && ACTIVE_MERGE_CHILDREN.get(runId) === child) {
+        ACTIVE_MERGE_CHILDREN.delete(runId)
+      }
+      child.removeAllListeners()
+    }
+    if (runId) ACTIVE_MERGE_CHILDREN.set(runId, child)
+    child.on('message', (message) => {
+      if (!message || typeof message !== 'object') return
+      if (message.type === 'result') {
+        settled = true
+        cleanup()
+        resolve(message.result)
+        return
+      }
+      if (message.type === 'error') {
+        settled = true
+        cleanup()
+        const error = new Error(message.error || 'PDF 合并失败')
+        if (message.code) error.code = message.code
+        reject(error)
+      }
+    })
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    })
+    child.on('exit', (code) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error(code === 0 ? 'PDF 合并已中止' : `PDF 合并子进程退出异常 (${code})`))
+    })
+    child.send({
+      type: 'start',
+      payload,
+      performanceMode: getAppSettings().performanceMode,
+    })
+  })
+}
+
 function cancelRun(runId) {
   const normalized = String(runId || '').trim()
   if (!normalized) return false
   CANCELLED_RUNS.add(normalized)
+  const child = ACTIVE_MERGE_CHILDREN.get(normalized)
+  if (child) {
+    ACTIVE_MERGE_CHILDREN.delete(normalized)
+    try {
+      child.kill()
+    } catch {}
+  }
   return true
 }
 
@@ -2658,6 +2716,11 @@ async function writeMergeImageAsset(sharpLib, payload) {
     width: totalWidth,
     height: totalHeight,
   }
+}
+
+async function writeMergePdfAssetIsolated(sharpLib, payload) {
+  throwIfRunCancelled(payload.runId)
+  return runMergePdfChild(payload)
 }
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
