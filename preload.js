@@ -1773,6 +1773,11 @@ function shouldKeepOriginalSource(sourceFormat, outputFormat, quality = 100) {
     && Math.round(Number(quality) || 0) >= 100
 }
 
+function tryCopyOriginalSource(asset, outputPath, sourceFormat, outputFormat, quality, sourceInput = null) {
+  if (!shouldKeepOriginalSource(sourceFormat, outputFormat, quality)) return null
+  return copyAssetToOutput(asset, outputPath, sourceInput)
+}
+
 async function prepareDirectSourcePassthrough(sharpLib, asset, sourceFormat, outputFormat, quality, options = {}) {
   let effectiveSourceFormat = normalizeImageFormatName(sourceFormat)
   let sourceInput = null
@@ -1990,8 +1995,9 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     throw new Error('目标大小未小于原图，已跳过该文件')
   }
 
-  if (config.mode !== 'target' && shouldKeepOriginalSource(sourceFormat, format, config.quality)) {
-    return copyAssetToOutput(asset, outputPath)
+  if (config.mode !== 'target') {
+    const passthrough = tryCopyOriginalSource(asset, outputPath, sourceFormat, format, config.quality)
+    if (passthrough) return passthrough
   }
 
   if (config.mode !== 'target' || !TARGET_COMPRESSION_FORMATS.has(format)) {
@@ -2094,9 +2100,8 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     { probeMetadata: true },
   )
 
-  if (shouldKeepOriginalSource(effectiveSourceFormat, format, config.quality)) {
-    return copyAssetToOutput(asset, outputPath, sourceInput)
-  }
+  const passthrough = tryCopyOriginalSource(asset, outputPath, effectiveSourceFormat, format, config.quality, sourceInput)
+  if (passthrough) return passthrough
 
   const baseTransformer = sourceInput
     ? createTransformerFromInput(sharpLib, sourceInput, effectiveSourceFormat)
