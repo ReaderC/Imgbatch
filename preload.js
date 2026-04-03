@@ -41,7 +41,7 @@ const ASSET_TOOL_HANDLERS = {
 }
 const MERGE_TOOL_HANDLERS = {
   'merge-image': writeMergeImageAsset,
-  'merge-pdf': writeMergePdfAssetIsolated,
+  'merge-pdf': writeMergePdfAssetReal,
   'merge-gif': writeMergeGifAsset,
 }
 const WATERMARK_IMAGE_CACHE = new Map()
@@ -54,7 +54,7 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
-const ACTIVE_MERGE_CHILDREN = new Map()
+const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -1041,6 +1041,86 @@ function emitProcessingProgress(detail = {}) {
   }
 }
 
+function yieldToEventLoop() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
+function runMergePdfWorker(payload) {
+  return new Promise((resolve, reject) => {
+    const worker = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    })
+    const runId = String(payload?.runId || '').trim()
+    let settled = false
+    const cleanup = () => {
+      if (runId && ACTIVE_MERGE_WORKERS.get(runId) === worker) {
+        ACTIVE_MERGE_WORKERS.delete(runId)
+      }
+      worker.removeAllListeners()
+    }
+    if (runId) {
+      ACTIVE_MERGE_WORKERS.set(runId, worker)
+    }
+    worker.send({
+      type: 'start',
+      payload,
+      performanceMode: getAppSettings().performanceMode || 'balanced',
+    })
+    worker.on('message', (message) => {
+      if (!message || typeof message !== 'object') return
+      if (message.type === 'progress') {
+        emitProcessingProgress({
+          runId: payload.runId,
+          toolId: payload.toolId,
+          toolLabel: payload.toolLabel,
+          mode: payload.mode,
+          ...message.detail,
+        })
+        return
+      }
+      if (message.type === 'result') {
+        settled = true
+        cleanup()
+        try {
+          worker.kill()
+        } catch {}
+        resolve(message.result)
+        return
+      }
+      if (message.type === 'error') {
+        settled = true
+        cleanup()
+        try {
+          worker.kill()
+        } catch {}
+        const error = new Error(message.error || 'PDF 合并失败')
+        if (message.code) error.code = message.code
+        reject(error)
+      }
+    })
+    worker.on('error', (error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    })
+    worker.on('exit', (code) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (code === 0) {
+        reject(new Error('PDF 合并已中止'))
+      } else {
+        const error = new Error(code === 1 ? 'PDF 合并已中止' : `PDF 合并 worker 退出异常 (${code})`)
+        if (code === 1) error.code = 'RUN_CANCELLED'
+        reject(error)
+      }
+    })
+  })
+}
+
 function emitQueueThumbnailReady(detail = {}) {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
   try {
@@ -1050,69 +1130,15 @@ function emitQueueThumbnailReady(detail = {}) {
   }
 }
 
-function runMergePdfChild(payload) {
-  return new Promise((resolve, reject) => {
-    const child = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
-      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-    })
-    const runId = String(payload?.runId || '').trim()
-    let settled = false
-    let stderrText = ''
-    const cleanup = () => {
-      if (runId && ACTIVE_MERGE_CHILDREN.get(runId) === child) {
-        ACTIVE_MERGE_CHILDREN.delete(runId)
-      }
-      child.removeAllListeners()
-    }
-    if (runId) ACTIVE_MERGE_CHILDREN.set(runId, child)
-    child.stderr?.on?.('data', (chunk) => {
-      stderrText += String(chunk || '')
-    })
-    child.on('message', (message) => {
-      if (!message || typeof message !== 'object') return
-      if (message.type === 'result') {
-        settled = true
-        cleanup()
-        resolve(message.result)
-        return
-      }
-      if (message.type === 'error') {
-        settled = true
-        cleanup()
-        const error = new Error(message.error || 'PDF 合并失败')
-        if (message.code) error.code = message.code
-        reject(error)
-      }
-    })
-    child.on('error', (error) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(error)
-    })
-    child.on('exit', (code) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(new Error(code === 0 ? 'PDF 合并已中止' : `PDF 合并子进程退出异常 (${code})`))
-    })
-    child.send({
-      type: 'start',
-      payload,
-      performanceMode: getAppSettings().performanceMode,
-    })
-  })
-}
-
 function cancelRun(runId) {
   const normalized = String(runId || '').trim()
   if (!normalized) return false
   CANCELLED_RUNS.add(normalized)
-  const child = ACTIVE_MERGE_CHILDREN.get(normalized)
-  if (child) {
-    ACTIVE_MERGE_CHILDREN.delete(normalized)
+  const worker = ACTIVE_MERGE_WORKERS.get(normalized)
+  if (worker) {
+    ACTIVE_MERGE_WORKERS.delete(normalized)
     try {
-      child.kill()
+      worker.terminate()
     } catch {}
   }
   return true
@@ -2722,9 +2748,9 @@ async function writeMergeImageAsset(sharpLib, payload) {
   }
 }
 
-async function writeMergePdfAssetIsolated(sharpLib, payload) {
+async function writeMergePdfAssetResponsive(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
-  return runMergePdfChild(payload)
+  return runMergePdfWorker(payload)
 }
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
@@ -2766,6 +2792,21 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       color: backgroundColor,
     })
   }
+  let preparedCount = 0
+  const emitMergePdfProgress = (phase) => {
+    emitProcessingProgress({
+      phase,
+      runId: payload.runId,
+      toolId: payload.toolId,
+      toolLabel: payload.toolLabel,
+      mode: payload.mode,
+      total: Math.max(1, Array.isArray(payload.assets) ? payload.assets.length : 0),
+      completed: preparedCount,
+      succeeded: 0,
+      failed: 0,
+    })
+  }
+  emitMergePdfProgress('merge-pdf-prepare')
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
     asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
@@ -2824,15 +2865,20 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.embeddedKind = embeddedKind
     }
 
+    preparedCount += 1
+    emitMergePdfProgress('merge-pdf-prepare')
+    await yieldToEventLoop()
     return prepared
   }
   const preparedAssets = payload.assets.length === 1
     ? [await prepareAsset(payload.assets[0])]
     : await mapWithConcurrency(payload.assets, prepareConcurrency, prepareAsset)
   throwIfRunCancelled(payload.runId)
+  emitMergePdfProgress('merge-pdf-write')
 
   for (const prepared of preparedAssets) {
     throwIfRunCancelled(payload.runId)
+    await yieldToEventLoop()
     const { imageBytes } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
@@ -2929,6 +2975,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let offsetY = 0
     while (offsetY < scaledHeight) {
       throwIfRunCancelled(payload.runId)
+      await yieldToEventLoop()
       const sliceHeight = Math.min(pageSliceHeight, scaledHeight - offsetY)
       const sliceBuffer = await scaledImage.clone()
         .extract({ left: 0, top: offsetY, width: scaledWidth, height: sliceHeight })
