@@ -1357,6 +1357,14 @@ function hasSameAssetOrder(previousAssets = [], nextAssets = []) {
   return true
 }
 
+function hasSameAssetSet(previousAssets = [], nextAssets = []) {
+  if (!Array.isArray(previousAssets) || !Array.isArray(nextAssets)) return false
+  if (previousAssets.length !== nextAssets.length) return false
+  const previousIds = new Set(previousAssets.map((asset) => asset?.id).filter(Boolean))
+  if (previousIds.size !== previousAssets.length) return false
+  return nextAssets.every((asset) => previousIds.has(asset?.id))
+}
+
 function renderNotificationsRoot(items) {
   return `<div class="render-slot" data-root="notifications">${renderNotifications(items)}</div>`
 }
@@ -1634,6 +1642,28 @@ function patchQueueItemsForToolChange(state) {
   return changed
 }
 
+function patchQueueOrderInPlace(state) {
+  const root = getRootNode('queue')
+  if (!root) return false
+  const queueList = root.querySelector('.queue-list')
+  if (!queueList) return false
+  const currentItems = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
+  if (currentItems.length !== state.assets.length) return false
+  const itemMap = new Map(currentItems.map((item) => [item.getAttribute('data-asset-id') || '', item]))
+  const orderedItems = []
+  for (const asset of state.assets) {
+    const item = itemMap.get(asset?.id || '')
+    if (!item) return false
+    orderedItems.push(item)
+  }
+  queueList.replaceChildren(...orderedItems)
+  patchQueueItemsForToolChange(state)
+  rootMarkupCache.queue = renderImageQueue(state, null)
+  queueMarkupCacheDirty = false
+  restoreQueuedQueueScroll(state)
+  return true
+}
+
 function queueQueueItemPatch() {
   if (queueItemPatchFrame) return
   queueItemPatchFrame = requestAnimationFrame(() => {
@@ -1730,6 +1760,14 @@ function shouldPatchQueueInPlace(diff, prevSnapshot, nextSnapshot, state) {
   if (diff.toolChanged || diff.modeChanged) return false
   if (!hasSameAssetOrder(prevSnapshot.assets, state.assets)) return false
   return prevSnapshot.assets !== nextSnapshot.assets || prevSnapshot.isProcessing !== nextSnapshot.isProcessing
+}
+
+function shouldPatchQueueOrderInPlace(diff, prevSnapshot, nextSnapshot, state) {
+  if (nextSnapshot.mode !== 'workspace' || diff.previousMode !== 'workspace') return false
+  if (diff.toolChanged || diff.modeChanged) return false
+  if (TOOL_MAP[state.activeTool]?.mode !== 'sort') return false
+  if (hasSameAssetOrder(prevSnapshot.assets, state.assets)) return false
+  return hasSameAssetSet(prevSnapshot.assets, state.assets)
 }
 
 function canPatchShell(prev, next) {
@@ -1890,8 +1928,12 @@ function render(state) {
     if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
-    const shouldPatchQueue = shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
-    if (shouldPatchQueue) {
+    const shouldPatchQueueOrder = shouldPatchQueueOrderInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
+    const shouldPatchQueue = !shouldPatchQueueOrder && shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
+    if (shouldPatchQueueOrder) {
+      patchQueueOrderInPlace(state)
+      effectiveQueueChanged = false
+    } else if (shouldPatchQueue) {
       queueQueueItemPatch()
       effectiveQueueChanged = false
     } else {
