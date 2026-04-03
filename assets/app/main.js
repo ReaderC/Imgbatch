@@ -1182,7 +1182,7 @@ function shouldReusePreviewResult(toolId, asset) {
   if (!isPreviewableTool(toolId)) return false
   if (asset?.stagedToolId !== toolId) return false
   if (!asset?.previewUrl) return false
-  const signature = JSON.stringify({ toolId, config: getState().configs[toolId] })
+  const signature = JSON.stringify({ toolId, config: getState().configs[toolId] || {} })
   if (asset?.saveSignature && asset.saveSignature !== signature) return false
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
 }
@@ -1227,9 +1227,15 @@ function getCompressionOversizeWarning(result, tool) {
   const targetKb = Number(result?.config?.targetSizeKb) || 0
   const targetBytes = targetKb > 0 ? targetKb * 1024 : 0
   if (!targetBytes) return ''
-  const oversizeItems = (result?.processed || []).filter((item) => Number(item?.outputSizeBytes) > targetBytes)
-  if (!oversizeItems.length) return ''
-  const worstBytes = Math.max(...oversizeItems.map((item) => Number(item?.outputSizeBytes) || 0))
+  let oversizeCount = 0
+  let worstBytes = 0
+  for (const item of result?.processed || []) {
+    const outputSizeBytes = Number(item?.outputSizeBytes) || 0
+    if (outputSizeBytes <= targetBytes) continue
+    oversizeCount += 1
+    if (outputSizeBytes > worstBytes) worstBytes = outputSizeBytes
+  }
+  if (!oversizeCount) return ''
   if (worstBytes <= targetBytes * 1.5) return ''
   return `按体积存在明显偏离：目标 ${targetKb} KB，最大结果 ${formatBytes(worstBytes)}。极端图片无法保证严格命中目标体积。`
 }

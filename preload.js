@@ -623,6 +623,10 @@ async function resolveProcessedMeta(resultPath, result, sharpLib = null) {
     : null) || await readOutputMeta(resultPath, sharpLib)
 }
 
+function buildSaveSignature(toolId, config) {
+  return JSON.stringify({ toolId, config: config || {} })
+}
+
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = await resolveProcessedMeta(stagedPath, result, sharpLib)
@@ -643,7 +647,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
-    saveSignature: JSON.stringify({ toolId: payload.toolId, config: payload.config }),
+    saveSignature: buildSaveSignature(payload.toolId, payload.config),
     runId: payload.runId,
     runFolderName: payload.runFolderName,
     savedOutputPath: '',
