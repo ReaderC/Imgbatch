@@ -1749,6 +1749,27 @@ async function ensureAssetDescriptorState(sharpLib, asset, options = {}) {
   }
 }
 
+async function resolveAssetDimensions(sharpLib, asset, options = {}) {
+  let width = Math.max(0, Number(asset?.width) || 0)
+  let height = Math.max(0, Number(asset?.height) || 0)
+  let descriptorState = null
+  if (!(width > 0 && height > 0) || options.probeMetadata === true) {
+    descriptorState = await ensureAssetDescriptorState(sharpLib, asset, {
+      probeMetadata: options.probeMetadata === true || !(width > 0 && height > 0),
+    })
+    if (descriptorState?.inputFormat) asset.inputFormat = descriptorState.inputFormat
+    if (!(width > 0 && height > 0)) {
+      width = Math.max(1, Number(descriptorState?.metadata?.width) || width || 1)
+      height = Math.max(1, Number(descriptorState?.metadata?.height) || height || 1)
+    }
+  }
+  return {
+    width,
+    height,
+    descriptorState,
+  }
+}
+
 async function prepareSingleAssetWriteContext(sharpLib, asset, toolId, config, destinationPath, options = {}) {
   const descriptorState = await ensureAssetDescriptorState(sharpLib, asset, {
     probeMetadata: options.probeMetadata === true,
@@ -3047,14 +3068,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const dominantSize = targetSpan
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    let sourceWidth = Math.max(0, Number(asset.width) || 0)
-    let sourceHeight = Math.max(0, Number(asset.height) || 0)
-    let metadata = null
-    if (!(sourceWidth > 0 && sourceHeight > 0)) {
-      ;({ metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true }))
-      sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
-      sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
-    }
+    const { width: sourceWidth, height: sourceHeight } = await resolveAssetDimensions(sharpLib, asset)
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && sourceWidth <= targetSpan) || sourceWidth === targetSpan)
       : ((preventUpscale && sourceHeight <= targetSpan) || sourceHeight === targetSpan)
@@ -3250,8 +3264,12 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     const needsMetadata = autoPaginateFixedPage && !(sourceWidth > 0 && sourceHeight > 0)
-    const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: needsMetadata })
-    asset.inputFormat = inputFormat
+    const { descriptorState } = await resolveAssetDimensions(sharpLib, asset, { probeMetadata: needsMetadata })
+    if (descriptorState?.inputFormat) asset.inputFormat = descriptorState.inputFormat
+    if (needsMetadata) {
+      sourceWidth = Math.max(1, Number(asset.width) || Number(descriptorState?.metadata?.width) || sourceWidth || 1)
+      sourceHeight = Math.max(1, Number(asset.height) || Number(descriptorState?.metadata?.height) || sourceHeight || 1)
+    }
     const sourceFormat = normalizeImageFormatName(asset.inputFormat || asset.ext)
     const margin = fixedMargin ?? (payload.config.margin === 'none'
       ? 0
@@ -3278,12 +3296,6 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     if (autoPaginateFixedPage) {
-      if (!(sourceWidth > 0 && sourceHeight > 0)) {
-        sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
-        sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
-        prepared.sourceWidth = sourceWidth
-        prepared.sourceHeight = sourceHeight
-      }
       prepared.drawableWidth = fixedDrawableWidth
       prepared.drawableHeight = fixedDrawableHeight
       prepared.scaledWidth = fixedDrawableWidth
@@ -3459,11 +3471,16 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
-  const hydratedAssets = await Promise.all((payload.assets || []).map(async (asset) => {
-    const needsMetadata = !(Number(asset?.width) > 0 && Number(asset?.height) > 0)
-    await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: needsMetadata })
-    return asset
-  }))
+  const profile = getPerformanceProfile(getAppSettings().performanceMode)
+  const hydrationConcurrency = Math.max(1, Math.min((payload.assets || []).length || 1, Math.min(profile.mediumConcurrency, 4)))
+  const hydratedAssets = await mapWithConcurrency(payload.assets || [], hydrationConcurrency, async (asset) => {
+    const { width, height } = await resolveAssetDimensions(sharpLib, asset)
+    return {
+      ...asset,
+      width,
+      height,
+    }
+  })
   const frameWidth = payload.config.useMaxAssetSize
     ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
     : payload.config.width
@@ -3474,7 +3491,6 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const delay = Math.max(1, Math.round(payload.config.interval))
   const repeat = payload.config.loop ? 0 : -1
   const frameWriteOptions = { delay, repeat }
-  const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(hydratedAssets.length, Math.min(profile.mediumConcurrency, 4)))
   const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
   const prepareFrame = async (asset) => {
