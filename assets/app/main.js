@@ -1556,8 +1556,13 @@ function patchQueueRootMarkup(root, markup) {
 function queueQueueScrollRestore() {
   const queueNode = getQueueScrollNode()
   if (!queueNode) return
+  const queueRect = queueNode.getBoundingClientRect()
+  const anchorItem = Array.from(queueNode.querySelectorAll('.queue-item[data-asset-id]'))
+    .find((item) => item.getBoundingClientRect().bottom > queueRect.top + 1)
   pendingQueueScrollRestore = {
     scrollTop: Math.max(0, queueNode.scrollTop || 0),
+    anchorAssetId: anchorItem?.getAttribute('data-asset-id') || '',
+    anchorOffset: anchorItem ? (anchorItem.getBoundingClientRect().top - queueRect.top) : 0,
     remainingPasses: 3,
   }
 }
@@ -1581,7 +1586,20 @@ function restoreQueuedQueueScroll(state) {
   if (getAppShellMode(state) !== 'workspace') return
   const queueNode = getQueueScrollNode()
   if (!queueNode) return
-  queueNode.scrollTop = pendingQueueScrollRestore.scrollTop
+  const queueRect = queueNode.getBoundingClientRect()
+  const anchorAssetId = pendingQueueScrollRestore.anchorAssetId || ''
+  const anchorOffset = Number(pendingQueueScrollRestore.anchorOffset) || 0
+  if (anchorAssetId) {
+    const anchorItem = queueNode.querySelector(`.queue-item[data-asset-id="${CSS.escape(anchorAssetId)}"]`)
+    if (anchorItem) {
+      const nextOffset = anchorItem.getBoundingClientRect().top - queueRect.top
+      queueNode.scrollTop += nextOffset - anchorOffset
+    } else {
+      queueNode.scrollTop = pendingQueueScrollRestore.scrollTop
+    }
+  } else {
+    queueNode.scrollTop = pendingQueueScrollRestore.scrollTop
+  }
   queueViewportState.scrollTop = Math.max(0, queueNode.scrollTop || 0)
   queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
   if ((pendingQueueScrollRestore.remainingPasses || 1) <= 1) {
