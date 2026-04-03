@@ -3214,6 +3214,18 @@ async function writeMergeImageAsset(sharpLib, payload) {
     },
   }).composite(composites), format, quality).toFile(outputPath)
   throwIfRunCancelled(payload.runId)
+  for (let index = 0; index < composites.length; index += 1) {
+    if (composites[index]) {
+      composites[index].input = null
+      composites[index].raw = null
+      composites[index] = null
+    }
+    if (prepared[index]) {
+      prepared[index].input = null
+      prepared[index].raw = null
+      prepared[index] = null
+    }
+  }
   prepared.length = 0
   composites.length = 0
 
@@ -3559,6 +3571,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
       palette: frame.palette,
       ...frameWriteOptions,
     })
+    hydratedAssets[0] = null
   } else {
     for (let index = 0; index < hydratedAssets.length; index += frameConcurrency) {
       throwIfRunCancelled(payload.runId)
@@ -3580,6 +3593,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
       await yieldToEventLoop()
     }
   }
+  hydratedAssets.length = 0
 
   encoder.finish()
   throwIfRunCancelled(payload.runId)
