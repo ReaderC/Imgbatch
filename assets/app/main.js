@@ -1647,6 +1647,8 @@ function patchQueueOrderInPlace(state) {
   if (!root) return false
   const queueList = root.querySelector('.queue-list')
   if (!queueList) return false
+  const previousScrollTop = Math.max(0, queueList.scrollTop || 0)
+  const previousScrollLeft = Math.max(0, queueList.scrollLeft || 0)
   const currentItems = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
   if (currentItems.length !== state.assets.length) return false
   const itemMap = new Map(currentItems.map((item) => [item.getAttribute('data-asset-id') || '', item]))
@@ -1657,6 +1659,10 @@ function patchQueueOrderInPlace(state) {
     orderedItems.push(item)
   }
   queueList.replaceChildren(...orderedItems)
+  queueList.scrollTop = previousScrollTop
+  queueList.scrollLeft = previousScrollLeft
+  queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
+  queueViewportState.height = Math.max(0, queueList.clientHeight || 0)
   patchQueueItemsForToolChange(state)
   rootMarkupCache.queue = renderImageQueue(state, null)
   queueMarkupCacheDirty = false
