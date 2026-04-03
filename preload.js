@@ -1462,6 +1462,11 @@ async function getAssetInputFormat(sharpLib, asset) {
     return cachedMetadataFormat
   }
   const headerFormat = detectImageFormatFromFile(sourcePath)
+  const directHeaderFormat = normalizeImageFormatName(headerFormat)
+  if (directHeaderFormat && SHARP_INPUT_FORMATS.has(directHeaderFormat)) {
+    asset.inputFormat = directHeaderFormat
+    return directHeaderFormat
+  }
   if (headerFormat && isFallbackDecodedInputFormat(headerFormat)) {
     asset.inputFormat = headerFormat
     return headerFormat
