@@ -699,6 +699,37 @@ async function mapWithConcurrency(items, concurrency, iteratee, options = {}) {
   return results
 }
 
+async function mapIndexRangeWithConcurrency(start, end, concurrency, iteratee, options = {}) {
+  const rangeSize = Math.max(0, end - start)
+  if (!rangeSize) return []
+
+  const workerCount = Math.max(1, Math.min(concurrency || 1, rangeSize))
+  const results = new Array(rangeSize)
+  let cursor = 0
+  const shouldStop = typeof options.shouldStop === 'function' ? options.shouldStop : () => false
+
+  if (workerCount === 1) {
+    for (let offset = 0; offset < rangeSize; offset += 1) {
+      if (shouldStop()) break
+      results[offset] = await iteratee(start + offset, offset)
+    }
+    return results
+  }
+
+  async function worker() {
+    while (cursor < rangeSize) {
+      if (shouldStop()) break
+      const offset = cursor
+      cursor += 1
+      if (shouldStop()) break
+      results[offset] = await iteratee(start + offset, offset)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
 function getAssetProcessingConcurrency(payload) {
   if (payload.mode === 'preview-only') return 1
   if (isMergeTool(payload.toolId)) return 1
@@ -3118,8 +3149,12 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const prepared = []
   for (let index = 0; index < payload.assets.length; index += prepareConcurrency) {
     throwIfRunCancelled(payload.runId)
-    const batch = payload.assets.slice(index, index + prepareConcurrency)
-    const preparedBatch = await mapWithConcurrency(batch, prepareConcurrency, prepareAsset)
+    const preparedBatch = await mapIndexRangeWithConcurrency(
+      index,
+      Math.min(payload.assets.length, index + prepareConcurrency),
+      prepareConcurrency,
+      (assetIndex) => prepareAsset(payload.assets[assetIndex]),
+    )
     prepared.push(...preparedBatch)
     await yieldToEventLoop()
   }
@@ -3147,7 +3182,9 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
   let cursorX = 0
   let cursorY = 0
-  const composites = prepared.map((item) => {
+  const composites = new Array(prepared.length)
+  for (let index = 0; index < prepared.length; index += 1) {
+    const item = prepared[index]
     const composite = {
       input: item.input,
       raw: item.raw,
@@ -3163,8 +3200,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
     } else {
       cursorX += item.width + spacing
     }
-    return composite
-  })
+    composites[index] = composite
+  }
 
   const info = await withOutputFormat(sharpLib({
     create: {
@@ -3514,8 +3551,12 @@ async function writeMergeGifAsset(sharpLib, payload) {
   } else {
     for (let index = 0; index < hydratedAssets.length; index += frameConcurrency) {
       throwIfRunCancelled(payload.runId)
-      const batch = hydratedAssets.slice(index, index + frameConcurrency)
-      const preparedFrames = await mapWithConcurrency(batch, frameConcurrency, prepareFrame)
+      const preparedFrames = await mapIndexRangeWithConcurrency(
+        index,
+        Math.min(hydratedAssets.length, index + frameConcurrency),
+        frameConcurrency,
+        (assetIndex) => prepareFrame(hydratedAssets[assetIndex]),
+      )
       for (const frame of preparedFrames) {
         throwIfRunCancelled(payload.runId)
         encoder.writeFrame(frame.index, frameWidth, frameHeight, {
