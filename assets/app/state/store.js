@@ -6,6 +6,7 @@ const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 let batchDepth = 0
 let emitQueued = false
 let assetIndexById = new Map()
+let assetPathSet = new Set()
 
 const DEFAULT_CONFIGS = {
   compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
@@ -86,12 +87,17 @@ export function getState() {
 
 function rebuildAssetIndex(assets = state.assets) {
   const next = new Map()
+  const nextPaths = new Set()
   for (let index = 0; index < assets.length; index += 1) {
-    const assetId = assets[index]?.id
+    const asset = assets[index]
+    const assetId = asset?.id
     if (!assetId) continue
     next.set(assetId, index)
+    const sourcePath = asset?.sourcePath
+    if (sourcePath) nextPaths.add(sourcePath)
   }
   assetIndexById = next
+  assetPathSet = nextPaths
 }
 
 function setAssets(nextAssets) {
@@ -101,6 +107,10 @@ function setAssets(nextAssets) {
 
 function findAssetIndexById(assetId) {
   return assetIndexById.has(assetId) ? assetIndexById.get(assetId) : -1
+}
+
+function hasAssetSourcePath(sourcePath) {
+  return sourcePath ? assetPathSet.has(sourcePath) : false
 }
 
 export function getAssetById(assetId) {
@@ -277,13 +287,12 @@ export function replaceAssets(assets) {
 }
 
 export function appendAssets(assets) {
-  const known = new Set(state.assets.map((item) => item.sourcePath))
   const next = [...state.assets]
   let appended = false
   for (const asset of assets) {
-    if (!known.has(asset.sourcePath)) {
+    if (!hasAssetSourcePath(asset.sourcePath)) {
       next.push(createAssetState(asset))
-      known.add(asset.sourcePath)
+      assetPathSet.add(asset.sourcePath)
       appended = true
     }
   }
