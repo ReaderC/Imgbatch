@@ -118,7 +118,9 @@ const queueViewportState = {
 }
 
 function shouldTrackQueueViewport(state) {
-  return getAppShellMode(state) === 'workspace' && shouldVirtualizeQueue(state.assets.length)
+  return getAppShellMode(state) === 'workspace'
+    && TOOL_MAP[state.activeTool]?.mode !== 'sort'
+    && shouldVirtualizeQueue(state.assets.length)
 }
 
 const {

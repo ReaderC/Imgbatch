@@ -31,7 +31,14 @@ export function renderImageQueue(state, viewport = null) {
   const assets = state.assets
   const layoutFlags = getQueueLayoutFlags(state)
   const { compactLayout, denseLayout, processingDenseLayout } = layoutFlags
-  const queueWindow = getQueueRenderWindow(assets.length, compactLayout, denseLayout, processingDenseLayout, viewport)
+  const queueWindow = getQueueRenderWindow(
+    assets.length,
+    compactLayout,
+    denseLayout,
+    processingDenseLayout,
+    viewport,
+    tool.mode !== 'sort',
+  )
   const queueItemsMarkup = renderVisibleQueueItems(assets, queueWindow, tool, state, compactLayout, denseLayout, processingDenseLayout)
 
   return `
@@ -89,6 +96,7 @@ export function shouldVirtualizeQueue(total = 0) {
 
 export function getQueueViewportRenderSignature(state, viewport = null) {
   const assets = state?.assets || []
+  const tool = TOOL_MAP[state?.activeTool]
   const layoutFlags = getQueueLayoutFlags(state)
   const queueWindow = getQueueRenderWindow(
     assets.length,
@@ -96,6 +104,7 @@ export function getQueueViewportRenderSignature(state, viewport = null) {
     layoutFlags.denseLayout,
     layoutFlags.processingDenseLayout,
     viewport,
+    tool?.mode !== 'sort',
   )
   if (!queueWindow) return ''
   return [
@@ -201,8 +210,8 @@ export function getQueueItemRenderSignatures(asset, tool, state, index, total, c
   return renderQueueItemFragments(asset, tool, state, index, total, compactLayout, false)
 }
 
-function getQueueRenderWindow(total, compactLayout, denseLayout, processingDenseLayout, viewport) {
-  if (!shouldVirtualizeQueue(total)) return null
+function getQueueRenderWindow(total, compactLayout, denseLayout, processingDenseLayout, viewport, allowVirtualization = true) {
+  if (!allowVirtualization || !shouldVirtualizeQueue(total)) return null
   const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)
   const viewportHeight = Math.max(0, Number(viewport?.height) || 0)
   if (!viewportHeight) return null
