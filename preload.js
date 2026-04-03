@@ -540,6 +540,13 @@ function copyAssetToOutput(asset, outputPath, sourceInput = null, fallback = ass
   }, fallback)
 }
 
+function getAssetDimensionFallback(asset, width = asset?.width, height = asset?.height) {
+  return {
+    width: Math.max(0, Number(width) || 0),
+    height: Math.max(0, Number(height) || 0),
+  }
+}
+
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
@@ -2577,10 +2584,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   if (normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop) {
     return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
       sourceFormat,
-      fallback: {
-      width: asset.width,
-      height: asset.height,
-      },
+      fallback: getAssetDimensionFallback(asset),
     })
   }
 
@@ -2633,10 +2637,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
         }
         return transformed
       },
-      fallback: {
-      width: asset.width,
-      height: asset.height,
-      },
+      fallback: getAssetDimensionFallback(asset),
     })
   }
 
@@ -2717,10 +2718,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   if (noPadding) {
     return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
       sourceFormat,
-      fallback: {
-      width: asset.width,
-      height: asset.height,
-      },
+      fallback: getAssetDimensionFallback(asset),
     })
   }
 
