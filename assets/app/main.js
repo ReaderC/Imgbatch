@@ -1518,6 +1518,27 @@ function attachQueueThumbContent(root, detachedThumbs) {
   })
 }
 
+function patchQueueRootMarkup(root, markup) {
+  if (!root) return false
+  const currentQueueNode = root.querySelector('[data-scroll-role="queue"]')
+  if (!currentQueueNode) {
+    root.innerHTML = markup
+    return true
+  }
+  const template = document.createElement('template')
+  template.innerHTML = markup.trim()
+  const nextQueueNode = template.content.querySelector('[data-scroll-role="queue"]')
+  if (!nextQueueNode) {
+    root.innerHTML = markup
+    return true
+  }
+  const detachedThumbs = detachQueueThumbContent(currentQueueNode)
+  currentQueueNode.className = nextQueueNode.className
+  currentQueueNode.innerHTML = nextQueueNode.innerHTML
+  attachQueueThumbContent(currentQueueNode, detachedThumbs)
+  return true
+}
+
 function queueQueueScrollRestore() {
   const queueNode = app?.querySelector?.('[data-scroll-role="queue"]')
   if (!queueNode) return
@@ -1651,9 +1672,7 @@ function renderQueueRoot(state, preserveScroll = true) {
   const markup = renderImageQueue(state, queueViewportState)
   let changed = false
   if (queueMarkupCacheDirty || rootMarkupCache.queue !== markup) {
-    const detachedThumbs = detachQueueThumbContent(root)
-    root.innerHTML = markup
-    attachQueueThumbContent(root, detachedThumbs)
+    patchQueueRootMarkup(root, markup)
     rootMarkupCache.queue = markup
     queueMarkupCacheDirty = false
     changed = true
