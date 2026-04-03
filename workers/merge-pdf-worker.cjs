@@ -1,4 +1,3 @@
-const { nativeImage } = require('electron')
 const fs = require('fs')
 const os = require('os')
 
@@ -74,6 +73,9 @@ function getCachedPathValue(cache, input, factory) {
 
 function createNativeImageFromInput(input) {
   try {
+    const electron = require('electron')
+    const nativeImage = electron?.nativeImage
+    if (!nativeImage) return null
     if (Buffer.isBuffer(input)) {
       const image = nativeImage.createFromBuffer(input)
       return image && !image.isEmpty() ? image : null
@@ -325,4 +327,26 @@ process.on('message', async (message) => {
     }
     process.exit(1)
   }
+})
+
+process.on('uncaughtException', (error) => {
+  if (typeof process.send === 'function') {
+    process.send({
+      type: 'error',
+      error: error?.message || 'PDF 合并子进程未捕获异常',
+      code: error?.code || '',
+    })
+  }
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (error) => {
+  if (typeof process.send === 'function') {
+    process.send({
+      type: 'error',
+      error: error?.message || 'PDF 合并子进程未处理拒绝',
+      code: error?.code || '',
+    })
+  }
+  process.exit(1)
 })

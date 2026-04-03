@@ -1053,10 +1053,11 @@ function emitQueueThumbnailReady(detail = {}) {
 function runMergePdfChild(payload) {
   return new Promise((resolve, reject) => {
     const child = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     })
     const runId = String(payload?.runId || '').trim()
     let settled = false
+    let stderrText = ''
     const cleanup = () => {
       if (runId && ACTIVE_MERGE_CHILDREN.get(runId) === child) {
         ACTIVE_MERGE_CHILDREN.delete(runId)
@@ -1064,6 +1065,9 @@ function runMergePdfChild(payload) {
       child.removeAllListeners()
     }
     if (runId) ACTIVE_MERGE_CHILDREN.set(runId, child)
+    child.stderr?.on?.('data', (chunk) => {
+      stderrText += String(chunk || '')
+    })
     child.on('message', (message) => {
       if (!message || typeof message !== 'object') return
       if (message.type === 'result') {
