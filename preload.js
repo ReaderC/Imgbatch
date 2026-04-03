@@ -2011,10 +2011,11 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 
   if (shouldProbeSourceFormat) {
     try {
-      sourceInput = fs.readFileSync(asset.sourcePath)
-      const metadata = asset.inputMetadata || await sharpLib(sourceInput).metadata()
-      if (metadata && !asset.inputMetadata) asset.inputMetadata = metadata
-      sourceFormat = normalizeImageFormatName(metadata?.format) || sourceFormat
+      const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: true })
+      sourceFormat = normalizeImageFormatName(descriptor?.inputFormat) || sourceFormat
+      if (sourceFormat === format) {
+        sourceInput = fs.readFileSync(asset.sourcePath)
+      }
     } catch {
       sourceFormat = normalizeImageFormatName(asset.inputFormat)
       sourceInput = null
