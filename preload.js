@@ -2297,22 +2297,16 @@ async function replaceOriginals(items = []) {
         removeEmptyDirectoryIfPossible(sourcePath)
       }
       const stat = fs.statSync(targetPath)
-      let width = 0
-      let height = 0
-      if (sharpLib) {
-        try {
-          const metadata = await getAssetMetadata(sharpLib, {
-            sourcePath: targetPath,
-            inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
-            ext: resultExtension.replace('.', ''),
-          })
-          width = Number(metadata?.width) || 0
-          height = Number(metadata?.height) || 0
-        } catch {
-          width = 0
-          height = 0
-        }
-      }
+      const descriptor = sharpLib
+        ? await getAssetDescriptor(sharpLib, {
+          sourcePath: targetPath,
+          inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
+          ext: resultExtension.replace('.', ''),
+        }, { probeMetadata: true })
+        : null
+      const width = Math.max(0, Number(descriptor?.width) || 0)
+      const height = Math.max(0, Number(descriptor?.height) || 0)
+      const inputFormat = normalizeImageFormatName(descriptor?.inputFormat || resultExtension.replace('.', ''))
       processed.push({
         assetId: item.assetId,
         name: path.basename(targetPath),
@@ -2322,9 +2316,11 @@ async function replaceOriginals(items = []) {
         sizeBytes: Number(stat.size) || 0,
         width,
         height,
-        inputFormat: normalizeImageFormatName(resultExtension.replace('.', '')),
-        thumbnailUrl: await createAssetDisplayUrlAsync(targetPath, resultExtension.replace('.', ''), sharpLib),
-        listThumbnailUrl: await createQueueThumbnailUrlAsync(targetPath, resultExtension.replace('.', ''), sharpLib),
+        inputFormat,
+        inputMetadata: descriptor?.inputMetadata || null,
+        hasAlpha: Boolean(descriptor?.hasAlpha),
+        thumbnailUrl: await createAssetDisplayUrlAsync(targetPath, inputFormat, sharpLib),
+        listThumbnailUrl: await createQueueThumbnailUrlAsync(targetPath, inputFormat, sharpLib),
       })
     } catch (error) {
       failed.push({ assetId: item.assetId, name: item.name, error: error?.message || '替换失败' })
