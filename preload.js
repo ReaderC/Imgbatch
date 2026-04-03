@@ -1773,6 +1773,32 @@ function shouldKeepOriginalSource(sourceFormat, outputFormat, quality = 100) {
     && Math.round(Number(quality) || 0) >= 100
 }
 
+async function prepareDirectSourcePassthrough(sharpLib, asset, sourceFormat, outputFormat, quality, options = {}) {
+  let effectiveSourceFormat = normalizeImageFormatName(sourceFormat)
+  let sourceInput = null
+  const normalizedOutputFormat = normalizeImageFormatName(outputFormat)
+  const shouldProbeSourceFormat = Math.round(Number(quality) || 0) >= 100
+    && (effectiveSourceFormat === normalizedOutputFormat || !isDirectSharpInputFormat(effectiveSourceFormat))
+
+  if (shouldProbeSourceFormat) {
+    try {
+      const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: options.probeMetadata !== false })
+      effectiveSourceFormat = normalizeImageFormatName(descriptor?.inputFormat) || effectiveSourceFormat
+      if (effectiveSourceFormat === normalizedOutputFormat) {
+        sourceInput = fs.readFileSync(asset.sourcePath)
+      }
+    } catch {
+      effectiveSourceFormat = normalizeImageFormatName(asset?.inputFormat || asset?.ext) || effectiveSourceFormat
+      sourceInput = null
+    }
+  }
+
+  return {
+    effectiveSourceFormat,
+    sourceInput,
+  }
+}
+
 async function writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, transformQuality, options = {}) {
   const sourceFormat = normalizeImageFormatName(options.sourceFormat || asset?.inputFormat || asset?.ext)
   const fallback = options.fallback
@@ -2046,23 +2072,14 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('format', asset, config)
   const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'format', format)
-  let effectiveSourceFormat = sourceFormat
-  let sourceInput = null
-  const shouldProbeSourceFormat = Math.round(config.quality) >= 100
-    && (effectiveSourceFormat === format || !isDirectSharpInputFormat(effectiveSourceFormat))
-
-  if (shouldProbeSourceFormat) {
-    try {
-      const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: true })
-      effectiveSourceFormat = normalizeImageFormatName(descriptor?.inputFormat) || effectiveSourceFormat
-      if (effectiveSourceFormat === format) {
-        sourceInput = fs.readFileSync(asset.sourcePath)
-      }
-    } catch {
-      effectiveSourceFormat = normalizeImageFormatName(asset.inputFormat)
-      sourceInput = null
-    }
-  }
+  const { effectiveSourceFormat, sourceInput } = await prepareDirectSourcePassthrough(
+    sharpLib,
+    asset,
+    sourceFormat,
+    format,
+    config.quality,
+    { probeMetadata: true },
+  )
 
   if (shouldKeepOriginalSource(effectiveSourceFormat, format, config.quality)) {
     return copyAssetToOutput(asset, outputPath, sourceInput)
