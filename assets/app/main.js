@@ -1663,11 +1663,24 @@ function patchQueueOrderInPlace(state) {
   queueList.scrollLeft = previousScrollLeft
   queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
   queueViewportState.height = Math.max(0, queueList.clientHeight || 0)
-  patchQueueItemsForToolChange(state)
+  patchQueueSortControlsInPlace(queueList, state)
   rootMarkupCache.queue = renderImageQueue(state, null)
   queueMarkupCacheDirty = false
   restoreQueuedQueueScroll(state)
   return true
+}
+
+function patchQueueSortControlsInPlace(queueList, state) {
+  const layoutFlags = getQueueLayoutFlags(state)
+  const items = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
+  items.forEach((item, index) => {
+    item.className = buildQueueItemClassName('queue-item queue-item--sortable', layoutFlags)
+    item.setAttribute('draggable', 'true')
+    const upButton = item.querySelector('[data-action="move-asset"][data-direction="up"]')
+    const downButton = item.querySelector('[data-action="move-asset"][data-direction="down"]')
+    if (upButton) upButton.toggleAttribute('disabled', index === 0)
+    if (downButton) downButton.toggleAttribute('disabled', index === items.length - 1)
+  })
 }
 
 function queueQueueItemPatch() {
