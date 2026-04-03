@@ -299,10 +299,22 @@ export function applyRunResult(result) {
   const processedMap = new Map((result.processed || []).map((item) => [item.assetId, item]))
   const failedMap = new Map((result.failed || []).map((item) => [item.assetId, item]))
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result.toolId)
+  let changed = false
 
-  state.activeRun = result.runId
-    ? { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
-    : state.activeRun
+  if (result.runId) {
+    const nextActiveRun = { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
+    const currentActiveRun = state.activeRun
+    if (
+      !currentActiveRun
+      || currentActiveRun.runId !== nextActiveRun.runId
+      || currentActiveRun.runFolderName !== nextActiveRun.runFolderName
+      || currentActiveRun.toolId !== nextActiveRun.toolId
+      || currentActiveRun.mode !== nextActiveRun.mode
+    ) {
+      state.activeRun = nextActiveRun
+      changed = true
+    }
+  }
 
   let nextAssets = null
   for (let index = 0; index < state.assets.length; index += 1) {
@@ -342,16 +354,23 @@ export function applyRunResult(result) {
 
   if (nextAssets) {
     state.assets = nextAssets
+    changed = true
   }
 
   if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
-    state.resultView = buildResultView(result, state.assets)
+    const nextResultView = buildResultView(result, state.assets)
+    if (!areResultViewsEquivalent(state.resultView, nextResultView)) {
+      state.resultView = nextResultView
+      changed = true
+    }
   }
 
-  if (result.mode === 'preview-only') {
+  if (result.mode === 'preview-only' && state.resultView !== null) {
     state.resultView = null
+    changed = true
   }
 
+  if (!changed) return
   emit()
 }
 
@@ -540,6 +559,63 @@ function buildResultView(result, assets = []) {
     totalResultSizeBytes,
     createdAt: Date.now(),
   }
+}
+
+function areResultViewsEquivalent(current, next) {
+  if (current === next) return true
+  if (!current || !next) return false
+  if (current.runId !== next.runId) return false
+  if (current.toolId !== next.toolId) return false
+  if (current.mode !== next.mode) return false
+  if ((current.elapsedMs || 0) !== (next.elapsedMs || 0)) return false
+  if ((current.totalSourceSizeBytes || 0) !== (next.totalSourceSizeBytes || 0)) return false
+  if ((current.totalResultSizeBytes || 0) !== (next.totalResultSizeBytes || 0)) return false
+  if (!areResultItemListsEquivalent(current.items, next.items)) return false
+  if (!areFailedItemListsEquivalent(current.failed, next.failed)) return false
+  return true
+}
+
+function areResultItemListsEquivalent(currentItems = [], nextItems = []) {
+  if (currentItems === nextItems) return true
+  if (currentItems.length !== nextItems.length) return false
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const current = currentItems[index]
+    const next = nextItems[index]
+    if (!current || !next) return false
+    if (current.assetId !== next.assetId) return false
+    if (current.outputPath !== next.outputPath) return false
+    if (current.afterUrl !== next.afterUrl) return false
+    if (current.summary !== next.summary) return false
+    if (!areResultSourceEquivalent(current.source, next.source)) return false
+    if (!areResultSourceEquivalent(current.result, next.result)) return false
+  }
+  return true
+}
+
+function areResultSourceEquivalent(current, next) {
+  if (current === next) return true
+  if (!current || !next) return false
+  return (
+    current.name === next.name
+    && (current.sizeBytes || 0) === (next.sizeBytes || 0)
+    && (current.width || 0) === (next.width || 0)
+    && (current.height || 0) === (next.height || 0)
+    && (current.dimensionsText || '') === (next.dimensionsText || '')
+    && Boolean(current.isAggregate) === Boolean(next.isAggregate)
+  )
+}
+
+function areFailedItemListsEquivalent(currentItems = [], nextItems = []) {
+  if (currentItems === nextItems) return true
+  if (currentItems.length !== nextItems.length) return false
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const current = currentItems[index]
+    const next = nextItems[index]
+    if (!current || !next) return false
+    if (current.assetId !== next.assetId) return false
+    if ((current.error || '') !== (next.error || '')) return false
+  }
+  return true
 }
 
 function buildResultViewItem(processed, asset) {
