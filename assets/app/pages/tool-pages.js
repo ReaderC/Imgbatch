@@ -221,8 +221,8 @@ function renderResizeConfig(config) {
   return renderSettingsSection(`
     ${renderSegmented('resize', 'sizeMode', sizeMode, [
       ['manual', '手动设置'],
-      ['max', '对齐最大宽高'],
-      ['min', '对齐最小宽高'],
+      ['max', '对齐最大'],
+      ['min', '对齐最小'],
     ])}
     ${renderFieldGrid(`
       ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px'), disabled: useReferenceSize })}
