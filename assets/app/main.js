@@ -1569,11 +1569,6 @@ function captureQueueScrollPosition() {
   queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
 }
 
-function preserveQueueScrollForReorder() {
-  captureQueueScrollPosition()
-  queueQueueScrollRestore()
-}
-
 function restoreQueuedQueueScroll(state) {
   if (!pendingQueueScrollRestore) return
   if (getAppShellMode(state) !== 'workspace') return
@@ -1672,7 +1667,6 @@ function patchQueueOrderInPlace(state) {
   patchQueueSortControlsInPlace(queueList, state)
   rootMarkupCache.queue = renderImageQueue(state, null)
   queueMarkupCacheDirty = false
-  restoreQueuedQueueScroll(state)
   return true
 }
 
@@ -2599,7 +2593,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'move-asset') {
-      preserveQueueScrollForReorder()
+      captureQueueScrollPosition()
       moveAsset(target.dataset.assetId, target.dataset.direction)
       return
     }
@@ -3328,7 +3322,7 @@ function finishQueueSortDrop(item, clientY) {
   if (!drag) return
   const targetAssetId = item.dataset.assetId
   if (targetAssetId && targetAssetId !== drag.assetId) {
-    preserveQueueScrollForReorder()
+    captureQueueScrollPosition()
     const rect = item.getBoundingClientRect()
     const placement = clientY > rect.top + rect.height / 2 ? 'after' : 'before'
     moveAssetToTarget(drag.assetId, targetAssetId, placement)
