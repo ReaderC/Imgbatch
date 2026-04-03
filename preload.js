@@ -1910,7 +1910,23 @@ function withOutputFormat(transformer, format, quality) {
   if (format === 'webp') return transformer.webp({ quality })
   if (format === 'tiff') return transformer.tiff({ quality })
   if (format === 'avif') return transformer.avif({ quality })
-  if (format === 'gif') return transformer.gif({ effort: 7 })
+  if (format === 'gif') {
+    const normalizedQuality = Math.max(1, Math.min(100, Math.round(Number(quality) || 90)))
+    const colours = Math.max(16, Math.min(256, Math.round(16 + (normalizedQuality / 100) * 240)))
+    const dither = normalizedQuality >= 90
+      ? 1
+      : (normalizedQuality >= 70 ? 0.85 : (normalizedQuality >= 40 ? 0.6 : 0.35))
+    const interFrameMaxError = Math.max(0, Math.min(32, Math.round(((100 - normalizedQuality) / 100) * 24)))
+    const interPaletteMaxError = Math.max(0, Math.min(256, Math.round(((100 - normalizedQuality) / 100) * 48)))
+    return transformer.gif({
+      effort: 7,
+      colours,
+      dither,
+      reuse: normalizedQuality >= 85,
+      interFrameMaxError,
+      interPaletteMaxError,
+    })
+  }
   return transformer.png({ compressionLevel: 6 })
 }
 
