@@ -1063,6 +1063,7 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         : (directFormat === 'jpeg' || directFormat === 'jpg' ? 'jpg' : '')
       if (directKind) {
         nextAsset.inputFormat = directKind === 'jpg' ? 'jpeg' : directKind
+        nextAsset.pdfEmbedKind = directKind
         preparedAssets.push(nextAsset)
         await yieldToEventLoop()
         continue
@@ -1084,6 +1085,7 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         sourcePath: tempPath,
         ext: outputKind,
         inputFormat: outputKind,
+        pdfEmbedKind: outputKind === 'jpeg' ? 'jpg' : outputKind,
       })
       await yieldToEventLoop()
     }
