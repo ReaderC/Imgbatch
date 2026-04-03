@@ -53,6 +53,7 @@ const DISPLAY_URL_CACHE = new Map()
 const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
+const ASSET_DESCRIPTOR_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
 const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
@@ -1446,97 +1447,152 @@ function detectImageFormatFromFile(filePath) {
   }
 }
 
-async function getAssetInputFormat(sharpLib, asset) {
-  const sourcePath = sanitizeText(asset?.sourcePath)
-  const fallbackFormat = normalizeImageFormatName(asset?.ext)
-  if (!sourcePath) {
-    if (fallbackFormat) asset.inputFormat = fallbackFormat
-    return fallbackFormat
-  }
-  const cachedFormat = normalizeImageFormatName(asset?.inputFormat)
-  if (cachedFormat) return cachedFormat
-  const cachedMetadata = asset?.inputMetadata
-  const cachedMetadataFormat = normalizeImageFormatName(cachedMetadata?.format)
-  if (cachedMetadataFormat) {
-    asset.inputFormat = cachedMetadataFormat
-    return cachedMetadataFormat
-  }
-  const headerFormat = detectImageFormatFromFile(sourcePath)
-  const directHeaderFormat = normalizeImageFormatName(headerFormat)
-  if (directHeaderFormat && SHARP_INPUT_FORMATS.has(directHeaderFormat)) {
-    asset.inputFormat = directHeaderFormat
-    return directHeaderFormat
-  }
-  if (headerFormat && isFallbackDecodedInputFormat(headerFormat)) {
-    asset.inputFormat = headerFormat
-    return headerFormat
-  }
-  let metadata = null
-  try {
-    metadata = await sharpLib(sourcePath).metadata()
-    asset.inputMetadata = metadata
-    const detectedFormat = resolveCanonicalInputFormat(metadata?.format, headerFormat, fallbackFormat)
-    if (detectedFormat) {
-      asset.inputFormat = detectedFormat
-      return detectedFormat
-    }
-  } catch {
-    // Fall back to the filename extension if metadata probing fails.
-  }
-  if (headerFormat) {
-    asset.inputFormat = headerFormat
-    return headerFormat
-  }
-  if (fallbackFormat) asset.inputFormat = fallbackFormat
-  return fallbackFormat
+function getAssetDescriptorSourcePath(assetOrPath) {
+  if (typeof assetOrPath === 'string') return sanitizeText(assetOrPath)
+  return sanitizeText(assetOrPath?.sourcePath)
 }
 
-async function getAssetMetadata(sharpLib, asset) {
-  if (asset?.inputMetadata) return asset.inputMetadata
-  const normalizedFormat = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
-  if (normalizedFormat === 'bmp') {
+function getAssetDescriptorFallbackFormat(assetOrPath) {
+  if (typeof assetOrPath === 'string') return normalizeImageFormatName(path.extname(assetOrPath).replace('.', ''))
+  return normalizeImageFormatName(assetOrPath?.inputFormat || assetOrPath?.ext)
+}
+
+function getAssetDescriptorCacheKey(assetOrPath) {
+  const sourcePath = getAssetDescriptorSourcePath(assetOrPath)
+  if (!sourcePath) return ''
+  try {
+    const stat = fs.statSync(sourcePath)
+    return `${path.resolve(sourcePath)}|${Number(stat.size) || 0}|${Number(stat.mtimeMs) || 0}`
+  } catch {
+    return path.resolve(sourcePath)
+  }
+}
+
+function mergeAssetDescriptor(asset, descriptor) {
+  if (!asset || !descriptor) return descriptor
+  if (descriptor.inputFormat) asset.inputFormat = descriptor.inputFormat
+  if (descriptor.inputMetadata) asset.inputMetadata = descriptor.inputMetadata
+  if (descriptor.width > 0) asset.width = descriptor.width
+  if (descriptor.height > 0) asset.height = descriptor.height
+  return descriptor
+}
+
+async function getAssetDescriptor(sharpLib, assetOrPath, options = {}) {
+  const probeMetadata = options.probeMetadata !== false
+  const sourcePath = getAssetDescriptorSourcePath(assetOrPath)
+  const fallbackFormat = getAssetDescriptorFallbackFormat(assetOrPath)
+  if (!sourcePath) {
+    const inputMetadata = assetOrPath?.inputMetadata || null
+    const inputFormat = normalizeImageFormatName(assetOrPath?.inputFormat || inputMetadata?.format || fallbackFormat)
+    const descriptor = {
+      sourcePath: '',
+      inputFormat,
+      inputMetadata,
+      width: Math.max(0, Number(inputMetadata?.width) || Number(assetOrPath?.width) || 0),
+      height: Math.max(0, Number(inputMetadata?.height) || Number(assetOrPath?.height) || 0),
+      hasAlpha: Boolean(inputMetadata?.hasAlpha),
+    }
+    return mergeAssetDescriptor(assetOrPath, descriptor)
+  }
+
+  const cacheKey = getAssetDescriptorCacheKey(assetOrPath)
+  const cachedDescriptor = cacheKey ? ASSET_DESCRIPTOR_CACHE.get(cacheKey) : null
+  if (cachedDescriptor && (!probeMetadata || cachedDescriptor.inputMetadata)) {
+    return mergeAssetDescriptor(assetOrPath, cachedDescriptor)
+  }
+
+  const baseDescriptor = cachedDescriptor
+    ? { ...cachedDescriptor }
+    : {
+        sourcePath,
+        inputFormat: '',
+        inputMetadata: null,
+        width: 0,
+        height: 0,
+        hasAlpha: false,
+      }
+
+  const cachedFormat = normalizeImageFormatName(assetOrPath?.inputFormat)
+  const cachedMetadata = assetOrPath?.inputMetadata
+  const cachedMetadataFormat = normalizeImageFormatName(cachedMetadata?.format)
+  const headerFormat = detectImageFormatFromFile(sourcePath)
+  const directHeaderFormat = normalizeImageFormatName(headerFormat)
+
+  if (!baseDescriptor.inputFormat) {
+    baseDescriptor.inputFormat = cachedFormat || cachedMetadataFormat || directHeaderFormat || fallbackFormat
+  }
+  if (!baseDescriptor.inputMetadata && cachedMetadata) {
+    baseDescriptor.inputMetadata = cachedMetadata
+    baseDescriptor.width = Math.max(0, Number(cachedMetadata?.width) || baseDescriptor.width || 0)
+    baseDescriptor.height = Math.max(0, Number(cachedMetadata?.height) || baseDescriptor.height || 0)
+    baseDescriptor.hasAlpha = Boolean(cachedMetadata?.hasAlpha)
+  }
+
+  if (!probeMetadata) {
+    if (cacheKey) ASSET_DESCRIPTOR_CACHE.set(cacheKey, baseDescriptor)
+    return mergeAssetDescriptor(assetOrPath, baseDescriptor)
+  }
+
+  if (!baseDescriptor.inputMetadata && baseDescriptor.inputFormat === 'bmp') {
     try {
-      const decoded = getCachedPathValue(BMP_DECODE_CACHE, asset.sourcePath, () => {
-        const sourceBuffer = fs.readFileSync(asset.sourcePath)
+      const decoded = getCachedPathValue(BMP_DECODE_CACHE, sourcePath, () => {
+        const sourceBuffer = fs.readFileSync(sourcePath)
         return decodeBmpBuffer(sourceBuffer)
       })
       if (decoded) {
-        const metadata = {
+        baseDescriptor.inputMetadata = {
           format: 'bmp',
           width: decoded.width,
           height: decoded.height,
           channels: decoded.channels,
           hasAlpha: decoded.channels === 4,
         }
-        asset.inputMetadata = metadata
-        asset.inputFormat = 'bmp'
-        return metadata
+        baseDescriptor.inputFormat = 'bmp'
       }
-    } catch {
-      // Fall through to generic probing when BMP decoding also fails.
-    }
+    } catch {}
   }
-  if (isFallbackDecodedInputFormat(normalizedFormat)) {
+
+  if (!baseDescriptor.inputMetadata && isFallbackDecodedInputFormat(baseDescriptor.inputFormat)) {
     try {
-      const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
+      const decodedInput = createNativeImagePngBuffer(sourcePath)
       if (decodedInput) {
         const metadata = await sharpLib(decodedInput).metadata()
-        asset.inputMetadata = metadata
-        return metadata
+        baseDescriptor.inputMetadata = metadata
       }
-    } catch {
-      // Fall through to generic probing when fallback probing also fails.
-    }
+    } catch {}
   }
-  try {
-    const metadata = await sharpLib(asset.sourcePath).metadata()
-    asset.inputMetadata = metadata
-    const detectedFormat = normalizeImageFormatName(metadata?.format)
-    if (detectedFormat && !asset.inputFormat) asset.inputFormat = detectedFormat
-    return metadata
-  } catch {
-    return null
+
+  if (!baseDescriptor.inputMetadata && sharpLib) {
+    try {
+      const metadata = await sharpLib(sourcePath).metadata()
+      baseDescriptor.inputMetadata = metadata
+    } catch {}
   }
+
+  if (baseDescriptor.inputMetadata) {
+    const detectedFormat = resolveCanonicalInputFormat(baseDescriptor.inputMetadata?.format, headerFormat, fallbackFormat)
+    if (detectedFormat) baseDescriptor.inputFormat = detectedFormat
+    baseDescriptor.width = Math.max(0, Number(baseDescriptor.inputMetadata?.width) || baseDescriptor.width || 0)
+    baseDescriptor.height = Math.max(0, Number(baseDescriptor.inputMetadata?.height) || baseDescriptor.height || 0)
+    baseDescriptor.hasAlpha = Boolean(baseDescriptor.inputMetadata?.hasAlpha)
+  }
+
+  if (!baseDescriptor.inputFormat) {
+    baseDescriptor.inputFormat = directHeaderFormat || fallbackFormat
+  }
+
+  if (cacheKey) ASSET_DESCRIPTOR_CACHE.set(cacheKey, baseDescriptor)
+  return mergeAssetDescriptor(assetOrPath, baseDescriptor)
+}
+
+async function getAssetInputFormat(sharpLib, asset) {
+  const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: false })
+  return normalizeImageFormatName(descriptor?.inputFormat || asset?.inputFormat || asset?.ext)
+}
+
+async function getAssetMetadata(sharpLib, asset) {
+  const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: true })
+  return descriptor?.inputMetadata || null
 }
 
 function isAlphaCapableFormat(format) {
@@ -3673,37 +3729,13 @@ const toolsApi = {
     const sharpLib = getSharp()
     return Promise.all(filePaths.map(async (filePath, index) => {
       const stat = fs.statSync(filePath)
-      let width = 0
-      let height = 0
-      let inputFormat = ''
-      if (sharpLib) {
-        try {
-          const metadata = await sharpLib(filePath).metadata()
-          width = Number(metadata?.width) || 0
-          height = Number(metadata?.height) || 0
-          const fallbackFormat = normalizeImageFormatName(path.extname(filePath).replace('.', '').toLowerCase())
-          inputFormat = resolveCanonicalInputFormat(metadata?.format, '', fallbackFormat)
-        } catch {
-          inputFormat = ''
-        }
-      }
-      if (!inputFormat) {
-        inputFormat = detectImageFormatFromFile(filePath)
-      }
-      if (!(width > 0 && height > 0) && inputFormat === 'bmp') {
-        try {
-          const decoded = getCachedPathValue(BMP_DECODE_CACHE, filePath, () => {
-            const sourceBuffer = fs.readFileSync(filePath)
-            return decodeBmpBuffer(sourceBuffer)
-          })
-          if (decoded) {
-            width = decoded.width
-            height = decoded.height
-          }
-        } catch {
-          // Fall through to nativeImage size probing.
-        }
-      }
+      const descriptor = await getAssetDescriptor(sharpLib, {
+        sourcePath: filePath,
+        ext: path.extname(filePath).replace('.', '').toLowerCase(),
+      }, { probeMetadata: true })
+      let width = Math.max(0, Number(descriptor?.width) || 0)
+      let height = Math.max(0, Number(descriptor?.height) || 0)
+      const inputFormat = normalizeImageFormatName(descriptor?.inputFormat || path.extname(filePath).replace('.', '').toLowerCase())
       if (!(width > 0 && height > 0)) {
         const image = createNativeImageFromInput(filePath)
         const size = !image || image.isEmpty() ? { width: 0, height: 0 } : image.getSize()
