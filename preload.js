@@ -471,7 +471,9 @@ async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib
 
   if (sharpLib) {
     try {
-      const buffer = await sharpLib(filePath, { animated: false })
+      const transformer = createTransformerFromInput(sharpLib, filePath, format)
+      if (transformer) {
+        const buffer = await transformer
         .resize({
           width: maxDimension,
           height: maxDimension,
@@ -481,9 +483,10 @@ async function createQueueThumbnailUrlAsync(filePath, inputFormat = '', sharpLib
         })
         .png()
         .toBuffer()
-      const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`
-      QUEUE_THUMBNAIL_URL_CACHE.set(cacheKey, dataUrl)
-      return dataUrl
+        const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`
+        QUEUE_THUMBNAIL_URL_CACHE.set(cacheKey, dataUrl)
+        return dataUrl
+      }
     } catch {}
   }
 
