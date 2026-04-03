@@ -213,11 +213,29 @@ function renderFormatConfig(config) {
 }
 
 function renderResizeConfig(config) {
+  const sizeMode = config.sizeMode || 'manual'
+  const useReferenceSize = sizeMode !== 'manual'
+  const referenceHint = sizeMode === 'max'
+    ? '自动取当前图片列表中最大的宽度和最大的高度'
+    : '自动取当前图片列表中最小的宽度和最小的高度'
   return renderSettingsSection(`
+    ${renderSegmented('resize', 'sizeMode', sizeMode, [
+      ['manual', '手动设置'],
+      ['max', '对齐最大宽高'],
+      ['min', '对齐最小宽高'],
+    ])}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px') })}
-      ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px') })}
+      ${renderInputField({ label: '宽度', toolId: 'resize', key: 'width', value: getMeasureInputValue(config.width, '1920'), unitMode: getMeasureUnit(config.width, 'px'), disabled: useReferenceSize })}
+      ${renderInputField({ label: '高度', toolId: 'resize', key: 'height', value: getMeasureInputValue(config.height, '1080'), unitMode: getMeasureUnit(config.height, 'px'), disabled: useReferenceSize })}
     `)}
+    ${useReferenceSize ? `
+      <label class="setting-row setting-row--stack">
+        <span class="setting-row__header">
+          <span class="setting-row__label"></span>
+        </span>
+        <span class="setting-row__hint setting-row__hint--compression">${referenceHint}</span>
+      </label>
+    ` : ''}
     ${renderToggleRow('锁定比例', '', 'resize', 'lockAspectRatio', config.lockAspectRatio)}
     <div>
       <div class="card-label" style="margin-bottom:6px;">常用尺寸</div>

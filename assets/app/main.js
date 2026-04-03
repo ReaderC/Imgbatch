@@ -3009,6 +3009,7 @@ function attachGlobalEvents() {
 
     if (action === 'apply-resize-preset') {
       updateConfig('resize', {
+        sizeMode: 'manual',
         width: target.dataset.width,
         height: target.dataset.height,
       })

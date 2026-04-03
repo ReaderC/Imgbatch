@@ -11,6 +11,7 @@ const IMAGE_EXTENSIONS = new Set([
 const TRANSPARENT_BG = { r: 0, g: 0, b: 0, alpha: 0 }
 const OPAQUE_WHITE_BG = { r: 255, g: 255, b: 255, alpha: 1 }
 const SHARP_INPUT_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif', 'bmp', 'ico'])
+const DIRECT_SHARP_INPUT_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'tiff', 'tif', 'avif', 'gif'])
 const SHARP_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif', 'gif'])
 const CUSTOM_OUTPUT_FORMATS = new Set(['bmp', 'ico'])
 const TARGET_COMPRESSION_FORMATS = new Set(['jpeg', 'webp', 'avif'])
@@ -84,7 +85,11 @@ const TOOL_LABELS = {
 function summarizeConfig(toolId, config = {}) {
   if (toolId === 'compression') return config.mode === 'quality' ? `压缩质量 ${config.quality}%` : `目标大小 ${config.targetSizeKb} KB`
   if (toolId === 'format') return `输出 ${config.targetFormat} / 质量 ${config.quality}%`
-  if (toolId === 'resize') return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit}`
+  if (toolId === 'resize') {
+    if (config.sizeMode === 'max') return `尺寸 对齐最大宽高 / 质量 ${config.quality}%`
+    if (config.sizeMode === 'min') return `尺寸 对齐最小宽高 / 质量 ${config.quality}%`
+    return `尺寸 ${config.width.value}${config.width.unit} × ${config.height.value}${config.height.unit} / 质量 ${config.quality}%`
+  }
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${config.position} / 质量 ${config.quality}%`
   if (toolId === 'corners') {
     const radius = String(config.radius ?? '').trim()
@@ -723,6 +728,7 @@ function normalizeRunConfig(toolId, config = {}) {
 
   if (toolId === 'resize') {
     return {
+      sizeMode: pickOption(config.sizeMode, ['manual', 'max', 'min'], 'manual'),
       width: normalizeMeasure(config.width, 1920, inferMeasureUnit(config.width, 'px')),
       height: normalizeMeasure(config.height, 1080, inferMeasureUnit(config.height, 'px')),
       lockAspectRatio: Boolean(config.lockAspectRatio),
@@ -876,6 +882,22 @@ function normalizeRunConfig(toolId, config = {}) {
 function prepareRunPayload(toolId, config, assets, destinationPath) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
+  if (toolId === 'resize' && normalizedConfig.sizeMode !== 'manual') {
+    const dimensions = normalizedAssets
+      .map((asset) => ({
+        width: Math.max(0, Math.round(Number(asset?.width) || 0)),
+        height: Math.max(0, Math.round(Number(asset?.height) || 0)),
+      }))
+      .filter((entry) => entry.width > 0 && entry.height > 0)
+    if (dimensions.length) {
+      const referenceSize = dimensions.slice(1).reduce((best, entry) => ({
+        width: normalizedConfig.sizeMode === 'min' ? Math.min(best.width, entry.width) : Math.max(best.width, entry.width),
+        height: normalizedConfig.sizeMode === 'min' ? Math.min(best.height, entry.height) : Math.max(best.height, entry.height),
+      }), dimensions[0])
+      normalizedConfig.width = normalizeMeasure(referenceSize.width, referenceSize.width, 'px')
+      normalizedConfig.height = normalizeMeasure(referenceSize.height, referenceSize.height, 'px')
+    }
+  }
   const manualCropSessionPath = toolId === 'manual-crop' ? sanitizeText(normalizedConfig.sessionOutputPath) : ''
   if (manualCropSessionPath) {
     const createdAt = new Date().toISOString()
@@ -1320,6 +1342,10 @@ function isFallbackDecodedInputFormat(format) {
   return normalized === 'bmp' || normalized === 'ico'
 }
 
+function isDirectSharpInputFormat(format) {
+  return DIRECT_SHARP_INPUT_FORMATS.has(normalizeImageFormatName(format))
+}
+
 function createNativeImageFromInput(input) {
   try {
     if (Buffer.isBuffer(input)) {
@@ -1565,7 +1591,7 @@ async function getAssetDescriptor(sharpLib, assetOrPath, options = {}) {
     } catch {}
   }
 
-  if (!baseDescriptor.inputMetadata && sharpLib) {
+  if (!baseDescriptor.inputMetadata && sharpLib && isDirectSharpInputFormat(baseDescriptor.inputFormat || headerFormat || fallbackFormat)) {
     try {
       const metadata = await sharpLib(sourcePath).metadata()
       baseDescriptor.inputMetadata = metadata
@@ -1909,7 +1935,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   let sourceFormat = normalizeImageFormatName(asset.inputFormat)
   let sourceInput = null
   const shouldProbeSourceFormat = Math.round(config.quality) >= 100
-    && (sourceFormat === format || !SHARP_INPUT_FORMATS.has(sourceFormat))
+    && (sourceFormat === format || !isDirectSharpInputFormat(sourceFormat))
 
   if (shouldProbeSourceFormat) {
     try {

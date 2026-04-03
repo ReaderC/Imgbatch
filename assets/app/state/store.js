@@ -9,7 +9,7 @@ let emitQueued = false
 const DEFAULT_CONFIGS = {
   compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
   format: { mode: 'quality', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
-  resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
+  resize: { sizeMode: 'manual', width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
   watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100, quality: 90 },
   corners: { radius: '24px', background: '#ffffff', keepTransparency: false, quality: 90 },
   padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100, quality: 90 },
