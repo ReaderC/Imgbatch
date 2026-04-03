@@ -6,6 +6,50 @@ const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 let batchDepth = 0
 let emitQueued = false
 
+const DEFAULT_CONFIGS = {
+  compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
+  format: { mode: 'quality', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
+  resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
+  watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100, quality: 90 },
+  corners: { radius: '24px', background: '#ffffff', keepTransparency: false, quality: 90 },
+  padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100, quality: 90 },
+  crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080, quality: 90 },
+  rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff', quality: 90 },
+  flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original', quality: 90 },
+  'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
+  'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, useMaxAssetSize: false, outputFormat: 'JPEG', quality: 90 },
+  'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true, useMaxAssetSize: false },
+  'manual-crop': {
+    ratio: '16:9 电影',
+    ratioValue: '16:9',
+    currentIndex: 0,
+    completedIds: [],
+    cropAreas: {},
+    helpOpen: false,
+    lastCompletedCropSeed: null,
+    angle: 0,
+    flipHorizontal: false,
+    flipVertical: false,
+    viewScale: 1,
+    viewOffsetX: 0,
+    viewOffsetY: 0,
+    stageWidth: 1600,
+    stageHeight: 900,
+    outerAreaMode: 'trim',
+    snapEnabled: true,
+    snapStrength: 'low',
+    lockAspectRatio: false,
+    sessionOutputPath: '',
+    keepOriginalFormat: true,
+  },
+}
+
+function cloneDefaultConfigs() {
+  return Object.fromEntries(
+    Object.entries(DEFAULT_CONFIGS).map(([toolId, config]) => [toolId, { ...config }]),
+  )
+}
+
 const state = {
   activeTool: DEFAULT_TOOL,
   lastWorkspaceTool: DEFAULT_TOOL,
@@ -32,43 +76,7 @@ const state = {
   sidebarCollapsed: false,
   assets: [],
   notifications: [],
-  configs: {
-    compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
-    format: { mode: 'quality', targetFormat: 'JPEG', quality: 90, keepTransparency: true, colorProfile: 'srgb' },
-    resize: { width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
-    watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100, quality: 90 },
-    corners: { radius: '24px', background: '#ffffff', keepTransparency: false, quality: 90 },
-    padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100, quality: 90 },
-    crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080, quality: 90 },
-    rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff', quality: 90 },
-    flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original', quality: 90 },
-    'merge-pdf': { pageSize: 'A4', margin: 'narrow', background: '#ffffff', autoPaginate: false },
-    'merge-image': { direction: 'vertical', pageWidth: 1920, spacing: 24, background: '#ffffff', align: 'start', preventUpscale: false, useMaxAssetSize: false, outputFormat: 'JPEG', quality: 90 },
-    'merge-gif': { width: 1080, height: 1080, interval: 500, background: '#ffffff', loop: true, useMaxAssetSize: false },
-    'manual-crop': {
-      ratio: '16:9 电影',
-      ratioValue: '16:9',
-      currentIndex: 0,
-      completedIds: [],
-      cropAreas: {},
-      helpOpen: false,
-      lastCompletedCropSeed: null,
-      angle: 0,
-      flipHorizontal: false,
-      flipVertical: false,
-      viewScale: 1,
-      viewOffsetX: 0,
-      viewOffsetY: 0,
-      stageWidth: 1600,
-      stageHeight: 900,
-      outerAreaMode: 'trim',
-      snapEnabled: true,
-      snapStrength: 'low',
-      lockAspectRatio: false,
-      sessionOutputPath: '',
-      keepOriginalFormat: true,
-    },
-  },
+  configs: cloneDefaultConfigs(),
 }
 
 export function getState() {
@@ -165,6 +173,20 @@ export function setResultView(resultView) {
   emit()
 }
 
+function markPreviewAssetsStale(toolId) {
+  if (!PREVIEW_SAVE_TOOLS.has(toolId)) return
+  let nextAssets = null
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    const nextAsset = markAssetPreviewStale(asset, toolId)
+    if (nextAsset !== asset) {
+      if (!nextAssets) nextAssets = [...state.assets]
+      nextAssets[index] = nextAsset
+    }
+  }
+  if (nextAssets) state.assets = nextAssets
+}
+
 export function updateConfig(toolId, patch) {
   const currentConfig = state.configs[toolId] || {}
   const entries = Object.entries(patch || {})
@@ -172,18 +194,23 @@ export function updateConfig(toolId, patch) {
   const hasConfigChanges = entries.some(([key, value]) => currentConfig[key] !== value)
   if (!hasConfigChanges) return
   state.configs[toolId] = { ...currentConfig, ...patch }
-  if (PREVIEW_SAVE_TOOLS.has(toolId)) {
-    let nextAssets = null
-    for (let index = 0; index < state.assets.length; index += 1) {
-      const asset = state.assets[index]
-      const nextAsset = markAssetPreviewStale(asset, toolId)
-      if (nextAsset !== asset) {
-        if (!nextAssets) nextAssets = [...state.assets]
-        nextAssets[index] = nextAsset
-      }
-    }
-    if (nextAssets) state.assets = nextAssets
+  markPreviewAssetsStale(toolId)
+  emit()
+}
+
+export function replaceConfig(toolId, config) {
+  const currentConfig = state.configs[toolId] || {}
+  const nextConfig = {
+    ...(DEFAULT_CONFIGS[toolId] ? { ...DEFAULT_CONFIGS[toolId] } : {}),
+    ...(config && typeof config === 'object' ? config : {}),
   }
+  const currentKeys = Object.keys(currentConfig)
+  const nextKeys = Object.keys(nextConfig)
+  const changed = currentKeys.length !== nextKeys.length
+    || nextKeys.some((key) => currentConfig[key] !== nextConfig[key])
+  if (!changed) return
+  state.configs[toolId] = nextConfig
+  markPreviewAssetsStale(toolId)
   emit()
 }
 
