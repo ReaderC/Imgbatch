@@ -1057,19 +1057,18 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
     for (const asset of sourceAssets) {
       throwIfRunCancelled(payload.runId)
       const nextAsset = { ...asset }
-      nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
-      const directKind = (() => {
-        const directFormat = detectImageFormatFromFile(nextAsset.sourcePath)
-        if (directFormat === 'png') return 'png'
-        if (directFormat === 'jpeg' || directFormat === 'jpg') return 'jpg'
-        return ''
-      })()
+      const directFormat = detectImageFormatFromFile(nextAsset.sourcePath)
+      const directKind = directFormat === 'png'
+        ? 'png'
+        : (directFormat === 'jpeg' || directFormat === 'jpg' ? 'jpg' : '')
       if (directKind) {
+        nextAsset.inputFormat = directKind === 'jpg' ? 'jpeg' : directKind
         preparedAssets.push(nextAsset)
         await yieldToEventLoop()
         continue
       }
 
+      nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
       const outputKind = isAlphaCapableFormat(nextAsset.inputFormat) ? 'png' : 'jpeg'
       const parsed = path.parse(nextAsset.sourcePath)
       const tempPath = path.join(tempDir, `${parsed.name || 'asset'}-${preparedAssets.length + 1}.${outputKind === 'jpeg' ? 'jpg' : 'png'}`)
