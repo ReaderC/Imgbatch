@@ -1103,7 +1103,7 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         continue
       }
 
-      nextAsset.inputFormat = directFormat || await getAssetInputFormat(sharpLib, nextAsset)
+      nextAsset.inputFormat = directFormat || normalizeImageFormatName(nextAsset.inputFormat || nextAsset.ext)
       const outputKind = isAlphaCapableFormat(nextAsset.inputFormat) ? 'png' : 'jpeg'
       if (!tempDir) {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
@@ -1676,16 +1676,6 @@ async function getAssetDescriptor(sharpLib, assetOrPath, options = {}) {
 
   if (cacheKey) ASSET_DESCRIPTOR_CACHE.set(cacheKey, baseDescriptor)
   return mergeAssetDescriptor(assetOrPath, baseDescriptor)
-}
-
-async function getAssetInputFormat(sharpLib, asset) {
-  const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: false })
-  return normalizeImageFormatName(descriptor?.inputFormat || asset?.inputFormat || asset?.ext)
-}
-
-async function getAssetMetadata(sharpLib, asset) {
-  const descriptor = await getAssetDescriptor(sharpLib, asset, { probeMetadata: true })
-  return descriptor?.inputMetadata || null
 }
 
 async function ensureAssetDescriptorState(sharpLib, asset, options = {}) {
