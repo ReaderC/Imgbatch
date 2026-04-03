@@ -1060,7 +1060,6 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
   const sourceAssets = Array.isArray(payload?.assets) ? payload.assets : []
   if (!sourceAssets.length) return payload
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
-  const tempPaths = []
   const preparedAssets = []
 
   try {
@@ -1081,7 +1080,6 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         ? createTransformer(sharpLib, nextAsset).png()
         : createTransformer(sharpLib, nextAsset).jpeg({ quality: 100, mozjpeg: true })
       await transformed.toFile(tempPath)
-      tempPaths.push(tempPath)
       preparedAssets.push({
         ...nextAsset,
         sourcePath: tempPath,
@@ -1094,7 +1092,6 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
       ...payload,
       assets: preparedAssets,
       mergePdfTempDir: tempDir,
-      mergePdfTempPaths: tempPaths,
     }
   } catch (error) {
     try {
