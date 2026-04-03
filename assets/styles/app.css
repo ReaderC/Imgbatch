@@ -1766,14 +1766,9 @@ html {
   display: block;
   grid-column: 1 / -1;
   margin-top: 2px;
-  white-space: nowrap;
-}
-
-@media (max-width: 1380px) {
-  .workspace:not(.workspace--result) .setting-row__hint--compression {
-    white-space: normal;
-    line-height: 1.35;
-  }
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .workspace:not(.workspace--result) .setting-row__hint--measure {
