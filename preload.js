@@ -1768,6 +1768,11 @@ function canCopyWithoutTransform(sourceFormat, outputFormat, transformQuality) {
     && canSkipSameFormatEncoding(outputFormat, transformQuality)
 }
 
+function shouldKeepOriginalSource(sourceFormat, outputFormat, quality = 100) {
+  return normalizeImageFormatName(sourceFormat) === normalizeImageFormatName(outputFormat)
+    && Math.round(Number(quality) || 0) >= 100
+}
+
 async function writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, transformQuality, options = {}) {
   const sourceFormat = normalizeImageFormatName(options.sourceFormat || asset?.inputFormat || asset?.ext)
   const fallback = options.fallback
@@ -1924,7 +1929,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('compression', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'compression', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'compression', format)
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
   const targetBytes = config.targetSizeKb * 1024
   const maxQuality = 90
@@ -1939,7 +1944,7 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     throw new Error('目标大小未小于原图，已跳过该文件')
   }
 
-  if (config.mode !== 'target' && sourceFormat === format && Math.round(config.quality) >= 100) {
+  if (config.mode !== 'target' && shouldKeepOriginalSource(sourceFormat, format, config.quality)) {
     return copyAssetToOutput(asset, outputPath)
   }
 
@@ -2040,7 +2045,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('format', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'format', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'format', format)
   let effectiveSourceFormat = sourceFormat
   let sourceInput = null
   const shouldProbeSourceFormat = Math.round(config.quality) >= 100
@@ -2059,7 +2064,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
     }
   }
 
-  if (Math.round(config.quality) >= 100 && effectiveSourceFormat === format) {
+  if (shouldKeepOriginalSource(effectiveSourceFormat, format, config.quality)) {
     return copyAssetToOutput(asset, outputPath, sourceInput)
   }
 
