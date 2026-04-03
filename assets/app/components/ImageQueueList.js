@@ -129,14 +129,14 @@ export function buildQueueItemClassName(baseClassName, flags = {}) {
   return `${baseClassName || 'queue-item'}${flags.denseLayout ? ' queue-item--dense' : ''}${flags.processingDenseLayout ? ' queue-item--processing-dense' : ''}`
 }
 
-export function renderQueueItemFragments(asset, tool, state, index, total, compactLayout = isCompactQueueLayout()) {
+export function renderQueueItemFragments(asset, tool, state, index, total, compactLayout = isCompactQueueLayout(), includeMarkup = true) {
   const assetFormat = getAssetFormatLabel(asset)
   const sortable = tool.mode === 'sort'
   const previewStatus = getToolPreviewStatus(asset, tool.id)
   const summaryText = asset.error ? `错误：${escapeHtml(asset.error)}` : getToolSummary(tool.id, state, asset)
   const compactTickerText = compactLayout ? getCompactQueueTickerText(asset, tool, state, assetFormat, summaryText) : ''
-  const resultMetaMarkup = renderResultMeta(asset, tool, previewStatus)
-  const primaryActionMarkup = sortable ? '' : renderPrimaryAction(asset, tool, previewStatus)
+  const resultMetaMarkup = includeMarkup ? renderResultMeta(asset, tool, previewStatus) : ''
+  const primaryActionMarkup = includeMarkup && !sortable ? renderPrimaryAction(asset, tool, previewStatus) : ''
   return {
     itemClassName: `queue-item${sortable ? ' queue-item--sortable' : ''}`,
     draggable: sortable,
@@ -164,7 +164,7 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
       index,
       total,
     ].join('\u0001'),
-    contentMarkup: `
+    contentMarkup: includeMarkup ? `
       <p class="queue-item__name" data-tooltip="${escapeHtml(asset.name)}" data-tooltip-overflow="true">${escapeHtml(asset.name)}</p>
       <div class="queue-item__subline queue-item__subline--meta">
         <span class="queue-pill">${formatBytes(asset.sizeBytes)}</span>
@@ -178,8 +178,8 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
       ${resultMetaMarkup}
       ${asset.savedOutputPath && asset.savedOutputPath !== asset.outputPath ? `<div class="queue-item__subline"><span>已保存：${escapeHtml(asset.savedOutputPath)}</span></div>` : ''}
       ${asset.warning ? `<div class="queue-item__subline queue-item__subline--hint"><span>提示：${escapeHtml(asset.warning)}</span></div>` : ''}
-    `,
-    controlsMarkup: sortable ? `
+    ` : '',
+    controlsMarkup: includeMarkup ? (sortable ? `
       <button class="icon-button" data-action="move-asset" data-direction="up" data-asset-id="${asset.id}" ${index === 0 ? 'disabled' : ''}>
         <span class="material-symbols-outlined">keyboard_arrow_up</span>
       </button>
@@ -195,7 +195,7 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
       <button class="icon-button" data-action="remove-asset" data-asset-id="${asset.id}" data-tooltip="移除" aria-label="移除">
         <span class="material-symbols-outlined">close</span>
       </button>
-    `,
+    `) : '',
   }
 }
 

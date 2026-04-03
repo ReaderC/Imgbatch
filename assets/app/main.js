@@ -1513,9 +1513,10 @@ function patchQueueItemsForToolChange(state) {
     const assetIndex = assetIndexMap.get(assetId)
     if (assetIndex == null) return
     const asset = state.assets[assetIndex]
-    const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout)
+    const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout, false)
     const expectedItemClassName = buildQueueItemClassName(fragments.itemClassName, layoutFlags)
     const expectedDraggable = fragments.draggable ? 'true' : null
+    let nextFragments = null
     if (item.className !== expectedItemClassName) {
       item.className = expectedItemClassName
       changed = true
@@ -1527,14 +1528,16 @@ function patchQueueItemsForToolChange(state) {
     }
     const content = item.querySelector('.queue-item__content')
     if (content && content.dataset.renderSignature !== fragments.contentSignature) {
-      content.innerHTML = fragments.contentMarkup
-      content.dataset.renderSignature = fragments.contentSignature
+      nextFragments = nextFragments || renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout, true)
+      content.innerHTML = nextFragments.contentMarkup
+      content.dataset.renderSignature = nextFragments.contentSignature
       changed = true
     }
     const controls = item.querySelector('.queue-item__controls')
     if (controls && controls.dataset.renderSignature !== fragments.controlsSignature) {
-      controls.innerHTML = fragments.controlsMarkup
-      controls.dataset.renderSignature = fragments.controlsSignature
+      nextFragments = nextFragments || renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout, true)
+      controls.innerHTML = nextFragments.controlsMarkup
+      controls.dataset.renderSignature = nextFragments.controlsSignature
       changed = true
     }
   })
