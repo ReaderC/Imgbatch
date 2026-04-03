@@ -2715,7 +2715,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const dominantSize = targetSpan
-  const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
+  const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
@@ -2769,7 +2769,15 @@ async function writeMergeImageAsset(sharpLib, payload) {
       width: info.width || Math.max(1, Math.round(baseWidth * scale)),
       height: info.height || Math.max(1, Math.round(baseHeight * scale)),
     }
-  })
+  }
+  const prepared = []
+  for (let index = 0; index < payload.assets.length; index += prepareConcurrency) {
+    throwIfRunCancelled(payload.runId)
+    const batch = payload.assets.slice(index, index + prepareConcurrency)
+    const preparedBatch = await mapWithConcurrency(batch, prepareConcurrency, prepareAsset)
+    prepared.push(...preparedBatch)
+    await yieldToEventLoop()
+  }
   throwIfRunCancelled(payload.runId)
   let contentWidth = 0
   let contentHeight = 0
