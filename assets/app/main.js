@@ -38,7 +38,7 @@ import {
 import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
 import { getFormatCapability } from './services/ztools-bridge.js'
-import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getAssetById, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, replaceConfig, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
+import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getAssetById, getAssetIndexById, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, replaceConfig, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
 import { cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, savePreset, saveSettings, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -2718,7 +2718,7 @@ function attachGlobalEvents() {
         const state = getState()
         const assetId = target.dataset.assetId
         const config = state.configs['manual-crop']
-        const removeIndex = state.assets.findIndex((item) => item.id === assetId)
+        const removeIndex = getAssetIndexById(assetId)
         if (removeIndex !== -1) {
           const nextAssets = state.assets.filter((item) => item.id !== assetId)
           const cropAreas = { ...(config.cropAreas || {}) }

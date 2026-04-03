@@ -108,6 +108,10 @@ export function getAssetById(assetId) {
   return assetIndex === -1 ? null : state.assets[assetIndex]
 }
 
+export function getAssetIndexById(assetId) {
+  return findAssetIndexById(assetId)
+}
+
 export function subscribe(listener) {
   listeners.add(listener)
   return () => listeners.delete(listener)
