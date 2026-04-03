@@ -79,6 +79,21 @@ export function renderImageQueue(state, viewport = null) {
   `
 }
 
+export function renderQueueItemsMarkup(state, startIndex = 0) {
+  const tool = TOOL_MAP[state.activeTool]
+  const assets = state.assets
+  const layoutFlags = getQueueLayoutFlags(state)
+  return renderVisibleQueueItems(
+    assets,
+    { startIndex, endIndex: assets.length },
+    tool,
+    state,
+    layoutFlags.compactLayout,
+    layoutFlags.denseLayout,
+    layoutFlags.processingDenseLayout,
+  )
+}
+
 function renderVisibleQueueItems(assets, queueWindow, tool, state, compactLayout, denseLayout, processingDenseLayout) {
   let markup = ''
   const startIndex = queueWindow ? queueWindow.startIndex : 0

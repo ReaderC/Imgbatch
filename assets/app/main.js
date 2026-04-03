@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { buildQueueClassName, buildQueueItemClassName, getQueueItemRenderSignatures, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { buildQueueClassName, buildQueueItemClassName, getQueueItemRenderSignatures, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, renderQueueItemsMarkup, shouldVirtualizeQueue } from './components/ImageQueueList.js'
 import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
@@ -1365,6 +1365,15 @@ function hasSameAssetSet(previousAssets = [], nextAssets = []) {
   return nextAssets.every((asset) => previousIds.has(asset?.id))
 }
 
+function hasAssetOrderPrefix(previousAssets = [], nextAssets = []) {
+  if (!Array.isArray(previousAssets) || !Array.isArray(nextAssets)) return false
+  if (previousAssets.length >= nextAssets.length) return false
+  for (let index = 0; index < previousAssets.length; index += 1) {
+    if (previousAssets[index]?.id !== nextAssets[index]?.id) return false
+  }
+  return true
+}
+
 function renderNotificationsRoot(items) {
   return `<div class="render-slot" data-root="notifications">${renderNotifications(items)}</div>`
 }
@@ -1708,6 +1717,30 @@ function patchQueueSortControlsInPlace(queueList, state) {
   })
 }
 
+function appendQueueItemsInPlace(state, previousAssets) {
+  const root = getRootNode('queue')
+  if (!root) return false
+  const queueList = root.querySelector('.queue-list')
+  if (!queueList) return false
+  const previousCount = Array.isArray(previousAssets) ? previousAssets.length : 0
+  const currentItems = queueList.querySelectorAll('.queue-item[data-asset-id]')
+  if (currentItems.length !== previousCount) return false
+  const previousScrollTop = Math.max(0, queueList.scrollTop || 0)
+  const previousScrollLeft = Math.max(0, queueList.scrollLeft || 0)
+  const markup = renderQueueItemsMarkup(state, previousCount)
+  if (markup) {
+    queueList.insertAdjacentHTML('beforeend', markup)
+  }
+  queueList.scrollTop = previousScrollTop
+  queueList.scrollLeft = previousScrollLeft
+  queueViewportState.scrollTop = Math.max(0, queueList.scrollTop || 0)
+  queueViewportState.height = Math.max(0, queueList.clientHeight || 0)
+  patchQueueSortControlsInPlace(queueList, state)
+  rootMarkupCache.queue = renderImageQueue(state, null)
+  queueMarkupCacheDirty = false
+  return true
+}
+
 function queueQueueItemPatch() {
   if (queueItemPatchFrame) return
   queueItemPatchFrame = requestAnimationFrame(() => {
@@ -1812,6 +1845,13 @@ function shouldPatchQueueOrderInPlace(diff, prevSnapshot, nextSnapshot, state) {
   if (TOOL_MAP[state.activeTool]?.mode !== 'sort') return false
   if (hasSameAssetOrder(prevSnapshot.assets, state.assets)) return false
   return hasSameAssetSet(prevSnapshot.assets, state.assets)
+}
+
+function shouldAppendQueueItemsInPlace(diff, prevSnapshot, nextSnapshot, state) {
+  if (nextSnapshot.mode !== 'workspace' || diff.previousMode !== 'workspace') return false
+  if (diff.toolChanged || diff.modeChanged) return false
+  if (TOOL_MAP[state.activeTool]?.mode !== 'sort') return false
+  return hasAssetOrderPrefix(prevSnapshot.assets, state.assets)
 }
 
 function canPatchShell(prev, next) {
@@ -1972,9 +2012,13 @@ function render(state) {
     if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
+    const shouldAppendQueue = shouldAppendQueueItemsInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
     const shouldPatchQueueOrder = shouldPatchQueueOrderInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
-    const shouldPatchQueue = !shouldPatchQueueOrder && shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
-    if (shouldPatchQueueOrder) {
+    const shouldPatchQueue = !shouldAppendQueue && !shouldPatchQueueOrder && shouldPatchQueueInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
+    if (shouldAppendQueue) {
+      appendQueueItemsInPlace(state, lastRenderSnapshot.assets)
+      effectiveQueueChanged = false
+    } else if (shouldPatchQueueOrder) {
       patchQueueOrderInPlace(state)
       effectiveQueueChanged = false
     } else if (shouldPatchQueue) {
@@ -2260,8 +2304,6 @@ async function bootstrapLaunchInputs() {
 
 function appendImportedAssets(assets, verb = '已导入') {
   if (!assets?.length) return
-  captureQueueScrollPosition()
-  queueQueueScrollRestore()
   appendAssets(assets)
   notify({ type: 'success', message: `${verb} ${assets.length} 张图片。` })
 }
