@@ -3252,7 +3252,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     const needsMetadata = autoPaginateFixedPage && !(sourceWidth > 0 && sourceHeight > 0)
     const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: needsMetadata })
     asset.inputFormat = inputFormat
-    const imageBytes = fs.readFileSync(asset.sourcePath)
+    const sourceFormat = normalizeImageFormatName(asset.inputFormat || asset.ext)
     const margin = fixedMargin ?? (payload.config.margin === 'none'
       ? 0
       : payload.config.margin === 'wide'
@@ -3261,9 +3261,9 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           ? Math.round((sourceWidth || 1) * 0.06)
           : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
-      imageBytes,
+      imageBytes: null,
       sourcePath: asset.sourcePath,
-      sourceFormat: normalizeImageFormatName(asset.inputFormat || asset.ext),
+      sourceFormat,
       sourceWidth,
       sourceHeight,
       margin,
@@ -3318,10 +3318,15 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   for (const prepared of preparedAssets) {
     throwIfRunCancelled(payload.runId)
     await yieldToEventLoop()
-    const { imageBytes } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
     let sourceHeight = prepared.sourceHeight
+    const ensureSourceBytes = () => {
+      if (!prepared.imageBytes) {
+        prepared.imageBytes = fs.readFileSync(prepared.sourcePath)
+      }
+      return prepared.imageBytes
+    }
     const ensureEmbedded = async () => {
       if (embedded) return embedded
       if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
@@ -3329,9 +3334,9 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
         embedded = await pdf.embedJpg(prepared.embeddedBytes)
       } else if (prepared.sourceFormat === 'png') {
-        embedded = await pdf.embedPng(imageBytes)
+        embedded = await pdf.embedPng(ensureSourceBytes())
       } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
-        embedded = await pdf.embedJpg(imageBytes)
+        embedded = await pdf.embedJpg(ensureSourceBytes())
       } else {
         embedded = await pdf.embedPng(
           prepared.embeddedBytes || await createTransformer(sharpLib, {
