@@ -2712,7 +2712,6 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     throwIfRunCancelled(payload.runId)
-    asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
@@ -3137,17 +3136,27 @@ async function writeMergeGifAsset(sharpLib, payload) {
     const index = applyPalette(data, palette)
     return { index, palette }
   }
-  const preparedFrames = payload.assets.length === 1
-    ? [await prepareFrame(payload.assets[0])]
-    : await mapWithConcurrency(payload.assets, frameConcurrency, prepareFrame)
-  throwIfRunCancelled(payload.runId)
-
-  for (const frame of preparedFrames) {
+  if (payload.assets.length === 1) {
+    const frame = await prepareFrame(payload.assets[0])
     throwIfRunCancelled(payload.runId)
     encoder.writeFrame(frame.index, frameWidth, frameHeight, {
       palette: frame.palette,
       ...frameWriteOptions,
     })
+  } else {
+    for (let index = 0; index < payload.assets.length; index += frameConcurrency) {
+      throwIfRunCancelled(payload.runId)
+      const batch = payload.assets.slice(index, index + frameConcurrency)
+      const preparedFrames = await mapWithConcurrency(batch, frameConcurrency, prepareFrame)
+      for (const frame of preparedFrames) {
+        throwIfRunCancelled(payload.runId)
+        encoder.writeFrame(frame.index, frameWidth, frameHeight, {
+          palette: frame.palette,
+          ...frameWriteOptions,
+        })
+      }
+      await yieldToEventLoop()
+    }
   }
 
   encoder.finish()
