@@ -81,6 +81,9 @@ const DRAG_CONTEXT = {
   previewPan: null,
   queueSort: null,
 }
+let activeQueueSortDragItem = null
+let activeQueueSortBeforeItem = null
+let activeQueueSortAfterItem = null
 let resultMarqueeFrame = 0
 let activeTooltipTarget = null
 let tooltipElement = null
@@ -3125,8 +3128,12 @@ function getQueueSortDropTarget(event) {
 }
 
 function clearQueueSortIndicators() {
-  document.querySelectorAll('.queue-item--sortable.is-dragging, .queue-item--sortable.is-drop-before, .queue-item--sortable.is-drop-after')
-    .forEach((item) => item.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after'))
+  activeQueueSortDragItem?.classList.remove('is-dragging')
+  activeQueueSortBeforeItem?.classList.remove('is-drop-before')
+  activeQueueSortAfterItem?.classList.remove('is-drop-after')
+  activeQueueSortDragItem = null
+  activeQueueSortBeforeItem = null
+  activeQueueSortAfterItem = null
 }
 
 function getAdjacentSortableItem(item, direction) {
@@ -3142,12 +3149,30 @@ function getAdjacentSortableItem(item, direction) {
 function markQueueSortInsertionGap(item, placement) {
   if (!item) return
   if (placement === 'after') {
-    item.classList.add('is-drop-after')
-    getAdjacentSortableItem(item, 'next')?.classList.add('is-drop-before')
+    const nextBeforeItem = getAdjacentSortableItem(item, 'next')
+    if (activeQueueSortAfterItem !== item) {
+      activeQueueSortAfterItem?.classList.remove('is-drop-after')
+      item.classList.add('is-drop-after')
+      activeQueueSortAfterItem = item
+    }
+    if (activeQueueSortBeforeItem !== nextBeforeItem) {
+      activeQueueSortBeforeItem?.classList.remove('is-drop-before')
+      nextBeforeItem?.classList.add('is-drop-before')
+      activeQueueSortBeforeItem = nextBeforeItem
+    }
     return
   }
-  item.classList.add('is-drop-before')
-  getAdjacentSortableItem(item, 'prev')?.classList.add('is-drop-after')
+  const nextAfterItem = getAdjacentSortableItem(item, 'prev')
+  if (activeQueueSortBeforeItem !== item) {
+    activeQueueSortBeforeItem?.classList.remove('is-drop-before')
+    item.classList.add('is-drop-before')
+    activeQueueSortBeforeItem = item
+  }
+  if (activeQueueSortAfterItem !== nextAfterItem) {
+    activeQueueSortAfterItem?.classList.remove('is-drop-after')
+    nextAfterItem?.classList.add('is-drop-after')
+    activeQueueSortAfterItem = nextAfterItem
+  }
 }
 
 function beginQueueSortDrag(item, event) {
@@ -3156,6 +3181,7 @@ function beginQueueSortDrag(item, event) {
   DRAG_CONTEXT.queueSort = { assetId: item.dataset.assetId }
   clearQueueSortIndicators()
   item.classList.add('is-dragging')
+  activeQueueSortDragItem = item
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', item.dataset.assetId || '')
@@ -3163,9 +3189,20 @@ function beginQueueSortDrag(item, event) {
 }
 
 function updateQueueSortDropIndicator(item, clientY) {
-  clearQueueSortIndicators()
   if (!DRAG_CONTEXT.queueSort || item.dataset.assetId === DRAG_CONTEXT.queueSort.assetId) {
-    item.classList.add('is-dragging')
+    if (activeQueueSortBeforeItem) {
+      activeQueueSortBeforeItem.classList.remove('is-drop-before')
+      activeQueueSortBeforeItem = null
+    }
+    if (activeQueueSortAfterItem) {
+      activeQueueSortAfterItem.classList.remove('is-drop-after')
+      activeQueueSortAfterItem = null
+    }
+    if (activeQueueSortDragItem !== item) {
+      activeQueueSortDragItem?.classList.remove('is-dragging')
+      item.classList.add('is-dragging')
+      activeQueueSortDragItem = item
+    }
     return
   }
   const rect = item.getBoundingClientRect()
