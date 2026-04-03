@@ -412,6 +412,12 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
   }
 }
 
+function writeOutputBuffer(outputPath, buffer, info = {}, fallback = {}) {
+  fs.writeFileSync(outputPath, buffer)
+  const size = Number(buffer?.length ?? buffer?.byteLength) || Number(info?.size) || 0
+  return createOutputMeta(outputPath, { ...info, size }, fallback)
+}
+
 function createAssetDisplayUrl(filePath, inputFormat = '') {
   const format = normalizeImageFormatName(inputFormat)
   if (format === 'bmp' || format === 'ico' || format === 'tiff') {
@@ -585,8 +591,7 @@ function applyFormatOutputSettings(transformer, outputFormat, options = {}) {
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
-    fs.writeFileSync(outputPath, buffer)
-    return createOutputMeta(outputPath, { size: buffer.length }, fallback)
+    return writeOutputBuffer(outputPath, buffer, {}, fallback)
   }
 
   if (format === 'ico') {
@@ -595,9 +600,7 @@ async function writeTransformedAsset(transformer, format, quality, outputPath, f
       .png({ compressionLevel: 9, effort: 10 })
       .toBuffer({ resolveWithObject: true })
     const buffer = createIcoBuffer(data, info.width || 256, info.height || 256)
-    fs.writeFileSync(outputPath, buffer)
-    return createOutputMeta(outputPath, {
-      size: buffer.length,
+    return writeOutputBuffer(outputPath, buffer, {
       width: info.width || fallback.width || 256,
       height: info.height || fallback.height || 256,
     }, fallback)
@@ -2165,13 +2168,11 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   if (originalSizeBytes && chosenBuffer.length >= originalSizeBytes) {
     throw new Error('压缩结果未小于原图，已跳过该文件')
   }
-  fs.writeFileSync(outputPath, chosenBuffer)
   return {
-    outputPath,
-    outputName: path.basename(outputPath),
-    outputSizeBytes: chosenBuffer.length,
-    width: asset.width || 0,
-    height: asset.height || 0,
+    ...writeOutputBuffer(outputPath, chosenBuffer, {
+      width: asset.width || 0,
+      height: asset.height || 0,
+    }),
     warning,
   }
 }
@@ -3445,13 +3446,10 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   const saveObjectsPerTick = payload.assets.length > 8 ? 8 : 16
   const bytes = await pdf.save({ objectsPerTick: saveObjectsPerTick })
   throwIfRunCancelled(payload.runId)
-  fs.writeFileSync(outputPath, bytes)
-  return {
-    outputPath,
-    outputSizeBytes: bytes.length,
+  return writeOutputBuffer(outputPath, bytes, {
     width: fixedPageSize?.[0] || 0,
     height: fixedPageSize?.[1] || 0,
-  }
+  })
 }
 
 async function writeMergeGifAsset(sharpLib, payload) {
@@ -3521,11 +3519,7 @@ async function writeMergeGifAsset(sharpLib, payload) {
   encoder.finish()
   throwIfRunCancelled(payload.runId)
   const bytes = encoder.bytesView()
-  fs.writeFileSync(outputPath, bytes)
-  return {
-    outputPath,
-    outputSizeBytes: bytes.byteLength,
-  }
+  return writeOutputBuffer(outputPath, bytes)
 }
 
 async function executeAssetTool(sharpLib, payload, asset) {
