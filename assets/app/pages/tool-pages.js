@@ -405,17 +405,25 @@ function renderMergePdfConfig(config) {
 function renderMergeImageConfig(config) {
   const outputFormat = String(config.outputFormat || 'JPEG')
   const qualitySupported = !!getFormatCapability(outputFormat)?.supportsQuality
+  const isVertical = config.direction === 'vertical'
+  const targetSizeLabel = isVertical ? '目标宽度' : '目标高度'
+  const preventUpscaleHint = isVertical
+    ? '小于目标宽度的图片不放大，按原尺寸居中留白'
+    : '小于目标高度的图片不放大，按原尺寸居中留白'
+  const useMaxAssetHint = isVertical
+    ? '自动取当前图片列表中的最大宽度作为目标宽度'
+    : '自动取当前图片列表中的最大高度作为目标高度'
   return renderSettingsSection(`
     ${renderSegmented('merge-image', 'direction', config.direction, [
       ['vertical', '纵向'],
       ['horizontal', '横向'],
     ])}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '页面宽度', toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1, disabled: config.useMaxAssetSize })}
+      ${renderInputField({ label: targetSizeLabel, toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1, disabled: config.useMaxAssetSize })}
       ${renderInputField({ label: '图片间距', toolId: 'merge-image', key: 'spacing', type: 'number', value: config.spacing, min: 0 })}
     `)}
-    ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
-    ${renderToggleRow('使用列表最大宽高', '纵向拼接时自动取列表最大宽度，横向拼接时自动取列表最大高度', 'merge-image', 'useMaxAssetSize', config.useMaxAssetSize)}
+    ${renderToggleRow('小图保持原尺寸', preventUpscaleHint, 'merge-image', 'preventUpscale', config.preventUpscale)}
+    ${renderToggleRow('使用列表最大宽高', useMaxAssetHint, 'merge-image', 'useMaxAssetSize', config.useMaxAssetSize)}
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
     `)}
