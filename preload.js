@@ -1090,7 +1090,8 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
     for (const asset of sourceAssets) {
       throwIfRunCancelled(payload.runId)
       const nextAsset = { ...asset }
-      const directFormat = detectImageFormatFromFile(nextAsset.sourcePath)
+      const descriptor = await getAssetDescriptor(sharpLib, nextAsset, { probeMetadata: false })
+      const directFormat = normalizeImageFormatName(descriptor?.inputFormat || nextAsset.inputFormat)
       const directKind = directFormat === 'png'
         ? 'png'
         : (directFormat === 'jpeg' || directFormat === 'jpg' ? 'jpg' : '')
@@ -1102,7 +1103,7 @@ async function prepareMergePdfChildPayload(sharpLib, payload) {
         continue
       }
 
-      nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
+      nextAsset.inputFormat = directFormat || await getAssetInputFormat(sharpLib, nextAsset)
       const outputKind = isAlphaCapableFormat(nextAsset.inputFormat) ? 'png' : 'jpeg'
       if (!tempDir) {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
