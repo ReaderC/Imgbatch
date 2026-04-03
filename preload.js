@@ -2,8 +2,7 @@ const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync } = require('child_process')
-const { Worker } = require('worker_threads')
+const { execFileSync, fork } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -1050,11 +1049,8 @@ function yieldToEventLoop() {
 
 function runMergePdfWorker(payload) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), {
-      workerData: {
-        payload,
-        performanceMode: getAppSettings().performanceMode || 'balanced',
-      },
+    const worker = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     })
     const runId = String(payload?.runId || '').trim()
     let settled = false
@@ -1067,6 +1063,11 @@ function runMergePdfWorker(payload) {
     if (runId) {
       ACTIVE_MERGE_WORKERS.set(runId, worker)
     }
+    worker.send({
+      type: 'start',
+      payload,
+      performanceMode: getAppSettings().performanceMode || 'balanced',
+    })
     worker.on('message', (message) => {
       if (!message || typeof message !== 'object') return
       if (message.type === 'progress') {
@@ -1082,12 +1083,18 @@ function runMergePdfWorker(payload) {
       if (message.type === 'result') {
         settled = true
         cleanup()
+        try {
+          worker.kill()
+        } catch {}
         resolve(message.result)
         return
       }
       if (message.type === 'error') {
         settled = true
         cleanup()
+        try {
+          worker.kill()
+        } catch {}
         const error = new Error(message.error || 'PDF 合并失败')
         if (message.code) error.code = message.code
         reject(error)

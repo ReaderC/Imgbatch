@@ -1,7 +1,6 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { parentPort, workerData } = require('worker_threads')
 
 const CPU_COUNT = Math.max(1, os.cpus()?.length || 1)
 const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ico'])
@@ -47,7 +46,9 @@ function getPerformanceProfile(mode) {
 }
 
 function postProgress(detail) {
-  parentPort?.postMessage({ type: 'progress', detail })
+  if (typeof process.send === 'function') {
+    process.send({ type: 'progress', detail })
+  }
 }
 
 function mapWithConcurrency(items, concurrency, worker) {
@@ -71,7 +72,11 @@ function mapWithConcurrency(items, concurrency, worker) {
 async function run() {
   const sharp = require('sharp')
   const pdfLib = require('pdf-lib')
-  const { payload, performanceMode } = workerData || {}
+  const message = await new Promise((resolve) => {
+    process.once('message', resolve)
+  })
+  const payload = message?.payload || null
+  const performanceMode = message?.performanceMode || 'balanced'
   if (!payload?.destinationPath) throw new Error('Missing destination path')
 
   const profile = getPerformanceProfile(performanceMode)
@@ -306,12 +311,18 @@ async function run() {
 
 run()
   .then((result) => {
-    parentPort?.postMessage({ type: 'result', result })
+    if (typeof process.send === 'function') {
+      process.send({ type: 'result', result })
+    }
+    process.exit(0)
   })
   .catch((error) => {
-    parentPort?.postMessage({
-      type: 'error',
-      error: error?.message || 'PDF merge failed',
-      code: error?.code || '',
-    })
+    if (typeof process.send === 'function') {
+      process.send({
+        type: 'error',
+        error: error?.message || 'PDF merge failed',
+        code: error?.code || '',
+      })
+    }
+    process.exit(error?.code === 'RUN_CANCELLED' ? 1 : 2)
   })
