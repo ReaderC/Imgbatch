@@ -208,25 +208,35 @@ export function setSearchQuery(value) {
 }
 
 export function replaceAssets(assets) {
-  state.assets = assets.map(createAssetState)
+  const nextAssets = assets.map(createAssetState)
+  if (
+    nextAssets.length === state.assets.length
+    && nextAssets.every((asset, index) => state.assets[index]?.sourcePath === asset.sourcePath)
+  ) return
+  state.assets = nextAssets
   emit()
 }
 
 export function appendAssets(assets) {
   const known = new Set(state.assets.map((item) => item.sourcePath))
   const next = [...state.assets]
+  let appended = false
   for (const asset of assets) {
     if (!known.has(asset.sourcePath)) {
       next.push(createAssetState(asset))
       known.add(asset.sourcePath)
+      appended = true
     }
   }
+  if (!appended) return
   state.assets = next
   emit()
 }
 
 export function removeAsset(assetId) {
-  state.assets = state.assets.filter((item) => item.id !== assetId)
+  const nextAssets = state.assets.filter((item) => item.id !== assetId)
+  if (nextAssets.length === state.assets.length) return
+  state.assets = nextAssets
   emit()
 }
 
