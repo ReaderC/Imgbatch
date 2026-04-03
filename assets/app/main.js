@@ -1869,7 +1869,7 @@ function queuePostRenderWork(work) {
     if (!nextWork) return
     if (nextWork.toolbarChanged) injectResultToolbar()
     if (nextWork.snapshot) restoreUiSnapshot(nextWork.snapshot)
-    if ((nextWork.tooltipRoots || []).length && document.querySelector('[title]:not([data-tooltip])')) {
+    if ((nextWork.tooltipRoots || []).length) {
       for (const root of nextWork.tooltipRoots || []) {
         syncCustomTooltips(root)
       }
@@ -1911,14 +1911,7 @@ function syncCustomTooltips(root = app) {
   const hasDirectTitle = root.matches?.('[title]:not([data-tooltip])')
   const hasNestedTitle = root.querySelector?.('[title]:not([data-tooltip])')
   if (!hasDirectTitle && !hasNestedTitle) return
-  const nodes = []
-  if (hasDirectTitle) {
-    nodes.push(root)
-  }
-  root.querySelectorAll?.('[title]:not([data-tooltip])').forEach((node) => {
-    nodes.push(node)
-  })
-  nodes.forEach((node) => {
+  const applyTooltip = (node) => {
     const text = String(node.getAttribute('title') || '').trim()
     if (!text) return
     node.dataset.tooltip = text
@@ -1926,7 +1919,9 @@ function syncCustomTooltips(root = app) {
       node.setAttribute('aria-label', text)
     }
     node.removeAttribute('title')
-  })
+  }
+  if (hasDirectTitle) applyTooltip(root)
+  root.querySelectorAll?.('[title]:not([data-tooltip])').forEach(applyTooltip)
 }
 
 function positionTooltip(target) {
