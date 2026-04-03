@@ -53,6 +53,8 @@ const FALLBACK_IMAGE_BUFFER_CACHE = new Map()
 const DISPLAY_URL_CACHE = new Map()
 const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
+const ICO_PNG_CACHE = new Map()
+const ICO_METADATA_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const ASSET_DESCRIPTOR_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
@@ -367,9 +369,12 @@ async function readOutputMeta(outputPath, sharpLib = null) {
 
   if (sharpLib) {
     try {
-      const metadata = await sharpLib(outputPath).metadata()
-      width = metadata.width || 0
-      height = metadata.height || 0
+      const descriptor = await getAssetDescriptor(sharpLib, {
+        sourcePath: outputPath,
+        ext: path.extname(outputPath).replace('.', '').toLowerCase(),
+      }, { probeMetadata: true })
+      width = Number(descriptor?.width) || 0
+      height = Number(descriptor?.height) || 0
     } catch {
       width = 0
       height = 0
@@ -1382,6 +1387,10 @@ function createNativeImagePngBuffer(input) {
   })
 }
 
+function getCachedIcoPngBuffer(input) {
+  return getCachedPathValue(ICO_PNG_CACHE, input, () => createNativeImagePngBuffer(input))
+}
+
 function decodeBmpBuffer(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 54) return null
   if (buffer[0] !== 0x42 || buffer[1] !== 0x4d) return null
@@ -1425,6 +1434,41 @@ function decodeBmpBuffer(buffer) {
     height,
     channels: 4,
   }
+}
+
+function parseIcoDirectory(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 22) return null
+  if (buffer.readUInt16LE(0) !== 0 || buffer.readUInt16LE(2) !== 1) return null
+  const count = buffer.readUInt16LE(4)
+  if (count <= 0 || buffer.length < 6 + count * 16) return null
+  let bestEntry = null
+  for (let index = 0; index < count; index += 1) {
+    const offset = 6 + index * 16
+    const width = buffer[offset] || 256
+    const height = buffer[offset + 1] || 256
+    const colorCount = buffer[offset + 2]
+    const bitCount = buffer.readUInt16LE(offset + 6)
+    const bytesInRes = buffer.readUInt32LE(offset + 8)
+    const imageOffset = buffer.readUInt32LE(offset + 12)
+    if (!(width > 0 && height > 0) || !(bytesInRes > 0) || !(imageOffset > 0)) continue
+    const score = width * height * 1000 + Math.max(bitCount, colorCount || 0)
+    if (!bestEntry || score > bestEntry.score) {
+      bestEntry = { width, height, score }
+    }
+  }
+  return bestEntry ? { width: bestEntry.width, height: bestEntry.height } : null
+}
+
+function getCachedIcoMetadata(input) {
+  return getCachedPathValue(ICO_METADATA_CACHE, input, () => {
+    if (Buffer.isBuffer(input)) return parseIcoDirectory(input)
+    if (typeof input !== 'string' || !input) return null
+    try {
+      return parseIcoDirectory(fs.readFileSync(input))
+    } catch {
+      return null
+    }
+  })
 }
 
 function detectImageFormatFromBuffer(buffer) {
@@ -1581,9 +1625,28 @@ async function getAssetDescriptor(sharpLib, assetOrPath, options = {}) {
     } catch {}
   }
 
+  if (!baseDescriptor.inputMetadata && baseDescriptor.inputFormat === 'ico') {
+    try {
+      const icoMeta = getCachedIcoMetadata(sourcePath)
+      const decodedInput = getCachedIcoPngBuffer(sourcePath)
+      if (decodedInput) {
+        const metadata = await sharpLib(decodedInput).metadata()
+        baseDescriptor.inputMetadata = {
+          ...metadata,
+          format: 'ico',
+          width: icoMeta?.width || metadata?.width || 0,
+          height: icoMeta?.height || metadata?.height || 0,
+        }
+        baseDescriptor.inputFormat = 'ico'
+      }
+    } catch {}
+  }
+
   if (!baseDescriptor.inputMetadata && isFallbackDecodedInputFormat(baseDescriptor.inputFormat)) {
     try {
-      const decodedInput = createNativeImagePngBuffer(sourcePath)
+      const decodedInput = baseDescriptor.inputFormat === 'ico'
+        ? getCachedIcoPngBuffer(sourcePath)
+        : createNativeImagePngBuffer(sourcePath)
       if (decodedInput) {
         const metadata = await sharpLib(decodedInput).metadata()
         baseDescriptor.inputMetadata = metadata
@@ -1707,6 +1770,10 @@ function createTransformerFromInput(sharpLib, input, ext = '') {
       })
     }
   }
+  if (normalizedExt === 'ico') {
+    const decoded = getCachedIcoPngBuffer(input)
+    if (decoded) return sharpLib(decoded, { animated: false })
+  }
   const sharpInput = isFallbackDecodedInputFormat(normalizedExt)
     ? createNativeImagePngBuffer(input) || input
     : input
@@ -1717,7 +1784,9 @@ function getCachedDecodedFallbackInput(asset) {
   const normalizedExt = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
   if (!isFallbackDecodedInputFormat(normalizedExt)) return null
   if (asset?.decodedFallbackInput) return asset.decodedFallbackInput
-  const decoded = createNativeImagePngBuffer(asset?.sourcePath)
+  const decoded = normalizedExt === 'ico'
+    ? getCachedIcoPngBuffer(asset?.sourcePath)
+    : createNativeImagePngBuffer(asset?.sourcePath)
   if (decoded) asset.decodedFallbackInput = decoded
   return decoded
 }
@@ -1851,7 +1920,9 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   }
 
   const decodedCompressionInput = isFallbackDecodedInputFormat(sourceFormat)
-    ? createNativeImagePngBuffer(asset.sourcePath)
+    ? (sourceFormat === 'ico'
+      ? getCachedIcoPngBuffer(asset.sourcePath)
+      : createNativeImagePngBuffer(asset.sourcePath))
     : null
   const sourceInput = decodedCompressionInput ? null : fs.readFileSync(asset.sourcePath)
   const cache = new Map()
