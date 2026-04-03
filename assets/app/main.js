@@ -722,15 +722,7 @@ function getResultViewItemsSignature(items = []) {
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]
     if (index > 0) signature += '\u0002'
-    signature += [
-      item.assetId || '',
-      item.outputPath || '',
-      item.result?.name || '',
-      item.result?.sizeBytes || 0,
-      item.result?.width || 0,
-      item.result?.height || 0,
-      item.summary || '',
-    ].join('\u0001')
+    signature += `${item.assetId || ''}\u0001${item.outputPath || ''}\u0001${item.result?.name || ''}\u0001${item.result?.sizeBytes || 0}\u0001${item.result?.width || 0}\u0001${item.result?.height || 0}\u0001${item.summary || ''}`
   }
   return signature
 }

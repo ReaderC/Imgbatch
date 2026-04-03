@@ -486,13 +486,13 @@ function mergeAssetPatch(asset, patch) {
 function buildResultView(result, assets = []) {
   const processed = Array.isArray(result?.processed) ? result.processed : []
   const failed = Array.isArray(result?.failed) ? result.failed : []
-  const assetMap = new Map((assets || []).map((asset) => [asset.id, asset]))
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
+  const assetMap = isMergedOutput ? null : new Map((assets || []).map((asset) => [asset.id, asset]))
   const items = []
   for (const item of processed) {
     const nextItem = isMergedOutput
       ? buildMergedResultViewItem(item, assets)
-      : buildResultViewItem(item, assetMap.get(item.assetId))
+      : buildResultViewItem(item, assetMap?.get(item.assetId))
     if (nextItem.outputPath) {
       items.push(nextItem)
     }
