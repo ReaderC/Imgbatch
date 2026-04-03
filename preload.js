@@ -2894,10 +2894,10 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const dominantSize = targetSpan
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
+    const { metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
-      const metadata = await getAssetMetadata(sharpLib, asset)
       sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }
@@ -3093,7 +3093,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   emitMergePdfProgress('merge-pdf-prepare')
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const { inputFormat } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: autoPaginateFixedPage })
+    const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: autoPaginateFixedPage })
     asset.inputFormat = inputFormat
     const imageBytes = fs.readFileSync(asset.sourcePath)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
@@ -3124,7 +3124,6 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
 
     if (autoPaginateFixedPage) {
       if (!(sourceWidth > 0 && sourceHeight > 0)) {
-        const metadata = await getAssetMetadata(sharpLib, asset)
         sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
         sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
         prepared.sourceWidth = sourceWidth
