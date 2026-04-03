@@ -3399,7 +3399,10 @@ async function executeSingleAssetTool(payload, sharpLib) {
       cancelled = true
       return { processed: null, failed: null, cancelled: true }
     }
-    const inputFormat = asset.sourcePath ? await getAssetInputFormat(sharpLib, asset) : ''
+    if (asset.sourcePath) {
+      await getAssetDescriptor(sharpLib, asset, { probeMetadata: true })
+    }
+    const inputFormat = normalizeImageFormatName(asset.inputFormat || asset.ext)
     if (!(asset.sourcePath && SHARP_INPUT_FORMATS.has(inputFormat))) {
       failedCount += 1
       emitAssetProgress()
