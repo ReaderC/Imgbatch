@@ -2729,7 +2729,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       : ((preventUpscale && sourceHeight <= targetSpan) || sourceHeight === targetSpan)
     if (sourceWidth > 0 && sourceHeight > 0 && keepsOriginalSize) {
       const { data, info } = await createTransformer(sharpLib, asset)
-        .ensureAlpha()
+        .flatten({ background })
         .raw()
         .toBuffer({ resolveWithObject: true })
       return {
@@ -2751,7 +2751,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
         background,
         withoutEnlargement: preventUpscale,
       })
-      .ensureAlpha()
+      .flatten({ background })
       .raw()
       .toBuffer({ resolveWithObject: true })
     const baseWidth = Math.max(1, sourceWidth || 1)
@@ -2817,7 +2817,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
     create: {
       width: totalWidth,
       height: totalHeight,
-      channels: 4,
+      channels: 3,
       background,
     },
   }).composite(composites), format, quality).toFile(outputPath)
