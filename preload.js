@@ -1758,6 +1758,11 @@ function getOutputName(asset, toolId, format) {
   return `${parsed.name}-${toolId}.${outputExtension}`
 }
 
+function getSingleAssetOutputPath(destinationPath, asset, toolId, format, options = {}) {
+  const rawOutputPath = path.join(destinationPath, getOutputName(asset, toolId, format))
+  return options.unique ? resolveUniqueOutputPath(rawOutputPath) : rawOutputPath
+}
+
 function resolveUniqueOutputPath(outputPath) {
   if (!fs.existsSync(outputPath)) return outputPath
   const parsed = path.parse(outputPath)
@@ -2066,7 +2071,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('resize', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'resize', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'resize', format)
   const quality = clampNumber(config.quality, 1, 100, 90)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
@@ -2472,7 +2477,7 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('watermark', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'watermark', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'watermark', format)
   const watermarkOpacity = Number(config.opacity) || 0
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
@@ -2495,7 +2500,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('rotate', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'rotate', format)
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2544,7 +2549,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
   const format = !requestedOutputFormat || requestedOutputFormat === 'keep original'
     ? mapOutputFormat('flip', asset, config)
     : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'flip', format)
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2591,7 +2596,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const outputFormat = config.keepTransparency
     ? (isAlphaCapableFormat(sourceFormat) ? sourceFormat : 'png')
     : mapOutputFormat('corners', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'corners', outputFormat))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'corners', outputFormat)
   const baseTransformer = createTransformer(sharpLib, asset)
   const width = asset.width || metadata?.width || 1
   const height = asset.height || metadata?.height || 1
@@ -2631,7 +2636,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('padding', asset, config)
-  const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'padding', format)
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
@@ -2776,8 +2781,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
   asset.inputFormat = inputFormat
   const format = mapOutputFormat(toolId, asset, config)
-  const rawOutputPath = path.join(destinationPath, getOutputName(asset, suffix, format))
-  const outputPath = toolId === 'manual-crop' ? resolveUniqueOutputPath(rawOutputPath) : rawOutputPath
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, suffix, format, { unique: toolId === 'manual-crop' })
   const box = normalizeCropBox(asset, config, toolId)
   const manualStageMetrics = toolId === 'manual-crop' ? getManualCropStageMetrics(asset, config) : null
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
