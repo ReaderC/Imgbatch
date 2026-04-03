@@ -2010,14 +2010,21 @@ function queueQueueThumbnailPatch(assetId, listThumbnailUrl) {
 
 function flushQueueThumbnailPatches() {
   if (!pendingQueueThumbnailPatches.size) return
+  const itemMap = new Map()
+  app?.querySelectorAll?.('.queue-item[data-asset-id]').forEach((item) => {
+    const assetId = item.getAttribute('data-asset-id') || ''
+    if (assetId) itemMap.set(assetId, item)
+  })
   for (const [assetId, listThumbnailUrl] of pendingQueueThumbnailPatches.entries()) {
-    patchQueueThumbnail(assetId, listThumbnailUrl)
+    patchQueueThumbnail(itemMap.get(String(assetId)) || null, assetId, listThumbnailUrl)
   }
   pendingQueueThumbnailPatches.clear()
 }
 
-function patchQueueThumbnail(assetId, listThumbnailUrl) {
-  const item = app?.querySelector?.(`.queue-item[data-asset-id="${CSS.escape(String(assetId))}"]`)
+function patchQueueThumbnail(item, assetId, listThumbnailUrl) {
+  if (!item) {
+    item = app?.querySelector?.(`.queue-item[data-asset-id="${CSS.escape(String(assetId))}"]`)
+  }
   const thumb = item?.querySelector?.('.queue-item__thumb')
   if (!thumb) return
   const current = thumb.querySelector('img')
@@ -2026,9 +2033,8 @@ function patchQueueThumbnail(assetId, listThumbnailUrl) {
     return
   }
   const image = document.createElement('img')
-  const asset = getState().assets.find((entry) => entry.id === assetId)
   image.src = listThumbnailUrl
-  image.alt = asset?.name || ''
+  image.alt = item?.querySelector?.('.queue-item__title')?.textContent?.trim() || ''
   image.loading = 'lazy'
   image.decoding = 'async'
   image.fetchPriority = 'low'
