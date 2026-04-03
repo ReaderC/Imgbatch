@@ -1569,6 +1569,13 @@ function captureQueueScrollPosition() {
   queueViewportState.height = Math.max(0, queueNode.clientHeight || 0)
 }
 
+function blurFocusedQueueSortControl() {
+  const activeElement = document.activeElement
+  if (!activeElement?.closest?.('.queue-item__controls')) return
+  if (!activeElement?.matches?.('[data-action="move-asset"], .queue-item__drag')) return
+  activeElement.blur()
+}
+
 function restoreQueuedQueueScroll(state) {
   if (!pendingQueueScrollRestore) return
   if (getAppShellMode(state) !== 'workspace') return
@@ -2595,6 +2602,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'move-asset') {
+      blurFocusedQueueSortControl()
       captureQueueScrollPosition()
       moveAsset(target.dataset.assetId, target.dataset.direction)
       return
@@ -3170,7 +3178,7 @@ function attachGlobalEvents() {
   }, true)
 
   document.addEventListener('scroll', (event) => {
-    const queueNode = event.target?.closest?.('[data-scroll-role="queue"]')
+    const queueNode = event.target?.closest?.('.queue-list')
     if (queueNode) {
       const nextScrollTop = Math.max(0, queueNode.scrollTop || 0)
       const nextHeight = Math.max(0, queueNode.clientHeight || 0)
@@ -3324,6 +3332,7 @@ function finishQueueSortDrop(item, clientY) {
   if (!drag) return
   const targetAssetId = item.dataset.assetId
   if (targetAssetId && targetAssetId !== drag.assetId) {
+    blurFocusedQueueSortControl()
     captureQueueScrollPosition()
     const rect = item.getBoundingClientRect()
     const placement = clientY > rect.top + rect.height / 2 ? 'after' : 'before'
