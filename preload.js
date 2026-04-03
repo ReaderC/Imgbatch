@@ -3146,7 +3146,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
       height: info.height || Math.max(1, Math.round(baseHeight * scale)),
     }
   }
-  const prepared = []
+  const prepared = new Array(payload.assets.length)
   for (let index = 0; index < payload.assets.length; index += prepareConcurrency) {
     throwIfRunCancelled(payload.runId)
     const preparedBatch = await mapIndexRangeWithConcurrency(
@@ -3155,7 +3155,9 @@ async function writeMergeImageAsset(sharpLib, payload) {
       prepareConcurrency,
       (assetIndex) => prepareAsset(payload.assets[assetIndex]),
     )
-    prepared.push(...preparedBatch)
+    for (let offset = 0; offset < preparedBatch.length; offset += 1) {
+      prepared[index + offset] = preparedBatch[offset]
+    }
     await yieldToEventLoop()
   }
   throwIfRunCancelled(payload.runId)
@@ -3512,11 +3514,9 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const hydrationConcurrency = Math.max(1, Math.min((payload.assets || []).length || 1, Math.min(profile.mediumConcurrency, 4)))
   const hydratedAssets = await mapWithConcurrency(payload.assets || [], hydrationConcurrency, async (asset) => {
     const { width, height } = await resolveAssetDimensions(sharpLib, asset)
-    return {
-      ...asset,
-      width,
-      height,
-    }
+    asset.width = width
+    asset.height = height
+    return asset
   })
   const frameWidth = payload.config.useMaxAssetSize
     ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
