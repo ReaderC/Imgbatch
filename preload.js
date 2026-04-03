@@ -1819,6 +1819,26 @@ function resolveUniqueOutputPath(outputPath) {
   }
 }
 
+function getBufferedAssetTransformerInput(asset, sourceFormat = asset?.inputFormat || asset?.ext) {
+  const normalizedSourceFormat = normalizeImageFormatName(sourceFormat)
+  const decodedInput = isFallbackDecodedInputFormat(normalizedSourceFormat)
+    ? getCachedDecodedFallbackInput({ ...asset, inputFormat: normalizedSourceFormat })
+    : null
+  if (decodedInput) {
+    return {
+      sourceInput: null,
+      transformerInput: decodedInput,
+      transformerExt: 'png',
+    }
+  }
+  const sourceInput = fs.readFileSync(asset.sourcePath)
+  return {
+    sourceInput,
+    transformerInput: sourceInput,
+    transformerExt: normalizedSourceFormat || asset?.inputFormat || asset?.ext,
+  }
+}
+
 function createTransformerFromInput(sharpLib, input, ext = '') {
   const normalizedExt = normalizeImageFormatName(ext)
   if (normalizedExt === 'bmp') {
@@ -1987,18 +2007,11 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
     return warning ? { ...output, warning } : output
   }
 
-  const decodedCompressionInput = isFallbackDecodedInputFormat(sourceFormat)
-    ? (sourceFormat === 'ico'
-      ? getCachedIcoPngBuffer(asset.sourcePath)
-      : createNativeImagePngBuffer(asset.sourcePath))
-    : null
-  const sourceInput = decodedCompressionInput ? null : fs.readFileSync(asset.sourcePath)
+  const { transformerInput, transformerExt } = getBufferedAssetTransformerInput(asset, sourceFormat)
   const cache = new Map()
   const encodeAtQuality = async (quality) => {
     const normalizedQuality = Math.max(1, Math.min(maxQuality, Math.round(quality)))
     if (cache.has(normalizedQuality)) return cache.get(normalizedQuality)
-    const transformerInput = decodedCompressionInput || sourceInput
-    const transformerExt = decodedCompressionInput ? 'png' : asset.inputFormat
     const buffer = await withOutputFormat(createTransformerFromInput(sharpLib, transformerInput, transformerExt), format, normalizedQuality).toBuffer()
     cache.set(normalizedQuality, buffer)
     return buffer
