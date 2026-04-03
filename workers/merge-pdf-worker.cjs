@@ -265,12 +265,25 @@ async function getAssetMetadata(sharpLib, asset) {
 }
 
 function createTransformer(sharpLib, asset) {
-  const normalizedExt = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
+  const fallbackInput = getCachedDecodedFallbackInput(asset)
+  return createTransformerFromInput(
+    sharpLib,
+    fallbackInput || asset.sourcePath,
+    fallbackInput ? 'png' : (asset.inputFormat || asset.ext),
+  )
+}
+
+function throwIfRunCancelled() {}
+
+function createTransformerFromInput(sharpLib, input, ext = '') {
+  const normalizedExt = normalizeImageFormatName(ext)
   if (normalizedExt === 'bmp') {
-    const decoded = getCachedPathValue(BMP_DECODE_CACHE, asset.sourcePath, () => {
-      const sourceBuffer = fs.readFileSync(String(asset?.sourcePath || ''))
-      return decodeBmpBuffer(sourceBuffer)
-    })
+    const decoded = Buffer.isBuffer(input)
+      ? decodeBmpBuffer(input)
+      : getCachedPathValue(BMP_DECODE_CACHE, input, () => {
+        const sourceBuffer = fs.readFileSync(String(input || ''))
+        return decodeBmpBuffer(sourceBuffer)
+      })
     if (decoded) {
       return sharpLib(decoded.data, {
         raw: {
@@ -281,14 +294,20 @@ function createTransformer(sharpLib, asset) {
       })
     }
   }
-  if (isFallbackDecodedInputFormat(normalizedExt)) {
-    const decodedInput = createNativeImagePngBuffer(asset.sourcePath)
-    if (decodedInput) return sharpLib(decodedInput)
-  }
-  return sharpLib(asset.sourcePath)
+  const sharpInput = isFallbackDecodedInputFormat(normalizedExt)
+    ? createNativeImagePngBuffer(input) || input
+    : input
+  return sharpLib(sharpInput, { animated: normalizedExt === 'gif' })
 }
 
-function throwIfRunCancelled() {}
+function getCachedDecodedFallbackInput(asset) {
+  const normalizedExt = normalizeImageFormatName(asset?.inputFormat || asset?.ext)
+  if (!isFallbackDecodedInputFormat(normalizedExt)) return null
+  if (asset?.decodedFallbackInput) return asset.decodedFallbackInput
+  const decoded = createNativeImagePngBuffer(asset?.sourcePath)
+  if (decoded) asset.decodedFallbackInput = decoded
+  return decoded
+}
 
 process.on('message', async (message) => {
   if (!message || message.type !== 'start') return
