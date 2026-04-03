@@ -2092,13 +2092,13 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
   const sourceHeight = Math.max(0, Number(asset.height) || 0)
 
-  if (sourceWidth > 0 && sourceHeight > 0 && sourceFormat === format && width === sourceWidth && height === sourceHeight && canSkipSameFormatEncoding(format, quality)) {
-    return copyAssetToOutput(asset, outputPath)
-  }
   if (sourceWidth > 0 && sourceHeight > 0 && width === sourceWidth && height === sourceHeight) {
-    return writeTransformedAsset(createTransformer(sharpLib, asset), format, quality, outputPath, {
+    return writeNoopSingleAsset(sharpLib, asset, outputPath, format, quality, {
+      sourceFormat,
+      fallback: {
       width: sourceWidth,
       height: sourceHeight,
+      },
     })
   }
 
