@@ -1191,33 +1191,30 @@ async function previewWithRunner(tool, asset) {
   const state = getState()
   const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
   const result = await getToolRunner(tool.id, 'preview-only')(tool.id, state.configs[tool.id], [asset], destinationPath)
-  if (result?.processed?.length || result?.failed?.length) {
-    applyRunResult(result)
-  }
   if (!(result?.ok || result?.partial)) {
     throw new Error(result?.message || '预览失败。')
   }
-  const nextAsset = getState().assets.find((item) => item.id === asset.id)
   const processed = result?.processed?.[0]?.assetId === asset.id
     ? result.processed[0]
     : (result?.processed || []).find((item) => item.assetId === asset.id)
-  const previewedAsset = nextAsset?.previewUrl
-    ? nextAsset
-    : processed
-      ? {
-          ...asset,
-          previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
-          stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
-          stagedWidth: processed.width || asset.stagedWidth || 0,
-          stagedHeight: processed.height || asset.stagedHeight || 0,
-          previewStatus: processed.previewStatus || (PREVIEW_SAVE_TOOLS.has(tool.id) ? 'previewed' : 'saved'),
-          stagedToolId: tool.id,
-          savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
-          outputPath: processed.outputPath || asset.outputPath || '',
-        }
-      : asset
+  const previewedAsset = processed
+    ? {
+        ...asset,
+        previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
+        stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
+        stagedWidth: processed.width || asset.stagedWidth || 0,
+        stagedHeight: processed.height || asset.stagedHeight || 0,
+        previewStatus: processed.previewStatus || (PREVIEW_SAVE_TOOLS.has(tool.id) ? 'previewed' : 'saved'),
+        stagedToolId: tool.id,
+        savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
+        outputPath: processed.outputPath || asset.outputPath || '',
+      }
+    : asset
   if (!openPreviewModal(previewedAsset, tool.id)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
+  }
+  if (result?.processed?.length || result?.failed?.length) {
+    applyRunResult(result)
   }
   if (isPreviewableTool(tool.id) && !PREVIEW_SAVE_TOOLS.has(tool.id)) {
     notify({ type: 'success', message: `${tool.label} 预览已生成。` })
@@ -3845,6 +3842,14 @@ function parseValue(value) {
 
 function normalizeConfigInputValue(toolId, key, value, unitMode = '') {
   const parsed = unitMode ? normalizeMeasureToggleValue(value, unitMode) : parseValue(value)
+  if (toolId === 'padding' && ['top', 'right', 'bottom', 'left', 'unifiedMargin'].includes(key)) {
+    const nextUnit = unitMode || getMeasureUnitFromValue(parsed)
+    const numeric = getNumericInputValue(parsed)
+    const clamped = nextUnit === '%'
+      ? Math.max(0, Math.min(100, Number.isFinite(numeric) ? numeric : 0))
+      : Math.max(0, Math.min(10000, Number.isFinite(numeric) ? numeric : 0))
+    return `${Math.round(clamped)}${nextUnit}`
+  }
   if (toolId === 'rotate' && key === 'angle') {
     const numeric = Number(parsed)
     if (!Number.isFinite(numeric)) return 0
@@ -3960,8 +3965,14 @@ function getToolInputValidationMessage(toolId, config = {}) {
 
   if (toolId === 'padding') {
     if (!isPositiveInputValue(config.quality)) return '输出质量必须大于 0 后才能开始处理。'
+    if (config.unifiedMarginEnabled) {
+      if (!isNonNegativeInputValue(config.unifiedMargin)) return '统一边距不能小于 0。'
+      if (getMeasureUnitFromValue(config.unifiedMargin) === '%' && getNumericInputValue(config.unifiedMargin) > 100) return '统一边距百分比不能超过 100%。'
+      return getNumericInputValue(config.unifiedMargin) > 0 ? '' : '请设置一个大于 0 的统一边距后再开始处理。'
+    }
     const edges = [config.top, config.right, config.bottom, config.left]
     if (edges.some((value) => !isNonNegativeInputValue(value))) return '留白边距不能小于 0。'
+    if (edges.some((value) => getMeasureUnitFromValue(value) === '%' && getNumericInputValue(value) > 100)) return '留白边距百分比不能超过 100%。'
     return edges.some((value) => getNumericInputValue(value) > 0) ? '' : '请至少设置一个大于 0 的留白边距后再开始处理。'
   }
 
@@ -4004,7 +4015,9 @@ function describeToolConfig(toolId, config) {
   }
   if (toolId === 'watermark') return `${config.type === 'text' ? '文本' : '图片'}水印 ${WATERMARK_POSITION_LABELS[config.position] || config.position} / 质量 ${config.quality}%`
   if (toolId === 'corners') return `圆角 ${config.radius}${config.unit} / 质量 ${config.quality}%`
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
+  if (toolId === 'padding') return config.unifiedMarginEnabled
+    ? `留白 统一 ${config.unifiedMargin} / 质量 ${config.quality}%`
+    : `留白 ${config.top}/${config.right}/${config.bottom}/${config.left} / 质量 ${config.quality}%`
   if (toolId === 'crop') {
     if ((config.mode || 'ratio') === 'size') return `裁剪 ${config.width}×${config.height} / 质量 ${config.quality}%`
     return `裁剪 ${config.ratio === 'Custom' ? `${config.customRatioX}:${config.customRatioY}` : config.ratio} / 质量 ${config.quality}%`

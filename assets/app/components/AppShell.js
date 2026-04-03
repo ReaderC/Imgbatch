@@ -291,9 +291,11 @@ function renderResultWorkspace(state) {
   const summary = failedCount
     ? `共 ${resultView.items.length} 项，失败 ${failedCount} 项`
     : `共 ${resultView.items.length} 项`
-  const subtitle = resultView.elapsedMs
-    ? `${summary} · 耗时 ${formatElapsed(resultView.elapsedMs)}`
-    : summary
+  const subtitle = [
+    summary,
+    resultView.elapsedMs ? `耗时 ${formatElapsed(resultView.elapsedMs)}` : '',
+    getResultTotalSizeText(resultView.totalSourceSizeBytes, resultView.totalResultSizeBytes),
+  ].filter(Boolean).join(' · ')
 
   return `
     <section class="result-page">
@@ -549,6 +551,14 @@ function getSizeDeltaPercentText(before = 0, after = 0) {
 function formatSizeWithDelta(value, delta, percent) {
   const details = [delta, percent].filter((item) => item && item !== '0 B' && item !== '0%')
   return details.length ? `${value} (${details.join(' / ')})` : value
+}
+
+function getResultTotalSizeText(before = 0, after = 0) {
+  return `总体积 ${formatSizeWithDelta(
+    formatBytes(after || 0),
+    getSizeDeltaText(before, after),
+    getSizeDeltaPercentText(before, after),
+  )}`
 }
 
 function getDimensionDeltaText(before = 0, after = 0) {

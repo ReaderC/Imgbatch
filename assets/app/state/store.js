@@ -12,7 +12,7 @@ const DEFAULT_CONFIGS = {
   resize: { sizeMode: 'manual', width: '1920px', height: '1080px', lockAspectRatio: true, quality: 90 },
   watermark: { type: 'text', text: '批量处理', opacity: 60, position: 'center', fontSize: 32, color: '#FFFFFF', rotation: 0, margin: 24, tiled: false, density: 100, quality: 90 },
   corners: { radius: '24px', background: '#ffffff', keepTransparency: false, quality: 90 },
-  padding: { top: 20, right: 20, bottom: 20, left: 20, color: '#ffffff', opacity: 100, quality: 90 },
+  padding: { top: '20px', right: '20px', bottom: '20px', left: '20px', unifiedMarginEnabled: false, unifiedMargin: '20px', color: '#ffffff', opacity: 100, quality: 90 },
   crop: { mode: 'ratio', ratio: '16:9', useCustomRatio: false, customRatioX: 16, customRatioY: 9, x: '0px', y: '0px', width: 1920, height: 1080, quality: 90 },
   rotate: { angle: 0, autoCrop: true, keepAspectRatio: false, background: '#ffffff', quality: 90 },
   flip: { horizontal: true, vertical: false, preserveMetadata: true, autoCropTransparent: false, outputFormat: 'Keep Original', quality: 90 },
@@ -516,12 +516,16 @@ function buildResultView(result, assets = []) {
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
   const assetMap = isMergedOutput ? null : new Map((assets || []).map((asset) => [asset.id, asset]))
   const items = []
+  let totalSourceSizeBytes = 0
+  let totalResultSizeBytes = 0
   for (const item of processed) {
     const nextItem = isMergedOutput
       ? buildMergedResultViewItem(item, assets)
       : buildResultViewItem(item, assetMap?.get(item.assetId))
     if (nextItem.outputPath) {
       items.push(nextItem)
+      totalSourceSizeBytes += Math.max(0, Number(nextItem.source?.sizeBytes) || 0)
+      totalResultSizeBytes += Math.max(0, Number(nextItem.result?.sizeBytes) || 0)
     }
   }
 
@@ -532,6 +536,8 @@ function buildResultView(result, assets = []) {
     items,
     failed,
     elapsedMs: Number(result?.elapsedMs) || 0,
+    totalSourceSizeBytes,
+    totalResultSizeBytes,
     createdAt: Date.now(),
   }
 }

@@ -308,12 +308,18 @@ function renderCornersConfig(config) {
 }
 
 function renderPaddingConfig(config) {
+  const unifiedMarginEnabled = Boolean(config.unifiedMarginEnabled)
   return renderSettingsSection(`
+    ${renderToggleRow('统一边距', '启用后上下左右会共用同一个边距值。', 'padding', 'unifiedMarginEnabled', unifiedMarginEnabled)}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '上边距', toolId: 'padding', key: 'top', type: 'number', value: config.top, min: 0 })}
-      ${renderInputField({ label: '右边距', toolId: 'padding', key: 'right', type: 'number', value: config.right, min: 0 })}
-      ${renderInputField({ label: '下边距', toolId: 'padding', key: 'bottom', type: 'number', value: config.bottom, min: 0 })}
-      ${renderInputField({ label: '左边距', toolId: 'padding', key: 'left', type: 'number', value: config.left, min: 0 })}
+      ${unifiedMarginEnabled
+        ? renderInputField({ label: '统一边距', toolId: 'padding', key: 'unifiedMargin', value: getMeasureInputValue(config.unifiedMargin, '20'), unitMode: getMeasureUnit(config.unifiedMargin, 'px'), min: 0, max: getMeasureUnit(config.unifiedMargin, 'px') === '%' ? 100 : 10000 })
+        : `
+          ${renderInputField({ label: '上边距', toolId: 'padding', key: 'top', value: getMeasureInputValue(config.top, '20'), unitMode: getMeasureUnit(config.top, 'px'), min: 0, max: getMeasureUnit(config.top, 'px') === '%' ? 100 : 10000 })}
+          ${renderInputField({ label: '右边距', toolId: 'padding', key: 'right', value: getMeasureInputValue(config.right, '20'), unitMode: getMeasureUnit(config.right, 'px'), min: 0, max: getMeasureUnit(config.right, 'px') === '%' ? 100 : 10000 })}
+          ${renderInputField({ label: '下边距', toolId: 'padding', key: 'bottom', value: getMeasureInputValue(config.bottom, '20'), unitMode: getMeasureUnit(config.bottom, 'px'), min: 0, max: getMeasureUnit(config.bottom, 'px') === '%' ? 100 : 10000 })}
+          ${renderInputField({ label: '左边距', toolId: 'padding', key: 'left', value: getMeasureInputValue(config.left, '20'), unitMode: getMeasureUnit(config.left, 'px'), min: 0, max: getMeasureUnit(config.left, 'px') === '%' ? 100 : 10000 })}
+        `}
     `)}
     ${renderColorField({ label: '背景色', toolId: 'padding', key: 'color', value: config.color })}
     ${renderRangeField({ label: '透明度', toolId: 'padding', key: 'opacity', min: 0, max: 100, value: config.opacity, suffix: '%' })}

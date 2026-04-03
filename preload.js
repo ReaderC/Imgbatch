@@ -98,7 +98,9 @@ function summarizeConfig(toolId, config = {}) {
     const unit = config.unit || 'px'
     return `圆角 ${radius ? (radius.endsWith('px') || radius.endsWith('%') ? radius : `${radius}${unit}`) : `0${unit}`} / 质量 ${config.quality}%`
   }
-  if (toolId === 'padding') return `留白 ${config.top}/${config.right}/${config.bottom}/${config.left}px / 质量 ${config.quality}%`
+  if (toolId === 'padding') return config.unifiedMarginEnabled
+    ? `留白 统一 ${formatMeasureLabel(config.unifiedMargin, 20)} / 质量 ${config.quality}%`
+    : `留白 ${formatMeasureLabel(config.top, 20)}/${formatMeasureLabel(config.right, 20)}/${formatMeasureLabel(config.bottom, 20)}/${formatMeasureLabel(config.left, 20)} / 质量 ${config.quality}%`
   if (toolId === 'crop') return (config.mode || 'ratio') === 'size' ? `裁剪 ${config.area?.width}×${config.area?.height} / 质量 ${config.quality}%` : `裁剪 ${config.ratio} / 质量 ${config.quality}%`
   if (toolId === 'rotate') return `旋转 ${toNumber(config.angle, 0)}° / 质量 ${config.quality}%`
   if (toolId === 'flip') {
@@ -135,6 +137,11 @@ function toInteger(value, fallback = 0) {
 }
 
 function resolveMeasureOffset(value, total, fallback = 0) {
+  if (value && typeof value === 'object') {
+    const numericValue = Math.max(0, Number(value.value) || 0)
+    if (value.unit === '%') return Math.round(total * (numericValue / 100))
+    return Math.round(numericValue)
+  }
   if (typeof value === 'string' && value.trim().endsWith('%')) {
     return Math.round(total * (toNumber(value, fallback) / 100))
   }
@@ -547,6 +554,17 @@ function getAssetDimensionFallback(asset, width = asset?.width, height = asset?.
   }
 }
 
+function formatMeasureLabel(value, fallbackValue = 0, fallbackUnit = 'px') {
+  if (value && typeof value === 'object') {
+    const numericValue = Math.max(0, Number(value.value) || fallbackValue)
+    const unit = value.unit === '%' ? '%' : fallbackUnit
+    return `${numericValue}${unit}`
+  }
+  const raw = String(value ?? '').trim()
+  if (raw) return raw.endsWith('px') || raw.endsWith('%') ? raw : `${Math.max(0, toNumber(raw, fallbackValue))}${fallbackUnit}`
+  return `${fallbackValue}${fallbackUnit}`
+}
+
 function applyOptionalMetadataPreservation(transformer, enabled) {
   if (!enabled || !transformer || typeof transformer.keepMetadata !== 'function') return transformer
   return transformer.keepMetadata()
@@ -794,11 +812,19 @@ function normalizeRunConfig(toolId, config = {}) {
   }
 
   if (toolId === 'padding') {
+    const unifiedMarginEnabled = Boolean(config.unifiedMarginEnabled)
+    const unifiedMargin = normalizeMeasure(config.unifiedMargin, 20, inferMeasureUnit(config.unifiedMargin, 'px'))
+    const top = normalizeMeasure(config.top, 20, inferMeasureUnit(config.top, 'px'))
+    const right = normalizeMeasure(config.right, 20, inferMeasureUnit(config.right, 'px'))
+    const bottom = normalizeMeasure(config.bottom, 20, inferMeasureUnit(config.bottom, 'px'))
+    const left = normalizeMeasure(config.left, 20, inferMeasureUnit(config.left, 'px'))
     return {
-      top: Math.max(0, toInteger(config.top, 20)),
-      right: Math.max(0, toInteger(config.right, 20)),
-      bottom: Math.max(0, toInteger(config.bottom, 20)),
-      left: Math.max(0, toInteger(config.left, 20)),
+      top: unifiedMarginEnabled ? unifiedMargin : top,
+      right: unifiedMarginEnabled ? unifiedMargin : right,
+      bottom: unifiedMarginEnabled ? unifiedMargin : bottom,
+      left: unifiedMarginEnabled ? unifiedMargin : left,
+      unifiedMarginEnabled,
+      unifiedMargin,
       color: sanitizeText(config.color, '#ffffff'),
       opacity: clampNumber(config.opacity, 0, 100, 100),
       quality: clampNumber(config.quality, 1, 100, 90),
@@ -2717,7 +2743,13 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('padding', asset, config)
   const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'padding', format)
-  const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
+  const sourceWidth = Math.max(1, Number(asset.width) || 1)
+  const sourceHeight = Math.max(1, Number(asset.height) || 1)
+  const top = Math.max(0, resolveMeasureOffset(config.top, sourceHeight, 20))
+  const right = Math.max(0, resolveMeasureOffset(config.right, sourceWidth, 20))
+  const bottom = Math.max(0, resolveMeasureOffset(config.bottom, sourceHeight, 20))
+  const left = Math.max(0, resolveMeasureOffset(config.left, sourceWidth, 20))
+  const noPadding = top === 0 && right === 0 && bottom === 0 && left === 0
 
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2730,10 +2762,10 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
 
   const background = hexToRgbaObject(config.color, config.opacity / 100)
   const transformed = createTransformer(sharpLib, asset).extend({
-    top: config.top,
-    right: config.right,
-    bottom: config.bottom,
-    left: config.left,
+    top,
+    right,
+    bottom,
+    left,
     background,
   })
   return writeTransformedAsset(transformed, format, transformQuality, outputPath)
