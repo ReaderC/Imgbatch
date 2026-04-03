@@ -148,6 +148,10 @@ Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线
 - `pdf-lib`
 - `gifenc`
 
+## License
+
+MIT
+
 ## 项目结构
 
 ```text
