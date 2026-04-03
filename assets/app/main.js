@@ -764,16 +764,17 @@ function refreshResultView() {
   }
 
   const currentResultView = state.resultView
-  const nextItemsSignature = getResultViewItemsSignature(items)
-  const currentItemsSignature = getResultViewItemsSignature(currentResultView?.items || [])
   if (
     currentResultView
     && currentResultView.runId === (state.activeRun?.runId || '')
     && currentResultView.toolId === state.activeTool
     && currentResultView.mode === (state.activeRun?.mode || 'save')
-    && currentItemsSignature === nextItemsSignature
   ) {
-    return
+    const nextItemsSignature = getResultViewItemsSignature(items)
+    const currentItemsSignature = getResultViewItemsSignature(currentResultView.items || [])
+    if (currentItemsSignature === nextItemsSignature) {
+      return
+    }
   }
 
   setResultView({
