@@ -3292,18 +3292,22 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
+  const hydratedAssets = await Promise.all((payload.assets || []).map(async (asset) => {
+    await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
+    return asset
+  }))
   const frameWidth = payload.config.useMaxAssetSize
-    ? Math.max(1, ...payload.assets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
+    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
     : payload.config.width
   const frameHeight = payload.config.useMaxAssetSize
-    ? Math.max(1, ...payload.assets.map((asset) => Math.max(0, Number(asset?.height) || 0)))
+    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.height) || 0)))
     : payload.config.height
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval))
   const repeat = payload.config.loop ? 0 : -1
   const frameWriteOptions = { delay, repeat }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
-  const frameConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
+  const frameConcurrency = Math.max(1, Math.min(hydratedAssets.length, Math.min(profile.mediumConcurrency, 4)))
   const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
   const prepareFrame = async (asset) => {
     throwIfRunCancelled(payload.runId)
@@ -3316,17 +3320,17 @@ async function writeMergeGifAsset(sharpLib, payload) {
     const index = applyPalette(data, palette)
     return { index, palette }
   }
-  if (payload.assets.length === 1) {
-    const frame = await prepareFrame(payload.assets[0])
+  if (hydratedAssets.length === 1) {
+    const frame = await prepareFrame(hydratedAssets[0])
     throwIfRunCancelled(payload.runId)
     encoder.writeFrame(frame.index, frameWidth, frameHeight, {
       palette: frame.palette,
       ...frameWriteOptions,
     })
   } else {
-    for (let index = 0; index < payload.assets.length; index += frameConcurrency) {
+    for (let index = 0; index < hydratedAssets.length; index += frameConcurrency) {
       throwIfRunCancelled(payload.runId)
-      const batch = payload.assets.slice(index, index + frameConcurrency)
+      const batch = hydratedAssets.slice(index, index + frameConcurrency)
       const preparedFrames = await mapWithConcurrency(batch, frameConcurrency, prepareFrame)
       for (const frame of preparedFrames) {
         throwIfRunCancelled(payload.runId)
