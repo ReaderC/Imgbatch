@@ -2688,7 +2688,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   if (radius <= 0) {
     return writeNoopSingleAsset(sharpLib, asset, outputPath, outputFormat, transformQuality, {
       sourceFormat,
-      fallback: { ...asset, width, height },
+      fallback: getAssetDimensionFallback(asset, width, height),
     })
   }
 
@@ -2880,10 +2880,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
     && box.height === sourceHeight) {
     return writeNoopSingleAsset(sharpLib, asset, outputPath, format, transformQuality, {
       sourceFormat,
-      fallback: {
-      width: sourceWidth,
-      height: sourceHeight,
-      },
+      fallback: getAssetDimensionFallback(asset, sourceWidth, sourceHeight),
     })
   }
 
