@@ -1716,6 +1716,15 @@ function canSkipSameFormatEncoding(format, quality = 100) {
   return Math.round(Number(quality) || 0) >= 100
 }
 
+function getTransformQuality(configQuality, sourceFormat, outputFormat, sameFormatDefault = 100, changedFormatDefault = 90) {
+  const normalizedSource = normalizeImageFormatName(sourceFormat)
+  const normalizedOutput = normalizeImageFormatName(outputFormat)
+  const fallbackQuality = normalizedSource && normalizedSource === normalizedOutput
+    ? sameFormatDefault
+    : changedFormatDefault
+  return clampNumber(configQuality, 1, 100, fallbackQuality)
+}
+
 function buildFormatCapabilitiesPayload() {
   const entries = [
     ['PNG', 'png', []],
@@ -2468,7 +2477,7 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
 
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (watermarkOpacity <= 0 || isEmptyTextWatermark || isZeroSizeTextWatermark) {
     if (sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
@@ -2488,7 +2497,7 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
   const format = mapOutputFormat('rotate', asset, config)
   const outputPath = path.join(destinationPath, getOutputName(asset, 'rotate', format))
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (sourceFormat === format && normalizedAngle === 0 && !config.keepAspectRatio && !config.autoCrop && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
@@ -2537,7 +2546,7 @@ async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
     : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
   const outputPath = path.join(destinationPath, getOutputName(asset, 'flip', format))
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (sourceFormat === format && hasNoFlipTransform && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
@@ -2589,7 +2598,7 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
   const maxRadius = Math.min(width, height) / 2
   const radius = config.unit === '%' ? Math.round(maxRadius * (config.radius / 100)) : Math.min(maxRadius, Math.max(0, config.radius))
 
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === outputFormat ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, outputFormat)
 
   if (radius <= 0 && sourceFormat === outputFormat && canSkipSameFormatEncoding(outputFormat, transformQuality)) {
     return copyAssetToOutput(asset, outputPath, null, { ...asset, width, height })
@@ -2625,7 +2634,7 @@ async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
   const outputPath = path.join(destinationPath, getOutputName(asset, 'padding', format))
   const noPadding = Number(config.top) === 0 && Number(config.right) === 0 && Number(config.bottom) === 0 && Number(config.left) === 0
 
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (noPadding && sourceFormat === format && canSkipSameFormatEncoding(format, transformQuality)) {
     return copyAssetToOutput(asset, outputPath)
@@ -2779,7 +2788,7 @@ async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix =
   const hasTransform = angle !== 0 || hasFlipHorizontal || hasFlipVertical
   const alphaCapable = supportsTransparentCanvasOutput(format)
 
-  const transformQuality = clampNumber(config.quality, 1, 100, sourceFormat === format ? 100 : 90)
+  const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
   if (toolId !== 'manual-crop'
     && sourceWidth > 0 && sourceHeight > 0
