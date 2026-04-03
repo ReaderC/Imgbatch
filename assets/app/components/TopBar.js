@@ -6,6 +6,9 @@ function getProcessButtonLabel(state) {
   if (!state.isProcessing) return '开始处理'
   const progress = state.processingProgress
   const toolId = progress?.toolId || state.activeTool
+  if (toolId === 'merge-pdf') {
+    return progress?.phase === 'merge-pdf-prepare' ? '预处理中' : '生成 PDF 中'
+  }
   if (SINGLE_RUN_PROCESS_TOOLS.has(toolId)) {
     return '合并中'
   }

@@ -1413,7 +1413,11 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
   const toolLabel = TOOL_MAP[state.activeTool]?.label || ''
   const progress = state.processingProgress
   const processLabel = state.isProcessing
-    ? (MERGE_PREVIEW_TOOLS.has(progress?.toolId || state.activeTool) ? '\u5408\u5e76\u4e2d' : `${progress?.completed || 0}/${progress?.total || 0} \u5904\u7406\u4e2d`)
+    ? (
+        (progress?.toolId || state.activeTool) === 'merge-pdf'
+          ? (progress?.phase === 'merge-pdf-prepare' ? '\u9884\u5904\u7406\u4e2d' : '\u751f\u6210 PDF \u4e2d')
+          : (MERGE_PREVIEW_TOOLS.has(progress?.toolId || state.activeTool) ? '\u5408\u5e76\u4e2d' : `${progress?.completed || 0}/${progress?.total || 0} \u5904\u7406\u4e2d`)
+      )
     : '\u5f00\u59cb\u5904\u7406'
 
   if (titleNode.textContent !== toolLabel) titleNode.textContent = toolLabel

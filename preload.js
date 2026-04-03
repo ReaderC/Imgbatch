@@ -1040,6 +1040,12 @@ function emitProcessingProgress(detail = {}) {
   }
 }
 
+function yieldToEventLoop() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
 function emitQueueThumbnailReady(detail = {}) {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
   try {
@@ -2699,6 +2705,21 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       color: backgroundColor,
     })
   }
+  let preparedCount = 0
+  const emitMergePdfProgress = (phase) => {
+    emitProcessingProgress({
+      phase,
+      runId: payload.runId,
+      toolId: payload.toolId,
+      toolLabel: payload.toolLabel,
+      mode: payload.mode,
+      total: Math.max(1, Array.isArray(payload.assets) ? payload.assets.length : 0),
+      completed: preparedCount,
+      succeeded: 0,
+      failed: 0,
+    })
+  }
+  emitMergePdfProgress('merge-pdf-prepare')
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
     asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
@@ -2757,15 +2778,20 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       prepared.embeddedKind = embeddedKind
     }
 
+    preparedCount += 1
+    emitMergePdfProgress('merge-pdf-prepare')
+    await yieldToEventLoop()
     return prepared
   }
   const preparedAssets = payload.assets.length === 1
     ? [await prepareAsset(payload.assets[0])]
     : await mapWithConcurrency(payload.assets, prepareConcurrency, prepareAsset)
   throwIfRunCancelled(payload.runId)
+  emitMergePdfProgress('merge-pdf-write')
 
   for (const prepared of preparedAssets) {
     throwIfRunCancelled(payload.runId)
+    await yieldToEventLoop()
     const { imageBytes } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
@@ -2862,6 +2888,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     let offsetY = 0
     while (offsetY < scaledHeight) {
       throwIfRunCancelled(payload.runId)
+      await yieldToEventLoop()
       const sliceHeight = Math.min(pageSliceHeight, scaledHeight - offsetY)
       const sliceBuffer = await scaledImage.clone()
         .extract({ left: 0, top: offsetY, width: scaledWidth, height: sliceHeight })
