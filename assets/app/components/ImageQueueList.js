@@ -197,6 +197,10 @@ export function renderQueueItemFragments(asset, tool, state, index, total, compa
   }
 }
 
+export function getQueueItemRenderSignatures(asset, tool, state, index, total, compactLayout = isCompactQueueLayout()) {
+  return renderQueueItemFragments(asset, tool, state, index, total, compactLayout, false)
+}
+
 function getQueueRenderWindow(total, compactLayout, denseLayout, processingDenseLayout, viewport) {
   if (!shouldVirtualizeQueue(total)) return null
   const scrollTop = Math.max(0, Number(viewport?.scrollTop) || 0)

@@ -1,6 +1,6 @@
 import { TOOL_MAP } from './config/tools.js'
 import { getAppShellMode, renderAppShell, renderShellOverlays, renderShellSideNav, renderShellTopBar, renderShellWorkspace } from './components/AppShell.js'
-import { buildQueueClassName, buildQueueItemClassName, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
+import { buildQueueClassName, buildQueueItemClassName, getQueueItemRenderSignatures, getQueueLayoutFlags, getQueueViewportRenderSignature, renderImageQueue, renderQueueItemFragments, shouldVirtualizeQueue } from './components/ImageQueueList.js'
 import { renderToolPage } from './pages/index.js'
 import {
   applyManualCropSnap,
@@ -1513,7 +1513,7 @@ function patchQueueItemsForToolChange(state) {
     const assetIndex = assetIndexMap.get(assetId)
     if (assetIndex == null) return
     const asset = state.assets[assetIndex]
-    const fragments = renderQueueItemFragments(asset, tool, state, assetIndex, state.assets.length, compactLayout, false)
+    const fragments = getQueueItemRenderSignatures(asset, tool, state, assetIndex, state.assets.length, compactLayout)
     const expectedItemClassName = buildQueueItemClassName(fragments.itemClassName, layoutFlags)
     const expectedDraggable = fragments.draggable ? 'true' : null
     let nextFragments = null
