@@ -718,15 +718,21 @@ function hasVisibleResultComparison() {
 
 function getResultViewItemsSignature(items = []) {
   if (!Array.isArray(items) || !items.length) return ''
-  return items.map((item) => [
-    item.assetId || '',
-    item.outputPath || '',
-    item.result?.name || '',
-    item.result?.sizeBytes || 0,
-    item.result?.width || 0,
-    item.result?.height || 0,
-    item.summary || '',
-  ].join('\u0001')).join('\u0002')
+  let signature = ''
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    if (index > 0) signature += '\u0002'
+    signature += [
+      item.assetId || '',
+      item.outputPath || '',
+      item.result?.name || '',
+      item.result?.sizeBytes || 0,
+      item.result?.width || 0,
+      item.result?.height || 0,
+      item.summary || '',
+    ].join('\u0001')
+  }
+  return signature
 }
 
 function refreshResultView() {

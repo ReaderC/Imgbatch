@@ -488,10 +488,15 @@ function buildResultView(result, assets = []) {
   const failed = Array.isArray(result?.failed) ? result.failed : []
   const assetMap = new Map((assets || []).map((asset) => [asset.id, asset]))
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
-  const items = (isMergedOutput
-    ? processed.map((item) => buildMergedResultViewItem(item, assets))
-    : processed.map((item) => buildResultViewItem(item, assetMap.get(item.assetId))))
-    .filter((item) => item.outputPath)
+  const items = []
+  for (const item of processed) {
+    const nextItem = isMergedOutput
+      ? buildMergedResultViewItem(item, assets)
+      : buildResultViewItem(item, assetMap.get(item.assetId))
+    if (nextItem.outputPath) {
+      items.push(nextItem)
+    }
+  }
 
   return {
     runId: result?.runId || '',
