@@ -160,6 +160,14 @@ async function run() {
       requiresSlicing: false,
     }
 
+    if (sourceFormat !== 'png' && sourceFormat !== 'jpg' && sourceFormat !== 'jpeg') {
+      const embeddedKind = isAlphaCapableFormat(sourceFormat) ? 'png' : 'jpg'
+      prepared.embeddedBytes = embeddedKind === 'png'
+        ? await sharp(asset.sourcePath).png().toBuffer()
+        : await sharp(asset.sourcePath).jpeg().toBuffer()
+      prepared.embeddedKind = embeddedKind
+    }
+
     if (autoPaginateFixedPage) {
       prepared.drawableWidth = fixedDrawableWidth
       prepared.drawableHeight = fixedDrawableHeight
@@ -173,12 +181,6 @@ async function run() {
           .png()
           .toBuffer()
       }
-    } else if (sourceFormat !== 'png' && sourceFormat !== 'jpg' && sourceFormat !== 'jpeg') {
-      const embeddedKind = isAlphaCapableFormat(sourceFormat) ? 'png' : 'jpg'
-      prepared.embeddedBytes = embeddedKind === 'png'
-        ? await sharp(asset.sourcePath).png().toBuffer()
-        : await sharp(asset.sourcePath).jpeg().toBuffer()
-      prepared.embeddedKind = embeddedKind
     }
 
     preparedCount += 1
@@ -212,16 +214,29 @@ async function run() {
     let sourceHeight = prepared.sourceHeight
     const ensureEmbedded = async () => {
       if (embedded) return embedded
-      if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
-        embedded = await pdf.embedPng(prepared.embeddedBytes)
-      } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
-        embedded = await pdf.embedJpg(prepared.embeddedBytes)
-      } else if (prepared.sourceFormat === 'png') {
-        embedded = await pdf.embedPng(imageBytes)
-      } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
-        embedded = await pdf.embedJpg(imageBytes)
-      } else {
-        embedded = await pdf.embedPng(prepared.embeddedBytes || await sharp(prepared.sourcePath).png().toBuffer())
+      try {
+        if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
+          embedded = await pdf.embedPng(prepared.embeddedBytes)
+        } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
+          embedded = await pdf.embedJpg(prepared.embeddedBytes)
+        } else if (prepared.sourceFormat === 'png') {
+          embedded = await pdf.embedPng(imageBytes)
+        } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
+          embedded = await pdf.embedJpg(imageBytes)
+        } else {
+          embedded = await pdf.embedPng(prepared.embeddedBytes || await sharp(prepared.sourcePath).png().toBuffer())
+        }
+      } catch {
+        const fallbackKind = isAlphaCapableFormat(prepared.sourceFormat) ? 'png' : 'jpg'
+        if (fallbackKind === 'png') {
+          prepared.embeddedBytes = await sharp(prepared.sourcePath).png().toBuffer()
+          prepared.embeddedKind = 'png'
+          embedded = await pdf.embedPng(prepared.embeddedBytes)
+        } else {
+          prepared.embeddedBytes = await sharp(prepared.sourcePath).jpeg().toBuffer()
+          prepared.embeddedKind = 'jpg'
+          embedded = await pdf.embedJpg(prepared.embeddedBytes)
+        }
       }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
