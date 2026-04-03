@@ -1746,6 +1746,24 @@ async function ensureAssetDescriptorState(sharpLib, asset, options = {}) {
   }
 }
 
+async function prepareSingleAssetWriteContext(sharpLib, asset, toolId, config, destinationPath, options = {}) {
+  const descriptorState = await ensureAssetDescriptorState(sharpLib, asset, {
+    probeMetadata: options.probeMetadata === true,
+  })
+  asset.inputFormat = descriptorState.inputFormat
+  const format = typeof options.resolveFormat === 'function'
+    ? options.resolveFormat(asset, config, descriptorState)
+    : mapOutputFormat(toolId, asset, config)
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, options.outputSuffix || toolId, format, {
+    unique: options.unique === true,
+  })
+  return {
+    ...descriptorState,
+    format,
+    outputPath,
+  }
+}
+
 function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
@@ -2046,10 +2064,13 @@ function createIcoBuffer(pngBuffer, width, height) {
 }
 
 async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('compression', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'compression', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'compression',
+    config,
+    destinationPath,
+  )
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
   const targetBytes = config.targetSizeKb * 1024
   const maxQuality = 90
@@ -2156,10 +2177,14 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('format', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'format', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'format',
+    config,
+    destinationPath,
+    { probeMetadata: true },
+  )
   const { effectiveSourceFormat, sourceInput } = await prepareDirectSourcePassthrough(
     sharpLib,
     asset,
@@ -2188,10 +2213,13 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('resize', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'resize', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'resize',
+    config,
+    destinationPath,
+  )
   const quality = getTransformQuality(config.quality, sourceFormat, format)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
@@ -2594,10 +2622,13 @@ function revealResultDirectoryIfNeeded(result) {
 }
 
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('watermark', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'watermark', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'watermark',
+    config,
+    destinationPath,
+  )
   const watermarkOpacity = Number(config.opacity) || 0
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
@@ -2614,10 +2645,13 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('rotate', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'rotate', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'rotate',
+    config,
+    destinationPath,
+  )
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2657,13 +2691,21 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
   const requestedOutputFormat = String(config.outputFormat || '').toLowerCase()
-  const format = !requestedOutputFormat || requestedOutputFormat === 'keep original'
-    ? mapOutputFormat('flip', asset, config)
-    : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'flip', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'flip',
+    config,
+    destinationPath,
+    {
+      resolveFormat: (currentAsset, currentConfig) => (
+        !requestedOutputFormat || requestedOutputFormat === 'keep original'
+          ? mapOutputFormat('flip', currentAsset, currentConfig)
+          : mapOutputFormat('format', currentAsset, { targetFormat: currentConfig.outputFormat })
+      ),
+    },
+  )
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2697,12 +2739,21 @@ function buildRoundedRectSvg(width, height, radius, fill) {
 }
 
 async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
-  asset.inputFormat = inputFormat
-  const outputFormat = config.keepTransparency
-    ? (isAlphaCapableFormat(sourceFormat) ? sourceFormat : 'png')
-    : mapOutputFormat('corners', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'corners', outputFormat)
+  const { sourceFormat, metadata, format: outputFormat, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'corners',
+    config,
+    destinationPath,
+    {
+      probeMetadata: true,
+      resolveFormat: (currentAsset, currentConfig, descriptorState) => (
+        currentConfig.keepTransparency
+          ? (isAlphaCapableFormat(descriptorState.sourceFormat) ? descriptorState.sourceFormat : 'png')
+          : mapOutputFormat('corners', currentAsset, currentConfig)
+      ),
+    },
+  )
   const baseTransformer = createTransformer(sharpLib, asset)
   const width = asset.width || metadata?.width || 1
   const height = asset.height || metadata?.height || 1
@@ -2739,10 +2790,13 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('padding', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'padding', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'padding',
+    config,
+    destinationPath,
+  )
   const sourceWidth = Math.max(1, Number(asset.width) || 1)
   const sourceHeight = Math.max(1, Number(asset.height) || 1)
   const top = Math.max(0, resolveMeasureOffset(config.top, sourceHeight, 20))
@@ -2887,10 +2941,17 @@ async function renderManualCropSelection(sharpLib, transformed, box, stageMetric
 }
 
 async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop', toolId = 'crop') {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat(toolId, asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, suffix, format, { unique: toolId === 'manual-crop' })
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    toolId,
+    config,
+    destinationPath,
+    {
+      outputSuffix: suffix,
+      unique: toolId === 'manual-crop',
+    },
+  )
   const box = normalizeCropBox(asset, config, toolId)
   const manualStageMetrics = toolId === 'manual-crop' ? getManualCropStageMetrics(asset, config) : null
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
