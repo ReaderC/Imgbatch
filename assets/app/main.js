@@ -602,9 +602,10 @@ function normalizeAssetPath(value = '') {
 }
 
 function getReplaceEntry(assetId) {
-  const asset = getState().assets.find((item) => item.id === assetId)
+  const state = getState()
+  const asset = state.assets.find((item) => item.id === assetId)
   if (!asset?.sourcePath) return null
-  const resultItem = getState().resultView?.items?.find((item) => item.assetId === assetId)
+  const resultItem = state.resultView?.items?.find((item) => item.assetId === assetId)
   const resultPath = normalizeAssetPath(
     resultItem?.outputPath
     || asset?.savedOutputPath
@@ -622,8 +623,21 @@ function getReplaceEntry(assetId) {
 }
 
 function getReplaceEntries() {
-  return getState().assets
-    .map((item) => getReplaceEntry(item.id))
+  const state = getState()
+  const resultPathByAssetId = new Map((state.resultView?.items || []).map((item) => [item.assetId, normalizeAssetPath(item.outputPath)]))
+  return state.assets
+    .map((asset) => {
+      if (!asset?.sourcePath) return null
+      const resultPath = resultPathByAssetId.get(asset.id)
+        || normalizeAssetPath(asset?.savedOutputPath || asset?.stagedOutputPath || asset?.outputPath || '')
+      if (!resultPath) return null
+      return {
+        assetId: asset.id,
+        name: asset.name,
+        sourcePath: normalizeAssetPath(asset.sourcePath),
+        resultPath,
+      }
+    })
     .filter(Boolean)
 }
 
@@ -858,7 +872,12 @@ async function openCurrentResultsDirectory() {
   if (state.activeTool === 'manual-crop') {
     const config = state.configs['manual-crop']
     const currentAsset = state.assets[config.currentIndex]
-    const currentTargetPath = config.sessionOutputPath || getLatestAssetResultPath(currentAsset) || state.assets.map((item) => getLatestAssetResultPath(item)).find(Boolean) || ''
+    let fallbackTargetPath = ''
+    for (const item of state.assets) {
+      fallbackTargetPath = getLatestAssetResultPath(item)
+      if (fallbackTargetPath) break
+    }
+    const currentTargetPath = config.sessionOutputPath || getLatestAssetResultPath(currentAsset) || fallbackTargetPath || ''
     if (!currentTargetPath) {
       notify({ type: 'info', message: '当前还没有可打开的结果目录。' })
       return
