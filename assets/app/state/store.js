@@ -5,6 +5,7 @@ const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermar
 const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 let batchDepth = 0
 let emitQueued = false
+let assetIndexById = new Map()
 
 const DEFAULT_CONFIGS = {
   compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
@@ -83,6 +84,25 @@ export function getState() {
   return state
 }
 
+function rebuildAssetIndex(assets = state.assets) {
+  const next = new Map()
+  for (let index = 0; index < assets.length; index += 1) {
+    const assetId = assets[index]?.id
+    if (!assetId) continue
+    next.set(assetId, index)
+  }
+  assetIndexById = next
+}
+
+function setAssets(nextAssets) {
+  state.assets = nextAssets
+  rebuildAssetIndex(nextAssets)
+}
+
+function findAssetIndexById(assetId) {
+  return assetIndexById.has(assetId) ? assetIndexById.get(assetId) : -1
+}
+
 export function subscribe(listener) {
   listeners.add(listener)
   return () => listeners.delete(listener)
@@ -114,6 +134,9 @@ export function setState(patch) {
   }
   if (!changed) return
   Object.assign(state, patch)
+  if (Array.isArray(patch?.assets)) {
+    rebuildAssetIndex(patch.assets)
+  }
   emit()
 }
 
@@ -184,7 +207,7 @@ function markPreviewAssetsStale(toolId) {
       nextAssets[index] = nextAsset
     }
   }
-  if (nextAssets) state.assets = nextAssets
+  if (nextAssets) setAssets(nextAssets)
 }
 
 export function updateConfig(toolId, patch) {
@@ -240,7 +263,7 @@ export function replaceAssets(assets) {
     nextAssets.length === state.assets.length
     && nextAssets.every((asset, index) => state.assets[index]?.sourcePath === asset.sourcePath)
   ) return
-  state.assets = nextAssets
+  setAssets(nextAssets)
   emit()
 }
 
@@ -256,16 +279,16 @@ export function appendAssets(assets) {
     }
   }
   if (!appended) return
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
 export function removeAsset(assetId) {
-  const assetIndex = state.assets.findIndex((item) => item.id === assetId)
+  const assetIndex = findAssetIndexById(assetId)
   if (assetIndex === -1) return
   const nextAssets = [...state.assets]
   nextAssets.splice(assetIndex, 1)
-  state.assets = nextAssets
+  setAssets(nextAssets)
   emit()
 }
 
@@ -273,18 +296,19 @@ export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange =
   if (!assetId || !listThumbnailUrl) return
   let changed = false
   if (emitChange) {
-    const assetIndex = state.assets.findIndex((asset) => asset.id === assetId)
+    const assetIndex = findAssetIndexById(assetId)
     if (assetIndex !== -1 && state.assets[assetIndex]?.listThumbnailUrl !== listThumbnailUrl) {
       const nextAssets = [...state.assets]
       nextAssets[assetIndex] = {
         ...state.assets[assetIndex],
         listThumbnailUrl,
       }
-      state.assets = nextAssets
+      setAssets(nextAssets)
       changed = true
     }
   } else {
-    const asset = state.assets.find((entry) => entry.id === assetId)
+    const assetIndex = findAssetIndexById(assetId)
+    const asset = assetIndex === -1 ? null : state.assets[assetIndex]
     if (asset && asset.listThumbnailUrl !== listThumbnailUrl) {
       asset.listThumbnailUrl = listThumbnailUrl
       changed = true
@@ -353,7 +377,7 @@ export function applyRunResult(result) {
   }
 
   if (nextAssets) {
-    state.assets = nextAssets
+    setAssets(nextAssets)
     changed = true
   }
 
@@ -375,20 +399,20 @@ export function applyRunResult(result) {
 }
 
 export function moveAsset(assetId, direction) {
-  const index = state.assets.findIndex((item) => item.id === assetId)
+  const index = findAssetIndexById(assetId)
   if (index === -1) return
   const nextIndex = direction === 'up' ? index - 1 : index + 1
   if (nextIndex < 0 || nextIndex >= state.assets.length) return
   const next = [...state.assets]
   ;[next[index], next[nextIndex]] = [next[nextIndex], next[index]]
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
 export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') {
   if (!assetId || !targetAssetId || assetId === targetAssetId) return
-  const fromIndex = state.assets.findIndex((item) => item.id === assetId)
-  const targetIndex = state.assets.findIndex((item) => item.id === targetAssetId)
+  const fromIndex = findAssetIndexById(assetId)
+  const targetIndex = findAssetIndexById(targetAssetId)
   if (fromIndex === -1 || targetIndex === -1) return
 
   const next = [...state.assets]
@@ -396,7 +420,7 @@ export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') 
   const adjustedTargetIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
   const insertIndex = placement === 'after' ? adjustedTargetIndex + 1 : adjustedTargetIndex
   next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, moved)
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
