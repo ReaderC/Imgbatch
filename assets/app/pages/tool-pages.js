@@ -411,10 +411,11 @@ function renderMergeImageConfig(config) {
       ['horizontal', '横向'],
     ])}
     ${renderFieldGrid(`
-      ${renderInputField({ label: '页面宽度', toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1 })}
+      ${renderInputField({ label: '页面宽度', toolId: 'merge-image', key: 'pageWidth', type: 'number', value: config.pageWidth, min: 1, disabled: config.useMaxAssetSize })}
       ${renderInputField({ label: '图片间距', toolId: 'merge-image', key: 'spacing', type: 'number', value: config.spacing, min: 0 })}
     `)}
     ${renderToggleRow('小图保持原尺寸', '小于目标宽度的图片不放大，按原尺寸居中留白', 'merge-image', 'preventUpscale', config.preventUpscale)}
+    ${renderToggleRow('使用列表最大宽高', '纵向拼接时自动取列表最大宽度，横向拼接时自动取列表最大高度', 'merge-image', 'useMaxAssetSize', config.useMaxAssetSize)}
     ${renderFieldGrid(`
       ${renderSelectField({ label: '输出格式', toolId: 'merge-image', key: 'outputFormat', value: config.outputFormat || 'JPEG', options: MERGE_IMAGE_OUTPUT_OPTIONS })}
     `)}

@@ -827,6 +827,7 @@ function normalizeRunConfig(toolId, config = {}) {
       background: sanitizeText(config.background, '#ffffff'),
       align: pickOption(String(config.align || ''), ['start', 'center'], 'start'),
       preventUpscale: Boolean(config.preventUpscale),
+      useMaxAssetSize: Boolean(config.useMaxAssetSize),
       outputFormat: pickOption(String(config.outputFormat || ''), ['PNG', 'JPEG', 'WebP'], 'JPEG'),
       quality: Math.max(1, Math.min(100, toInteger(config.quality, 90))),
     }
@@ -2676,15 +2677,18 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const isVertical = payload.config.direction === 'vertical'
   const isCentered = payload.config.align === 'center'
   const preventUpscale = Boolean(payload.config.preventUpscale)
-  const fitWidth = isVertical ? payload.config.pageWidth : undefined
-  const fitHeight = isVertical ? undefined : payload.config.pageWidth
+  const targetSpan = payload.config.useMaxAssetSize
+    ? Math.max(1, ...payload.assets.map((asset) => Math.max(0, Number(isVertical ? asset?.width : asset?.height) || 0)))
+    : Math.max(1, Number(payload.config.pageWidth) || 1)
+  const fitWidth = isVertical ? targetSpan : undefined
+  const fitHeight = isVertical ? undefined : targetSpan
   if (payload.assets.length === 1) {
     const asset = payload.assets[0]
     asset.inputFormat = await getAssetInputFormat(sharpLib, asset)
     const sourceFormat = normalizeImageFormatName(asset.inputFormat)
     const keepsOriginalSize = isVertical
-      ? ((preventUpscale && Number(asset.width) <= payload.config.pageWidth) || Number(asset.width) === payload.config.pageWidth)
-      : ((preventUpscale && Number(asset.height) <= payload.config.pageWidth) || Number(asset.height) === payload.config.pageWidth)
+      ? ((preventUpscale && Number(asset.width) <= targetSpan) || Number(asset.width) === targetSpan)
+      : ((preventUpscale && Number(asset.height) <= targetSpan) || Number(asset.height) === targetSpan)
     const canCopyOriginal = keepsOriginalSize
       && sourceFormat === format
       && canSkipSameFormatEncoding(format, quality)
@@ -2709,7 +2713,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
-  const dominantSize = Math.max(1, Number(payload.config.pageWidth) || 1)
+  const dominantSize = targetSpan
   const prepared = await mapWithConcurrency(payload.assets, prepareConcurrency, async (asset) => {
     throwIfRunCancelled(payload.runId)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
@@ -2720,8 +2724,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }
     const keepsOriginalSize = isVertical
-      ? ((preventUpscale && sourceWidth <= payload.config.pageWidth) || sourceWidth === payload.config.pageWidth)
-      : ((preventUpscale && sourceHeight <= payload.config.pageWidth) || sourceHeight === payload.config.pageWidth)
+      ? ((preventUpscale && sourceWidth <= targetSpan) || sourceWidth === targetSpan)
+      : ((preventUpscale && sourceHeight <= targetSpan) || sourceHeight === targetSpan)
     if (sourceWidth > 0 && sourceHeight > 0 && keepsOriginalSize) {
       const { data, info } = await createTransformer(sharpLib, asset)
         .ensureAlpha()
