@@ -1419,6 +1419,10 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
     ? (
         (progress?.toolId || state.activeTool) === 'merge-pdf'
           ? (progress?.phase === 'merge-pdf-prepare' ? '\u9884\u5904\u7406\u4e2d' : '\u751f\u6210 PDF \u4e2d')
+          : (progress?.toolId || state.activeTool) === 'merge-image'
+            ? '\u5408\u5e76\u4e2d'
+            : (progress?.toolId || state.activeTool) === 'merge-gif'
+              ? '\u751f\u6210 GIF \u4e2d'
           : `${progress?.completed || 0}/${progress?.total || 0} \u5904\u7406\u4e2d`
       )
     : '\u5f00\u59cb\u5904\u7406'
