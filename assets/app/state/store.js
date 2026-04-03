@@ -444,13 +444,23 @@ export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') 
 
 export function pushNotification(notification) {
   const item = { id: crypto.randomUUID(), ...notification }
-  state.notifications = [...state.notifications, item].slice(-4)
+  const next = state.notifications.slice()
+  next.push(item)
+  if (next.length > 4) {
+    next.splice(0, next.length - 4)
+  }
+  state.notifications = next
   emit()
   return item
 }
 
 export function dismissNotification(id) {
-  state.notifications = state.notifications.filter((item) => item.id !== id)
+  const current = state.notifications
+  const index = current.findIndex((item) => item.id === id)
+  if (index === -1) return
+  const next = current.slice()
+  next.splice(index, 1)
+  state.notifications = next
   emit()
 }
 

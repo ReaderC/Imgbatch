@@ -499,6 +499,26 @@ function isPreviewableTool(toolId) {
   return PREVIEWABLE_TOOLS.has(toolId)
 }
 
+function getCurrentStagedItems(activeTool, assets) {
+  if (!activeTool || !assets?.length) return []
+  const stagedItems = []
+  for (const asset of assets) {
+    if (!asset?.stagedOutputPath) continue
+    if (asset.previewStatus !== 'staged') continue
+    if (asset.stagedToolId !== activeTool) continue
+    if (!asset.runFolderName) continue
+    stagedItems.push({
+      assetId: asset.id,
+      name: asset.name,
+      stagedPath: asset.stagedOutputPath,
+      outputName: asset.stagedOutputName,
+      runId: asset.runId,
+      runFolderName: asset.runFolderName,
+    })
+  }
+  return stagedItems
+}
+
 async function saveAssetResult(assetId) {
   const state = getState()
   const asset = getAssetById(assetId)
@@ -532,7 +552,7 @@ async function saveAssetResult(assetId) {
 
 async function saveAllCurrentResults() {
   const state = getState()
-  const stagedItems = buildStagedItems(state.assets).filter((item) => item.runFolderName && item.toolId === state.activeTool)
+  const stagedItems = getCurrentStagedItems(state.activeTool, state.assets)
   if (!stagedItems.length) {
     notify({ type: 'info', message: '当前没有可批量保存的处理结果。' })
     return
@@ -1183,11 +1203,15 @@ function getToolRunner(toolId, previewMode = '') {
     : runTool
 }
 
+function buildPreviewReuseSignature(toolId, config) {
+  return JSON.stringify({ toolId, config: config || {} })
+}
+
 function shouldReusePreviewResult(toolId, asset) {
   if (!isPreviewableTool(toolId)) return false
   if (asset?.stagedToolId !== toolId) return false
   if (!asset?.previewUrl) return false
-  const signature = JSON.stringify({ toolId, config: getState().configs[toolId] || {} })
+  const signature = buildPreviewReuseSignature(toolId, getState().configs[toolId])
   if (asset?.saveSignature && asset.saveSignature !== signature) return false
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
 }
@@ -1571,12 +1595,21 @@ function patchQueueRootMarkup(root, markup) {
   return true
 }
 
+function findQueueAnchorItem(queueNode, queueRect) {
+  const items = queueNode?.querySelectorAll?.('.queue-item[data-asset-id]') || []
+  for (const item of items) {
+    if (item.getBoundingClientRect().bottom > queueRect.top + 1) {
+      return item
+    }
+  }
+  return null
+}
+
 function queueQueueScrollRestore() {
   const queueNode = getQueueScrollNode()
   if (!queueNode) return
   const queueRect = queueNode.getBoundingClientRect()
-  const anchorItem = Array.from(queueNode.querySelectorAll('.queue-item[data-asset-id]'))
-    .find((item) => item.getBoundingClientRect().bottom > queueRect.top + 1)
+  const anchorItem = findQueueAnchorItem(queueNode, queueRect)
   pendingQueueScrollRestore = {
     scrollTop: Math.max(0, queueNode.scrollTop || 0),
     anchorAssetId: anchorItem?.getAttribute('data-asset-id') || '',
@@ -1595,8 +1628,7 @@ function captureQueueScrollPosition() {
 function captureQueueAnchor(queueNode = getQueueScrollNode()) {
   if (!queueNode) return null
   const queueRect = queueNode.getBoundingClientRect()
-  const anchorItem = Array.from(queueNode.querySelectorAll('.queue-item[data-asset-id]'))
-    .find((item) => item.getBoundingClientRect().bottom > queueRect.top + 1)
+  const anchorItem = findQueueAnchorItem(queueNode, queueRect)
   if (!anchorItem) {
     return {
       assetId: '',
@@ -2412,18 +2444,22 @@ function appendImportedAssets(assets, verb = '已导入') {
 
 function captureUiSnapshot() {
   const activeElement = document.activeElement
-  const scrollRoots = Array.from(app?.querySelectorAll?.('[data-scroll-role]') || []).filter((node) => {
-    return node.getAttribute('data-scroll-role') !== 'queue'
-  })
   const activeField = activeElement?.matches?.('[data-action][data-tool-id][data-key], [data-role="search-input"], [data-action="change-preset-name"]')
     ? getElementDescriptor(activeElement)
     : null
+  const scrollTopByRole = []
+  const scrollRoots = app?.querySelectorAll?.('[data-scroll-role]') || []
+  for (const node of scrollRoots) {
+    const role = node.getAttribute('data-scroll-role')
+    if (role === 'queue') continue
+    scrollTopByRole.push({
+      role,
+      scrollTop: node.scrollTop,
+    })
+  }
   return {
     windowScrollY: window.scrollY,
-    scrollTopByRole: Array.from(scrollRoots).map((node) => ({
-      role: node.dataset.scrollRole,
-      scrollTop: node.scrollTop,
-    })),
+    scrollTopByRole,
     activeField,
     selection: activeField && activeElement && 'selectionStart' in activeElement
       ? {
