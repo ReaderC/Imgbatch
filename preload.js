@@ -1047,6 +1047,71 @@ function yieldToEventLoop() {
   })
 }
 
+function detectDirectEmbedKind(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return ''
+  if (buffer.length >= 8
+    && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) return 'png'
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpg'
+  return ''
+}
+
+async function prepareMergePdfChildPayload(sharpLib, payload) {
+  const sourceAssets = Array.isArray(payload?.assets) ? payload.assets : []
+  if (!sourceAssets.length) return payload
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imgbatch-merge-pdf-'))
+  const tempPaths = []
+  const preparedAssets = []
+
+  try {
+    for (const asset of sourceAssets) {
+      const nextAsset = { ...asset }
+      nextAsset.inputFormat = await getAssetInputFormat(sharpLib, nextAsset)
+      const sourceBuffer = fs.readFileSync(nextAsset.sourcePath)
+      const directKind = detectDirectEmbedKind(sourceBuffer)
+      if (directKind) {
+        preparedAssets.push(nextAsset)
+        continue
+      }
+
+      const outputKind = isAlphaCapableFormat(nextAsset.inputFormat) ? 'png' : 'jpeg'
+      const parsed = path.parse(nextAsset.sourcePath)
+      const tempPath = path.join(tempDir, `${parsed.name || 'asset'}-${preparedAssets.length + 1}.${outputKind === 'jpeg' ? 'jpg' : 'png'}`)
+      const transformed = outputKind === 'png'
+        ? createTransformer(sharpLib, nextAsset).png()
+        : createTransformer(sharpLib, nextAsset).jpeg({ quality: 100, mozjpeg: true })
+      await transformed.toFile(tempPath)
+      tempPaths.push(tempPath)
+      preparedAssets.push({
+        ...nextAsset,
+        sourcePath: tempPath,
+        ext: outputKind,
+        inputFormat: outputKind,
+      })
+    }
+
+    return {
+      ...payload,
+      assets: preparedAssets,
+      mergePdfTempDir: tempDir,
+      mergePdfTempPaths: tempPaths,
+    }
+  } catch (error) {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    } catch {}
+    throw error
+  }
+}
+
+function cleanupMergePdfChildPayload(payload) {
+  const tempDir = sanitizeText(payload?.mergePdfTempDir)
+  if (!tempDir) return
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  } catch {}
+}
+
 function runMergePdfWorker(payload) {
   return new Promise((resolve, reject) => {
     const worker = fork(path.join(__dirname, 'workers', 'merge-pdf-worker.cjs'), [], {
@@ -2750,7 +2815,12 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
 async function writeMergePdfAssetResponsive(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
-  return runMergePdfWorker(payload)
+  const preparedPayload = await prepareMergePdfChildPayload(sharpLib, payload)
+  try {
+    return await runMergePdfWorker(preparedPayload)
+  } finally {
+    cleanupMergePdfChildPayload(preparedPayload)
+  }
 }
 
 async function writeMergePdfAssetReal(sharpLib, payload) {
