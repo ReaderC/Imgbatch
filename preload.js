@@ -2095,7 +2095,7 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
   if (!(config.keepTransparency && isAlphaCapableFormat(format))) {
     transformed = transformed.flatten({ background: hexToRgbaObject('#ffffff', 1) })
   }
-  const quality = Math.round(clampNumber(config.quality, 1, 100, 90))
+  const quality = getTransformQuality(config.quality, sourceFormat, format)
 
   return writeTransformedAsset(transformed, format, quality, outputPath, {
     width: asset.width,
@@ -2108,7 +2108,7 @@ async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
   asset.inputFormat = inputFormat
   const format = mapOutputFormat('resize', asset, config)
   const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'resize', format)
-  const quality = clampNumber(config.quality, 1, 100, 90)
+  const quality = getTransformQuality(config.quality, sourceFormat, format)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
