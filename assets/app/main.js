@@ -716,6 +716,19 @@ function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
 
+function getResultViewItemsSignature(items = []) {
+  if (!Array.isArray(items) || !items.length) return ''
+  return items.map((item) => [
+    item.assetId || '',
+    item.outputPath || '',
+    item.result?.name || '',
+    item.result?.sizeBytes || 0,
+    item.result?.width || 0,
+    item.result?.height || 0,
+    item.summary || '',
+  ].join('\u0001')).join('\u0002')
+}
+
 function refreshResultView() {
   const state = getState()
   const items = []
@@ -749,6 +762,19 @@ function refreshResultView() {
 
   if (!items.length) {
     setResultView(null)
+    return
+  }
+
+  const currentResultView = state.resultView
+  const nextItemsSignature = getResultViewItemsSignature(items)
+  const currentItemsSignature = getResultViewItemsSignature(currentResultView?.items || [])
+  if (
+    currentResultView
+    && currentResultView.runId === (state.activeRun?.runId || '')
+    && currentResultView.toolId === state.activeTool
+    && currentResultView.mode === (state.activeRun?.mode || 'save')
+    && currentItemsSignature === nextItemsSignature
+  ) {
     return
   }
 
