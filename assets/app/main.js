@@ -2003,18 +2003,20 @@ function attachProcessingProgressEvents() {
 }
 
 function queueProcessingProgressState(detail) {
+  const toolId = detail?.toolId || ''
+  const isSingleRunTool = MERGE_PREVIEW_TOOLS.has(toolId)
   pendingProcessingProgress = detail?.phase === 'finish'
     ? null
     : {
         phase: detail.phase || 'progress',
         runId: detail.runId || '',
-        toolId: detail.toolId || '',
+        toolId,
         toolLabel: detail.toolLabel || '',
         mode: detail.mode || 'direct',
-        total: Number(detail.total) || 0,
-        completed: Number(detail.completed) || 0,
-        succeeded: Number(detail.succeeded) || 0,
-        failed: Number(detail.failed) || 0,
+        total: isSingleRunTool ? 1 : (Number(detail.total) || 0),
+        completed: isSingleRunTool ? 0 : (Number(detail.completed) || 0),
+        succeeded: isSingleRunTool ? 0 : (Number(detail.succeeded) || 0),
+        failed: isSingleRunTool ? 0 : (Number(detail.failed) || 0),
         startedAt: Number(detail.startedAt) || Date.now(),
       }
   if (processingProgressFrame) return
@@ -2031,14 +2033,17 @@ function queueProcessingProgressState(detail) {
 function isSameProcessingProgress(currentProgress, nextProgress) {
   if (currentProgress === nextProgress) return true
   if (!currentProgress || !nextProgress) return !currentProgress && !nextProgress
+  const isSingleRunTool = MERGE_PREVIEW_TOOLS.has(nextProgress.toolId || currentProgress.toolId || '')
   return currentProgress.phase === nextProgress.phase
     && currentProgress.runId === nextProgress.runId
     && currentProgress.toolId === nextProgress.toolId
     && currentProgress.mode === nextProgress.mode
-    && currentProgress.total === nextProgress.total
-    && currentProgress.completed === nextProgress.completed
-    && currentProgress.succeeded === nextProgress.succeeded
-    && currentProgress.failed === nextProgress.failed
+    && (isSingleRunTool || (
+      currentProgress.total === nextProgress.total
+      && currentProgress.completed === nextProgress.completed
+      && currentProgress.succeeded === nextProgress.succeeded
+      && currentProgress.failed === nextProgress.failed
+    ))
 }
 
 function attachQueueThumbnailSubscription() {
