@@ -3056,10 +3056,11 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const dominantSize = targetSpan
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const { metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
+    let metadata = null
     if (!(sourceWidth > 0 && sourceHeight > 0)) {
+      ;({ metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true }))
       sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
       sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
     }
@@ -3255,11 +3256,12 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   emitMergePdfProgress('merge-pdf-prepare')
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: autoPaginateFixedPage })
-    asset.inputFormat = inputFormat
-    const imageBytes = fs.readFileSync(asset.sourcePath)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
+    const needsMetadata = autoPaginateFixedPage && !(sourceWidth > 0 && sourceHeight > 0)
+    const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: needsMetadata })
+    asset.inputFormat = inputFormat
+    const imageBytes = fs.readFileSync(asset.sourcePath)
     const margin = fixedMargin ?? (payload.config.margin === 'none'
       ? 0
       : payload.config.margin === 'wide'
@@ -3465,7 +3467,8 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
   const hydratedAssets = await Promise.all((payload.assets || []).map(async (asset) => {
-    await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
+    const needsMetadata = !(Number(asset?.width) > 0 && Number(asset?.height) > 0)
+    await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: needsMetadata })
     return asset
   }))
   const frameWidth = payload.config.useMaxAssetSize
