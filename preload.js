@@ -3214,6 +3214,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
     },
   }).composite(composites), format, quality).toFile(outputPath)
   throwIfRunCancelled(payload.runId)
+  prepared.length = 0
+  composites.length = 0
 
   return {
     outputPath,
@@ -3382,21 +3384,27 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       if (embedded) return embedded
       if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
         embedded = await pdf.embedPng(prepared.embeddedBytes)
+        prepared.embeddedBytes = null
       } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
         embedded = await pdf.embedJpg(prepared.embeddedBytes)
+        prepared.embeddedBytes = null
       } else if (prepared.sourceFormat === 'png') {
         embedded = await pdf.embedPng(ensureSourceBytes())
+        prepared.imageBytes = null
       } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
         embedded = await pdf.embedJpg(ensureSourceBytes())
+        prepared.imageBytes = null
       } else {
-        embedded = await pdf.embedPng(
-          prepared.embeddedBytes || await createTransformer(sharpLib, {
-            ...prepared,
-            sourcePath: prepared.sourcePath,
-            inputFormat: prepared.sourceFormat,
-            ext: prepared.sourceFormat,
-          }).png().toBuffer(),
-        )
+        const fallbackEmbeddedBytes = prepared.embeddedBytes || await createTransformer(sharpLib, {
+          ...prepared,
+          sourcePath: prepared.sourcePath,
+          inputFormat: prepared.sourceFormat,
+          ext: prepared.sourceFormat,
+        }).png().toBuffer()
+        embedded = await pdf.embedPng(fallbackEmbeddedBytes)
+        if (prepared.embeddedBytes === fallbackEmbeddedBytes) {
+          prepared.embeddedBytes = null
+        }
       }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
@@ -3466,6 +3474,7 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
         .resize({ width: scaledWidth, fit: 'fill' })
         .png()
         .toBuffer()
+    prepared.scaledBuffer = null
     const scaledImage = sharpLib(scaledBuffer)
     let offsetY = 0
     while (offsetY < scaledHeight) {
