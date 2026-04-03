@@ -2814,6 +2814,17 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
 async function writeMergePdfAssetResponsive(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
+  emitProcessingProgress({
+    phase: 'merge-pdf-prepare',
+    runId: payload.runId,
+    toolId: payload.toolId,
+    toolLabel: payload.toolLabel,
+    mode: payload.mode,
+    total: Math.max(1, Array.isArray(payload.assets) ? payload.assets.length : 0),
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+  })
   const preparedPayload = await prepareMergePdfChildPayload(sharpLib, payload)
   try {
     return await runMergePdfWorker(preparedPayload)
