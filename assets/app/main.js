@@ -616,7 +616,12 @@ function getReplaceEntry(assetId) {
   const state = getState()
   const asset = getAssetById(assetId)
   if (!asset?.sourcePath) return null
-  const resultItem = state.resultView?.items?.find((item) => item.assetId === assetId)
+  let resultItem = null
+  for (const item of state.resultView?.items || []) {
+    if (item?.assetId !== assetId) continue
+    resultItem = item
+    break
+  }
   const resultPath = normalizeAssetPath(
     resultItem?.outputPath
     || asset?.savedOutputPath
@@ -2726,10 +2731,14 @@ function attachGlobalEvents() {
         const config = state.configs['manual-crop']
         const removeIndex = getAssetIndexById(assetId)
         if (removeIndex !== -1) {
-          const nextAssets = state.assets.filter((item) => item.id !== assetId)
+          const nextAssets = [...state.assets]
+          nextAssets.splice(removeIndex, 1)
           const cropAreas = { ...(config.cropAreas || {}) }
           delete cropAreas[assetId]
-          const completedIds = (config.completedIds || []).filter((id) => id !== assetId)
+          const completedIds = []
+          for (const id of config.completedIds || []) {
+            if (id !== assetId) completedIds.push(id)
+          }
           const nextIndex = nextAssets.length
             ? Math.min(removeIndex <= config.currentIndex ? Math.max(0, config.currentIndex - 1) : config.currentIndex, nextAssets.length - 1)
             : 0
