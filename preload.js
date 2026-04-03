@@ -2,7 +2,7 @@ const { nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync, fork } = require('child_process')
+const { execFileSync } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -54,7 +54,6 @@ const QUEUE_THUMBNAIL_URL_CACHE = new Map()
 const BMP_DECODE_CACHE = new Map()
 const INPUT_FORMAT_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
-const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
@@ -1134,13 +1133,6 @@ function cancelRun(runId) {
   const normalized = String(runId || '').trim()
   if (!normalized) return false
   CANCELLED_RUNS.add(normalized)
-  const worker = ACTIVE_MERGE_WORKERS.get(normalized)
-  if (worker) {
-    ACTIVE_MERGE_WORKERS.delete(normalized)
-    try {
-      worker.terminate()
-    } catch {}
-  }
   return true
 }
 
@@ -2994,7 +2986,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
   }
 
-  const bytes = await pdf.save()
+  const saveObjectsPerTick = payload.assets.length > 8 ? 8 : 16
+  const bytes = await pdf.save({ objectsPerTick: saveObjectsPerTick })
   throwIfRunCancelled(payload.runId)
   fs.writeFileSync(outputPath, bytes)
   return {
