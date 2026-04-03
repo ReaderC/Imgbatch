@@ -3754,6 +3754,8 @@ const toolsApi = {
         name: path.basename(filePath),
         ext,
         inputFormat: ext,
+        inputMetadata: descriptor?.inputMetadata || null,
+        hasAlpha: Boolean(descriptor?.hasAlpha),
         sizeBytes: stat.size,
         width,
         height,
