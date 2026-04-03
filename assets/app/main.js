@@ -1216,6 +1216,14 @@ function shouldReusePreviewResult(toolId, asset) {
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
 }
 
+function findProcessedResultByAssetId(processedItems, assetId) {
+  if (!processedItems?.length || !assetId) return null
+  for (const item of processedItems) {
+    if (item?.assetId === assetId) return item
+  }
+  return null
+}
+
 async function previewWithRunner(tool, asset) {
   const state = getState()
   const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
@@ -1225,7 +1233,7 @@ async function previewWithRunner(tool, asset) {
   }
   const processed = result?.processed?.[0]?.assetId === asset.id
     ? result.processed[0]
-    : (result?.processed || []).find((item) => item.assetId === asset.id)
+    : findProcessedResultByAssetId(result?.processed, asset.id)
   const previewedAsset = processed
     ? {
         ...asset,
@@ -1393,9 +1401,16 @@ function hasSameAssetOrder(previousAssets = [], nextAssets = []) {
 function hasSameAssetSet(previousAssets = [], nextAssets = []) {
   if (!Array.isArray(previousAssets) || !Array.isArray(nextAssets)) return false
   if (previousAssets.length !== nextAssets.length) return false
-  const previousIds = new Set(previousAssets.map((asset) => asset?.id).filter(Boolean))
-  if (previousIds.size !== previousAssets.length) return false
-  return nextAssets.every((asset) => previousIds.has(asset?.id))
+  const previousIds = new Set()
+  for (const asset of previousAssets) {
+    const assetId = asset?.id
+    if (!assetId || previousIds.has(assetId)) return false
+    previousIds.add(assetId)
+  }
+  for (const asset of nextAssets) {
+    if (!previousIds.has(asset?.id)) return false
+  }
+  return true
 }
 
 function hasAssetOrderPrefix(previousAssets = [], nextAssets = []) {
@@ -2197,17 +2212,25 @@ function render(state) {
 
 function queuePostRenderWork(work) {
   if (pendingPostRenderWork) {
-    const mergedTooltipRoots = [
-      ...(pendingPostRenderWork.tooltipRoots || []),
-      ...(work.tooltipRoots || []),
-    ].filter(Boolean)
+    const mergedTooltipRoots = []
+    const mergedTooltipRootSet = new Set()
+    for (const root of pendingPostRenderWork.tooltipRoots || []) {
+      if (!root || mergedTooltipRootSet.has(root)) continue
+      mergedTooltipRootSet.add(root)
+      mergedTooltipRoots.push(root)
+    }
+    for (const root of work.tooltipRoots || []) {
+      if (!root || mergedTooltipRootSet.has(root)) continue
+      mergedTooltipRootSet.add(root)
+      mergedTooltipRoots.push(root)
+    }
     pendingPostRenderWork = {
       snapshot: work.snapshot || pendingPostRenderWork.snapshot || null,
       activeTool: work.activeTool || pendingPostRenderWork.activeTool,
       queueChanged: Boolean(pendingPostRenderWork.queueChanged || work.queueChanged),
       toolbarChanged: Boolean(pendingPostRenderWork.toolbarChanged || work.toolbarChanged),
       marqueeChanged: Boolean(pendingPostRenderWork.marqueeChanged || work.marqueeChanged),
-      tooltipRoots: Array.from(new Set(mergedTooltipRoots)),
+      tooltipRoots: mergedTooltipRoots,
     }
   } else {
     pendingPostRenderWork = work
