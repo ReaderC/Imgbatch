@@ -625,33 +625,39 @@ function getReplaceEntry(assetId) {
 
 function getReplaceEntries() {
   const state = getState()
-  const resultPathByAssetId = new Map((state.resultView?.items || []).map((item) => [item.assetId, normalizeAssetPath(item.outputPath)]))
-  return state.assets
-    .map((asset) => {
-      if (!asset?.sourcePath) return null
-      const resultPath = resultPathByAssetId.get(asset.id)
-        || normalizeAssetPath(asset?.savedOutputPath || asset?.stagedOutputPath || asset?.outputPath || '')
-      if (!resultPath) return null
-      return {
-        assetId: asset.id,
-        name: asset.name,
-        sourcePath: normalizeAssetPath(asset.sourcePath),
-        resultPath,
-      }
+  const resultPathByAssetId = new Map()
+  for (const item of state.resultView?.items || []) {
+    resultPathByAssetId.set(item.assetId, normalizeAssetPath(item.outputPath))
+  }
+  const entries = []
+  for (const asset of state.assets) {
+    if (!asset?.sourcePath) continue
+    const resultPath = resultPathByAssetId.get(asset.id)
+      || normalizeAssetPath(asset?.savedOutputPath || asset?.stagedOutputPath || asset?.outputPath || '')
+    if (!resultPath) continue
+    entries.push({
+      assetId: asset.id,
+      name: asset.name,
+      sourcePath: normalizeAssetPath(asset.sourcePath),
+      resultPath,
     })
-    .filter(Boolean)
+  }
+  return entries
 }
 
 function clearAssetsResultState(processedItems) {
   const processedList = Array.isArray(processedItems) ? processedItems : []
-  const ids = new Set(processedList.map((item) => item?.assetId).filter(Boolean))
-  const replacementMap = new Map(processedList.map((item) => [item.assetId, item]))
+  const replacementMap = new Map()
+  for (const item of processedList) {
+    if (!item?.assetId) continue
+    replacementMap.set(item.assetId, item)
+  }
   const state = getState()
   let nextAssets = null
   for (let index = 0; index < state.assets.length; index += 1) {
     const asset = state.assets[index]
-    if (!ids.has(asset.id)) continue
     const replaced = replacementMap.get(asset.id)
+    if (!replaced) continue
     const nextSourcePath = String(replaced?.sourcePath || asset.sourcePath || '')
     const nextName = nextSourcePath ? nextSourcePath.replaceAll('\\', '/').split('/').pop() || asset.name : asset.name
     const nextExt = nextName.includes('.') ? nextName.split('.').pop().toLowerCase() : asset.ext
@@ -883,7 +889,7 @@ async function replaceAssetOriginal(assetId) {
     const result = await runBusyAction(() => replaceOriginals([entry]))
     if (result?.processed?.length) {
       clearAssetsResultState(result.processed)
-      refreshResultView()
+      refreshResultViewIfVisible()
       notify({ type: 'info', message: '图片列表已更新为替换后的文件信息。' })
     }
     notifyActionResult(result, '替换原图失败。')
@@ -963,7 +969,7 @@ async function replaceCurrentOriginals() {
     const result = await runBusyAction(() => replaceOriginals(entries))
     if (result?.processed?.length) {
       clearAssetsResultState(result.processed)
-      refreshResultView()
+      refreshResultViewIfVisible()
       notify({ type: 'info', message: '图片列表已更新为替换后的文件信息。' })
     }
     notifyActionResult(result, '替换原图失败。')
