@@ -2235,6 +2235,8 @@ async function bootstrapLaunchInputs() {
 
 function appendImportedAssets(assets, verb = '已导入') {
   if (!assets?.length) return
+  captureQueueScrollPosition()
+  queueQueueScrollRestore()
   appendAssets(assets)
   notify({ type: 'success', message: `${verb} ${assets.length} 张图片。` })
 }
