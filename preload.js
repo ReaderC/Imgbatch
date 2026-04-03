@@ -2724,16 +2724,22 @@ async function writeMergeImageAsset(sharpLib, payload) {
       ? ((preventUpscale && sourceWidth <= payload.config.pageWidth) || sourceWidth === payload.config.pageWidth)
       : ((preventUpscale && sourceHeight <= payload.config.pageWidth) || sourceHeight === payload.config.pageWidth)
     if (sourceWidth > 0 && sourceHeight > 0 && keepsOriginalSize) {
-      const data = await createTransformer(sharpLib, asset)
-        .png()
-        .toBuffer()
+      const { data, info } = await createTransformer(sharpLib, asset)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
       return {
         input: data,
-        width: sourceWidth,
-        height: sourceHeight,
+        raw: {
+          width: info.width,
+          height: info.height,
+          channels: info.channels,
+        },
+        width: info.width || sourceWidth,
+        height: info.height || sourceHeight,
       }
     }
-    const data = await createTransformer(sharpLib, asset)
+    const { data, info } = await createTransformer(sharpLib, asset)
       .resize({
         width: fitWidth,
         height: fitHeight,
@@ -2741,8 +2747,9 @@ async function writeMergeImageAsset(sharpLib, payload) {
         background,
         withoutEnlargement: preventUpscale,
       })
-      .png()
-      .toBuffer()
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
     const baseWidth = Math.max(1, sourceWidth || 1)
     const baseHeight = Math.max(1, sourceHeight || 1)
     const scale = isVertical
@@ -2750,8 +2757,13 @@ async function writeMergeImageAsset(sharpLib, payload) {
       : (preventUpscale ? Math.min(1, dominantSize / baseHeight) : (dominantSize / baseHeight))
     return {
       input: data,
-      width: Math.max(1, Math.round(baseWidth * scale)),
-      height: Math.max(1, Math.round(baseHeight * scale)),
+      raw: {
+        width: info.width,
+        height: info.height,
+        channels: info.channels,
+      },
+      width: info.width || Math.max(1, Math.round(baseWidth * scale)),
+      height: info.height || Math.max(1, Math.round(baseHeight * scale)),
     }
   })
   throwIfRunCancelled(payload.runId)
@@ -2781,6 +2793,7 @@ async function writeMergeImageAsset(sharpLib, payload) {
   const composites = prepared.map((item) => {
     const composite = {
       input: item.input,
+      raw: item.raw,
       left: isVertical && isCentered
         ? Math.max(0, Math.round((totalWidth - item.width) / 2))
         : cursorX,
