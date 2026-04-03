@@ -398,7 +398,7 @@ function renderMergePdfConfig(config) {
       ${renderColorField({ label: '背景色', toolId: 'merge-pdf', key: 'background', value: config.background || '#FFFFFF' })}
     `)}
     ${renderToggleRow('自动分页', '', 'merge-pdf', 'autoPaginate', config.autoPaginate)}
-    <span class="setting-row__hint setting-row__hint--compression">PDF 合并基于 pdf-lib，直接支持 JPG/JPEG 与 PNG；其他格式会在合并前自动转换为这两种格式后再处理。</span>
+    <span class="setting-row__hint setting-row__hint--compression">PDF 合并基于 pdf-lib，直接支持 JPG/JPEG 与 PNG；其他格式会在合并前自动转换为这两种格式后再处理。若需转换的图片过多，处理时间可能会显著延长。</span>
   `)
 }
 
