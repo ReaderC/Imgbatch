@@ -35,16 +35,14 @@ export function renderImageQueue(state, viewport = null) {
   const visibleAssets = queueWindow
     ? assets.slice(queueWindow.startIndex, queueWindow.endIndex)
     : assets
+  const queueItemsMarkup = renderVisibleQueueItems(visibleAssets, queueWindow, tool, state, assets.length, compactLayout, denseLayout, processingDenseLayout)
 
   return `
     <section class="${buildQueueClassName(layoutFlags)}" data-role="drop-surface" data-scroll-role="queue">
       ${assets.length ? `
         <div class="queue-list${queueWindow ? ' queue-list--virtual' : ''}">
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.topSpacer}px;" aria-hidden="true"></div>` : ''}
-          ${visibleAssets.map((asset, index) => {
-            const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
-            return renderQueueItem(asset, tool, state, absoluteIndex, assets.length, compactLayout, denseLayout, processingDenseLayout)
-          }).join('')}
+          ${queueItemsMarkup}
           ${queueWindow ? `<div class="queue-list__spacer" style="height:${queueWindow.bottomSpacer}px;" aria-hidden="true"></div>` : ''}
         </div>
       ` : `
@@ -75,6 +73,16 @@ export function renderImageQueue(state, viewport = null) {
       </div>
     </section>
   `
+}
+
+function renderVisibleQueueItems(visibleAssets, queueWindow, tool, state, total, compactLayout, denseLayout, processingDenseLayout) {
+  let markup = ''
+  for (let index = 0; index < visibleAssets.length; index += 1) {
+    const asset = visibleAssets[index]
+    const absoluteIndex = queueWindow ? queueWindow.startIndex + index : index
+    markup += renderQueueItem(asset, tool, state, absoluteIndex, total, compactLayout, denseLayout, processingDenseLayout)
+  }
+  return markup
 }
 
 export function shouldVirtualizeQueue(total = 0) {
