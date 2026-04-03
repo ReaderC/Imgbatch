@@ -3362,7 +3362,8 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
   emitMergePdfProgress('merge-pdf-write')
 
-  for (const prepared of preparedAssets) {
+  for (let preparedIndex = 0; preparedIndex < preparedAssets.length; preparedIndex += 1) {
+    const prepared = preparedAssets[preparedIndex]
     throwIfRunCancelled(payload.runId)
     await yieldToEventLoop()
     let embedded = null
@@ -3489,7 +3490,13 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       })
       offsetY += sliceHeight
     }
+    embedded = null
+    prepared.imageBytes = null
+    prepared.embeddedBytes = null
+    prepared.scaledBuffer = null
+    preparedAssets[preparedIndex] = null
   }
+  preparedAssets.length = 0
 
   const saveObjectsPerTick = payload.assets.length > 8 ? 8 : 16
   const bytes = await pdf.save({ objectsPerTick: saveObjectsPerTick })
@@ -3520,12 +3527,14 @@ async function writeMergeGifAsset(sharpLib, payload) {
     asset.height = height
     return asset
   })
-  const frameWidth = payload.config.useMaxAssetSize
-    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
-    : payload.config.width
-  const frameHeight = payload.config.useMaxAssetSize
-    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.height) || 0)))
-    : payload.config.height
+  let maxFrameWidth = 1
+  let maxFrameHeight = 1
+  for (const asset of hydratedAssets) {
+    maxFrameWidth = Math.max(maxFrameWidth, Math.max(0, Number(asset?.width) || 0))
+    maxFrameHeight = Math.max(maxFrameHeight, Math.max(0, Number(asset?.height) || 0))
+  }
+  const frameWidth = payload.config.useMaxAssetSize ? maxFrameWidth : payload.config.width
+  const frameHeight = payload.config.useMaxAssetSize ? maxFrameHeight : payload.config.height
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval))
   const repeat = payload.config.loop ? 0 : -1
@@ -3559,12 +3568,14 @@ async function writeMergeGifAsset(sharpLib, payload) {
         frameConcurrency,
         (assetIndex) => prepareFrame(hydratedAssets[assetIndex]),
       )
-      for (const frame of preparedFrames) {
+      for (let frameIndex = 0; frameIndex < preparedFrames.length; frameIndex += 1) {
+        const frame = preparedFrames[frameIndex]
         throwIfRunCancelled(payload.runId)
         encoder.writeFrame(frame.index, frameWidth, frameHeight, {
           palette: frame.palette,
           ...frameWriteOptions,
         })
+        preparedFrames[frameIndex] = null
       }
       await yieldToEventLoop()
     }
