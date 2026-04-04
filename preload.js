@@ -1088,7 +1088,6 @@ let detachedWindowHeartbeatTimer = null
 let detachedWindowHeartbeatFilePath = ''
 let launchApiDebugLogged = false
 let delayedPreviewCleanupTimer = null
-let startupCopiedFilesSignature = null
 let lastHandledCopiedFilesSignature = ''
 const pluginStartupAt = Date.now()
 const MAX_CONSUMED_HOST_LAUNCH_SIGNATURES = 12
@@ -1405,12 +1404,10 @@ function installLaunchHooks() {
   launchHooksInstalled = true
 
   const hostApi = getHostApi()
-  if (startupCopiedFilesSignature == null) {
-    startupCopiedFilesSignature = readCopiedFilesSnapshot().signature
-    lastHandledCopiedFilesSignature = startupCopiedFilesSignature
+  if (!lastHandledCopiedFilesSignature) {
+    lastHandledCopiedFilesSignature = readCopiedFilesSnapshot().signature
     appendLaunchDebugLog('startup-copied-files-signature', {
-      signature: startupCopiedFilesSignature,
-      lastHandledSignature: lastHandledCopiedFilesSignature,
+      signature: lastHandledCopiedFilesSignature,
     })
   }
   if (!launchApiDebugLogged) {
@@ -4700,9 +4697,6 @@ const toolsApi = {
     if (requirePending && !hadPendingValues) {
       if (includeCopiedFiles) {
         const copiedSnapshot = readCopiedFilesSnapshot()
-        const copiedFilesChangedSinceHandled = Boolean(
-          copiedSnapshot.signature && copiedSnapshot.signature !== lastHandledCopiedFilesSignature,
-        )
         let clipboardSnapshot = await readClipboardLaunchSnapshot()
         const initialClipboardToken = sanitizeText(clipboardSnapshot.token)
         const initialClipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
@@ -4724,10 +4718,8 @@ const toolsApi = {
           includeCopiedFiles,
           minClipboardTimestamp,
           pluginStartupAt,
-          startupCopiedFilesSignature,
           lastHandledCopiedFilesSignature,
           currentCopiedFilesSignature: copiedSnapshot.signature,
-          copiedFilesChangedSinceHandled,
           copiedFileCount: copiedSnapshot.paths.length,
           copiedPaths: copiedSnapshot.paths.slice(0, 12),
           initialClipboardToken,
