@@ -1,8 +1,8 @@
-const { nativeImage, shell } = require('electron')
+const { ipcRenderer, nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync, fork } = require('child_process')
+const { execFileSync } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -19,7 +19,9 @@ const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ic
 const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
+const LEGACY_DEBUG_LOG_DIR_NAME = 'Imgbatch Logs'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
+const CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY = 'imgbatch:consumed-host-launch-signatures'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PERFORMANCE_MODES = new Set(['compatible', 'balanced', 'max'])
 const QUEUE_THUMBNAIL_SIZE_OPTIONS = new Set(['60', '100', '128', '160', '192'])
@@ -60,6 +62,10 @@ const ASSET_DESCRIPTOR_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
 const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
+const LAUNCH_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'launch-debug.log')
+const PREVIEW_CACHE_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'preview-cache-debug.log')
+const DETACHED_HEARTBEAT_FILE_NAME = 'preview-detached-heartbeat.json'
+const DETACHED_HEARTBEAT_STALE_MS = 15000
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -156,6 +162,76 @@ function clampNumber(value, min, max, fallback = min) {
 function sanitizeText(value, fallback = '') {
   const text = typeof value === 'string' ? value.trim() : ''
   return text || fallback
+}
+
+function safeInvoke(reader, fallback = null) {
+  try {
+    return typeof reader === 'function' ? reader() : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function summarizeLaunchValue(value, depth = 0) {
+  if (value == null) return value
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (Array.isArray(value)) {
+    if (depth >= 1) return { type: 'array', length: value.length }
+    return value.slice(0, 6).map((item) => summarizeLaunchValue(item, depth + 1))
+  }
+  if (typeof value === 'object') {
+    const summary = {}
+    const keys = Object.keys(value).slice(0, 10)
+    for (const key of keys) {
+      const item = value[key]
+      if (typeof item === 'function') continue
+      summary[key] = depth >= 1 ? typeof item : summarizeLaunchValue(item, depth + 1)
+    }
+    return summary
+  }
+  return typeof value
+}
+
+function appendLaunchDebugLog(event, payload = {}) {
+  try {
+    fs.mkdirSync(path.dirname(LAUNCH_DEBUG_LOG_PATH), { recursive: true })
+    const record = {
+      time: new Date().toISOString(),
+      event,
+      payload,
+    }
+    fs.appendFileSync(LAUNCH_DEBUG_LOG_PATH, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch {
+    // Ignore debug log failures.
+  }
+}
+
+function appendPreviewCacheDebugLog(event, payload = {}) {
+  try {
+    fs.mkdirSync(path.dirname(PREVIEW_CACHE_DEBUG_LOG_PATH), { recursive: true })
+    const record = {
+      time: new Date().toISOString(),
+      event,
+      payload,
+    }
+    fs.appendFileSync(PREVIEW_CACHE_DEBUG_LOG_PATH, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch {
+    // Ignore debug log failures.
+  }
+}
+
+function cleanupLegacyDebugLogDirectory() {
+  const legacyDirPath = path.join(os.tmpdir(), LEGACY_DEBUG_LOG_DIR_NAME)
+  try {
+    fs.rmSync(legacyDirPath, { recursive: true, force: true })
+  } catch {
+    // Ignore legacy debug cleanup failures.
+  }
+}
+
+function getDetachedHeartbeatPath() {
+  return path.join(os.tmpdir(), PREVIEW_DIR_NAME, DETACHED_HEARTBEAT_FILE_NAME)
 }
 
 function normalizeQueueThumbnailSize(value) {
@@ -353,9 +429,9 @@ function buildRunFolderName(createdAt, toolId) {
   return `${stamp}-${toolId}`
 }
 
-function createRunDescriptor(baseDestinationPath, toolId, createdAt) {
+function createRunDescriptor(baseDestinationPath, toolId, createdAt, preferredRunFolderName = '') {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const runFolderName = buildRunFolderName(createdAt, toolId)
+  const runFolderName = sanitizeText(preferredRunFolderName) || buildRunFolderName(createdAt, toolId)
   const runPath = path.join(baseDestinationPath, runFolderName)
   return {
     runId,
@@ -410,6 +486,12 @@ function createOutputMeta(outputPath, info = {}, fallback = {}) {
     width: Number(info.width) || Number(fallback.width) || 0,
     height: Number(info.height) || Number(fallback.height) || 0,
   }
+}
+
+function writeOutputBuffer(outputPath, buffer, info = {}, fallback = {}) {
+  fs.writeFileSync(outputPath, buffer)
+  const size = Number(buffer?.length ?? buffer?.byteLength) || Number(info?.size) || 0
+  return createOutputMeta(outputPath, { ...info, size }, fallback)
 }
 
 function createAssetDisplayUrl(filePath, inputFormat = '') {
@@ -585,8 +667,7 @@ function applyFormatOutputSettings(transformer, outputFormat, options = {}) {
 async function writeTransformedAsset(transformer, format, quality, outputPath, fallback = {}) {
   if (format === 'bmp') {
     const buffer = await createBmpBuffer(transformer)
-    fs.writeFileSync(outputPath, buffer)
-    return createOutputMeta(outputPath, { size: buffer.length }, fallback)
+    return writeOutputBuffer(outputPath, buffer, {}, fallback)
   }
 
   if (format === 'ico') {
@@ -595,9 +676,7 @@ async function writeTransformedAsset(transformer, format, quality, outputPath, f
       .png({ compressionLevel: 9, effort: 10 })
       .toBuffer({ resolveWithObject: true })
     const buffer = createIcoBuffer(data, info.width || 256, info.height || 256)
-    fs.writeFileSync(outputPath, buffer)
-    return createOutputMeta(outputPath, {
-      size: buffer.length,
+    return writeOutputBuffer(outputPath, buffer, {
       width: info.width || fallback.width || 256,
       height: info.height || fallback.height || 256,
     }, fallback)
@@ -620,6 +699,10 @@ async function resolveProcessedMeta(resultPath, result, sharpLib = null) {
     : null) || await readOutputMeta(resultPath, sharpLib)
 }
 
+function buildSaveSignature(toolId, config) {
+  return JSON.stringify({ toolId, config: config || {} })
+}
+
 async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   const stagedPath = typeof result === 'string' ? result : result.outputPath
   const meta = await resolveProcessedMeta(stagedPath, result, sharpLib)
@@ -640,14 +723,14 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
-    saveSignature: JSON.stringify({ toolId: payload.toolId, config: payload.config }),
+    saveSignature: buildSaveSignature(payload.toolId, payload.config),
     runId: payload.runId,
     runFolderName: payload.runFolderName,
     savedOutputPath: '',
   }
 }
 
-async function directResultToProcessed(asset, result, sharpLib = null) {
+async function directResultToProcessed(asset, result, payload, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
   const meta = await resolveProcessedMeta(outputPath, result, sharpLib)
   return {
@@ -661,6 +744,9 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
+    saveSignature: buildSaveSignature(payload.toolId, payload.config),
+    runId: payload.runId,
+    runFolderName: payload.runFolderName,
     savedOutputPath: outputPath || '',
   }
 }
@@ -689,6 +775,37 @@ async function mapWithConcurrency(items, concurrency, iteratee, options = {}) {
       cursor += 1
       if (shouldStop()) break
       results[index] = await iteratee(list[index], index)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
+async function mapIndexRangeWithConcurrency(start, end, concurrency, iteratee, options = {}) {
+  const rangeSize = Math.max(0, end - start)
+  if (!rangeSize) return []
+
+  const workerCount = Math.max(1, Math.min(concurrency || 1, rangeSize))
+  const results = new Array(rangeSize)
+  let cursor = 0
+  const shouldStop = typeof options.shouldStop === 'function' ? options.shouldStop : () => false
+
+  if (workerCount === 1) {
+    for (let offset = 0; offset < rangeSize; offset += 1) {
+      if (shouldStop()) break
+      results[offset] = await iteratee(start + offset, offset)
+    }
+    return results
+  }
+
+  async function worker() {
+    while (cursor < rangeSize) {
+      if (shouldStop()) break
+      const offset = cursor
+      cursor += 1
+      if (shouldStop()) break
+      results[offset] = await iteratee(start + offset, offset)
     }
   }
 
@@ -934,7 +1051,7 @@ function normalizeRunConfig(toolId, config = {}) {
   return { ...config }
 }
 
-function prepareRunPayload(toolId, config, assets, destinationPath) {
+function prepareRunPayload(toolId, config, assets, destinationPath, options = {}) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
   if (toolId === 'resize' && normalizedConfig.sizeMode !== 'manual') {
@@ -977,7 +1094,7 @@ function prepareRunPayload(toolId, config, assets, destinationPath) {
   }
   const output = resolveDestinationPath(destinationPath, normalizedAssets, getAppSettings())
   const createdAt = new Date().toISOString()
-  const run = createRunDescriptor(output.destinationPath, toolId, createdAt)
+  const run = createRunDescriptor(output.destinationPath, toolId, createdAt, options?.preferredRunFolderName)
 
   return {
     toolId,
@@ -999,13 +1116,383 @@ const pendingLaunchValues = []
 const launchWaiters = new Set()
 const launchSubscribers = new Set()
 let launchHooksInstalled = false
+let previewLifecycleCleanupInstalled = false
+let delayedPreviewCleanupTimer = null
+let lastHandledCopiedFilesSignature = ''
+const pluginStartupAt = Date.now()
+const MAX_CONSUMED_HOST_LAUNCH_SIGNATURES = 12
+const CLIPBOARD_LAUNCH_LOOKBACK_MS = 15000
+const CLIPBOARD_LAUNCH_POLL_INTERVAL_MS = 80
+const CLIPBOARD_LAUNCH_POLL_TIMEOUT_MS = 420
+const MAX_INITIAL_CLIPBOARD_TOKEN_AGE_MS = 1500
 
 function getHostApi() {
   return globalThis.ztools || {}
 }
 
+function getCurrentWindowType() {
+  return sanitizeText(getHostApi().getWindowType?.()).toLowerCase()
+}
+
+function isDetachedWindowType(windowType = '') {
+  const normalized = sanitizeText(windowType).toLowerCase()
+  return normalized.includes('detach') || normalized.includes('separate')
+}
+
+function readDetachedHeartbeatSnapshot(heartbeatFilePath) {
+  try {
+    const content = fs.readFileSync(heartbeatFilePath, 'utf8')
+    const parsed = JSON.parse(content)
+    return {
+      exists: true,
+      ts: Number(parsed?.ts) || 0,
+      pid: Number(parsed?.pid) || 0,
+      windowType: sanitizeText(parsed?.windowType).toLowerCase(),
+    }
+  } catch {
+    return {
+      exists: false,
+      ts: 0,
+      pid: 0,
+      windowType: '',
+    }
+  }
+}
+
+function normalizeCopiedFilePaths(value) {
+  return uniqueStrings(
+    extractLaunchItems(value).map((item) => sanitizeText(item)).filter(Boolean),
+  )
+}
+
+function buildLaunchPathSignature(paths = []) {
+  return paths.map((item) => path.resolve(item)).sort((left, right) => left.localeCompare(right)).join('|')
+}
+
+function readCopiedFilesSnapshot() {
+  const hostApi = getHostApi()
+  const copiedValue = safeInvoke(() => hostApi.getCopyedFiles?.())
+  const paths = normalizeCopiedFilePaths(copiedValue)
+  return {
+    value: copiedValue,
+    paths,
+    signature: buildLaunchPathSignature(paths),
+  }
+}
+
+function extractClipboardHistoryEntries(value, visited = new Set()) {
+  if (!value || visited.has(value)) return []
+  if (Array.isArray(value)) return value.flatMap((item) => extractClipboardHistoryEntries(item, visited))
+  if (typeof value !== 'object') return []
+  visited.add(value)
+
+  const directKeys = ['items', 'list', 'records', 'history', 'data', 'rows']
+  for (const key of directKeys) {
+    if (!value[key]) continue
+    const entries = extractClipboardHistoryEntries(value[key], visited)
+    if (entries.length) return entries
+  }
+
+  if (value.id != null || value.type != null || value.content != null || value.path != null || value.filePath != null) {
+    return [value]
+  }
+
+  return Object.values(value).flatMap((item) => extractClipboardHistoryEntries(item, visited))
+}
+
+function buildClipboardLaunchToken(entry) {
+  if (!entry || typeof entry !== 'object') return ''
+  const parts = [
+    sanitizeText(entry.id),
+    sanitizeText(entry.type),
+    sanitizeText(entry.createdAt),
+    sanitizeText(entry.updatedAt),
+    sanitizeText(entry.time),
+    sanitizeText(entry.timestamp),
+    sanitizeText(entry.path),
+    sanitizeText(entry.filePath),
+    sanitizeText(entry.name),
+  ].filter(Boolean)
+  if (!parts.length) return ''
+  return parts.join('|')
+}
+
+function normalizeClipboardEntryTimestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 0 ? Math.round(value) : 0
+  }
+  const text = sanitizeText(value)
+  if (!text) return 0
+  const numeric = Number(text)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.round(numeric)
+  }
+  const parsed = Date.parse(text)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function extractClipboardEntryTimestamp(entry) {
+  if (!entry || typeof entry !== 'object') return 0
+  return [
+    entry.timestamp,
+    entry.time,
+    entry.updatedAt,
+    entry.createdAt,
+  ].map((value) => normalizeClipboardEntryTimestamp(value)).find((value) => value > 0) || 0
+}
+
+function pickLatestClipboardEntry(entries = []) {
+  let latestEntry = null
+  let latestTimestamp = 0
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const entryTimestamp = extractClipboardEntryTimestamp(entry)
+    if (!latestEntry || entryTimestamp > latestTimestamp) {
+      latestEntry = entry
+      latestTimestamp = entryTimestamp
+    }
+  }
+  return {
+    entry: latestEntry,
+    entryTimestamp: latestTimestamp,
+  }
+}
+
+function isRecentClipboardEntry(entryTimestamp, referenceTimestamp = pluginStartupAt) {
+  if (!entryTimestamp || !referenceTimestamp) return false
+  return entryTimestamp >= (referenceTimestamp - CLIPBOARD_LAUNCH_LOOKBACK_MS)
+}
+
+function getClipboardEntryAgeMs(entryTimestamp, referenceTimestamp = pluginStartupAt) {
+  if (!entryTimestamp || !referenceTimestamp) return 0
+  return referenceTimestamp - entryTimestamp
+}
+
+function isClipboardEntryAcceptableForBootstrap(entryTimestamp, referenceTimestamp = pluginStartupAt, maxInitialAgeMs = MAX_INITIAL_CLIPBOARD_TOKEN_AGE_MS) {
+  if (!entryTimestamp || !referenceTimestamp) return false
+  if (entryTimestamp >= referenceTimestamp) return true
+  const ageMs = getClipboardEntryAgeMs(entryTimestamp, referenceTimestamp)
+  return ageMs >= 0 && ageMs <= maxInitialAgeMs
+}
+
+async function readClipboardLaunchSnapshot() {
+  const hostApi = getHostApi()
+  const clipboardApi = hostApi.clipboard
+  if (!clipboardApi) {
+    return { token: '', entry: null, entryTimestamp: 0, historySummary: null, statusSummary: null }
+  }
+
+  const historyValues = await Promise.all([
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5, 'file'))),
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5, 'image'))),
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5))),
+  ])
+  const statusValue = await Promise.resolve(safeInvoke(() => clipboardApi.getStatus?.()))
+  const historyEntries = historyValues.flatMap((value) => extractClipboardHistoryEntries(value))
+  const { entry, entryTimestamp } = pickLatestClipboardEntry(historyEntries)
+  const token = buildClipboardLaunchToken(entry)
+  return {
+    token,
+    entry,
+    entryTimestamp,
+    historySummary: summarizeLaunchValue(historyValues),
+    statusSummary: summarizeLaunchValue(statusValue),
+  }
+}
+
+async function waitForRecentClipboardLaunchSnapshot(initialToken = '', referenceTimestamp = pluginStartupAt) {
+  let snapshot = await readClipboardLaunchSnapshot()
+  const deadline = Date.now() + CLIPBOARD_LAUNCH_POLL_TIMEOUT_MS
+
+  while (Date.now() < deadline) {
+    const snapshotToken = sanitizeText(snapshot.token)
+    if (
+      snapshotToken
+      && snapshotToken !== initialToken
+      && isClipboardEntryAcceptableForBootstrap(snapshot.entryTimestamp, referenceTimestamp)
+    ) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, CLIPBOARD_LAUNCH_POLL_INTERVAL_MS))
+    snapshot = await readClipboardLaunchSnapshot()
+  }
+
+  return snapshot
+}
+
+function loadConsumedHostLaunchSignaturesFromStorage() {
+  const hostApi = getHostApi()
+  const current = hostApi.dbStorage?.getItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY)
+  return Array.isArray(current)
+    ? current.map((value) => sanitizeText(value)).filter(Boolean)
+    : []
+}
+
+function rememberConsumedHostLaunchSignature(signature) {
+  const normalizedSignature = sanitizeText(signature)
+  if (!normalizedSignature) return []
+  const hostApi = getHostApi()
+  const current = loadConsumedHostLaunchSignaturesFromStorage()
+  const next = [normalizedSignature, ...current.filter((value) => value !== normalizedSignature)]
+    .slice(0, MAX_CONSUMED_HOST_LAUNCH_SIGNATURES)
+  hostApi.dbStorage?.setItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY, next)
+  return next
+}
+
+function installPreviewLifecycleCleanup() {
+  if (previewLifecycleCleanupInstalled) return
+  previewLifecycleCleanupInstalled = true
+  cleanupLegacyDebugLogDirectory()
+  const heartbeatFilePath = getDetachedHeartbeatPath()
+
+  const clearAllPreviewCache = () => {
+    appendPreviewCacheDebugLog('clear-all-preview-cache')
+    clearPreviewCacheDirectory({ reason: 'preload-clear-all-preview-cache' })
+  }
+
+  const cancelDelayedPreviewCleanup = () => {
+    if (!delayedPreviewCleanupTimer) return
+    clearTimeout(delayedPreviewCleanupTimer)
+    delayedPreviewCleanupTimer = null
+    appendPreviewCacheDebugLog('cancel-delayed-preview-cleanup')
+  }
+
+  const scheduleDelayedPreviewCleanup = () => {
+    cancelDelayedPreviewCleanup()
+    appendPreviewCacheDebugLog('schedule-delayed-preview-cleanup', {
+      delayMs: 60 * 1000,
+    })
+    delayedPreviewCleanupTimer = setTimeout(() => {
+      delayedPreviewCleanupTimer = null
+      appendPreviewCacheDebugLog('run-delayed-preview-cleanup')
+      clearAllPreviewCache()
+    }, 60 * 1000)
+  }
+
+  const clearDetachedHeartbeatFile = (reason) => {
+    try {
+      fs.rmSync(heartbeatFilePath, { force: true })
+    } catch {}
+    appendPreviewCacheDebugLog('clear-detached-heartbeat-file', {
+      heartbeatFilePath,
+      reason,
+    })
+  }
+
+  const writeDetachedHeartbeatFile = () => {
+    const payload = {
+      ts: Date.now(),
+      pid: process.pid,
+      windowType: getCurrentWindowType(),
+    }
+    try {
+      fs.mkdirSync(path.dirname(heartbeatFilePath), { recursive: true })
+      fs.writeFileSync(heartbeatFilePath, JSON.stringify(payload), 'utf8')
+      appendPreviewCacheDebugLog('write-detached-heartbeat-file', {
+        heartbeatFilePath,
+        windowType: payload.windowType,
+        pid: payload.pid,
+      })
+    } catch {}
+  }
+
+  const cleanupStaleDetachedPreviewCacheOnStartup = (windowType) => {
+    if (isDetachedWindowType(windowType)) {
+      writeDetachedHeartbeatFile()
+      return
+    }
+    const heartbeat = readDetachedHeartbeatSnapshot(heartbeatFilePath)
+    appendPreviewCacheDebugLog('check-detached-heartbeat-on-startup', {
+      heartbeatFilePath,
+      windowType,
+      heartbeatExists: heartbeat.exists,
+      heartbeatTs: heartbeat.ts,
+      heartbeatAgeMs: heartbeat.ts ? (Date.now() - heartbeat.ts) : null,
+      heartbeatWindowType: heartbeat.windowType,
+    })
+    if (!heartbeat.exists) return
+    const heartbeatAgeMs = heartbeat.ts ? (Date.now() - heartbeat.ts) : Number.POSITIVE_INFINITY
+    if (heartbeatAgeMs <= DETACHED_HEARTBEAT_STALE_MS) return
+    appendPreviewCacheDebugLog('cleanup-stale-detached-preview-cache-on-startup', {
+      heartbeatFilePath,
+      heartbeatAgeMs,
+    })
+    clearAllPreviewCache()
+    clearDetachedHeartbeatFile('startup-stale-detached-heartbeat')
+  }
+
+  const handlePluginOut = (source, isKill = false) => {
+    const normalizedIsKill = Boolean(isKill)
+    appendPreviewCacheDebugLog(source, {
+      isKill: normalizedIsKill,
+    })
+    cancelDelayedPreviewCleanup()
+    if (normalizedIsKill) {
+      clearAllPreviewCache()
+      return
+    }
+    scheduleDelayedPreviewCleanup()
+  }
+
+  const hostApi = getHostApi()
+  const windowType = getCurrentWindowType()
+  appendPreviewCacheDebugLog('install-preview-lifecycle-cleanup', {
+    windowType,
+    heartbeatFilePath,
+  })
+  cleanupStaleDetachedPreviewCacheOnStartup(windowType)
+  hostApi.onPluginOut?.((isKill) => {
+    handlePluginOut('host-plugin-out', isKill)
+  })
+  hostApi.onPluginEnter?.(() => {
+    appendPreviewCacheDebugLog('host-plugin-enter')
+    cancelDelayedPreviewCleanup()
+  })
+  hostApi.onPluginReady?.(() => {
+    appendPreviewCacheDebugLog('host-plugin-ready')
+    cancelDelayedPreviewCleanup()
+  })
+  hostApi.onPluginDetach?.(() => {
+    const currentWindowType = getCurrentWindowType()
+    appendPreviewCacheDebugLog('host-plugin-detach', {
+      windowType: currentWindowType,
+    })
+    if (isDetachedWindowType(currentWindowType)) {
+      writeDetachedHeartbeatFile()
+    }
+  })
+
+  if (ipcRenderer?.on) {
+    ipcRenderer.on('plugin-out', (_event, isKill) => {
+      handlePluginOut('ipc-plugin-out', isKill)
+    })
+  }
+
+  if (typeof process?.once === 'function') {
+    process.once('exit', () => {
+      appendPreviewCacheDebugLog('process-exit')
+      cancelDelayedPreviewCleanup()
+      clearDetachedHeartbeatFile('process-exit')
+      clearAllPreviewCache()
+    })
+  }
+
+  if (typeof globalThis?.addEventListener === 'function') {
+    globalThis.addEventListener('unload', () => {
+      appendPreviewCacheDebugLog('global-unload')
+      cancelDelayedPreviewCleanup()
+      clearDetachedHeartbeatFile('global-unload')
+      clearAllPreviewCache()
+    })
+  }
+}
+
 function enqueueLaunchValue(value) {
   if (value == null) return
+  appendLaunchDebugLog('enqueue-launch-value', {
+    summary: summarizeLaunchValue(value),
+    extractedItems: extractLaunchItems(value).slice(0, 12),
+  })
   pendingLaunchValues.push(value)
   for (const waiter of launchWaiters) waiter()
   launchWaiters.clear()
@@ -1017,7 +1504,17 @@ function installLaunchHooks() {
   launchHooksInstalled = true
 
   const hostApi = getHostApi()
+  if (!lastHandledCopiedFilesSignature) {
+    lastHandledCopiedFilesSignature = readCopiedFilesSnapshot().signature
+  }
   const handleLaunch = (param) => {
+    appendLaunchDebugLog('launch-callback-raw', {
+      summary: summarizeLaunchValue(param),
+      extractedItems: extractLaunchItems(param).slice(0, 12),
+      hasPayload: param?.payload != null,
+      payloadSummary: param?.payload != null ? summarizeLaunchValue(param.payload) : null,
+      payloadExtractedItems: param?.payload != null ? extractLaunchItems(param.payload).slice(0, 12) : [],
+    })
     enqueueLaunchValue(param)
     if (param?.payload != null && param.payload !== param) {
       enqueueLaunchValue(param.payload)
@@ -1746,6 +2243,45 @@ async function ensureAssetDescriptorState(sharpLib, asset, options = {}) {
   }
 }
 
+async function resolveAssetDimensions(sharpLib, asset, options = {}) {
+  let width = Math.max(0, Number(asset?.width) || 0)
+  let height = Math.max(0, Number(asset?.height) || 0)
+  let descriptorState = null
+  if (!(width > 0 && height > 0) || options.probeMetadata === true) {
+    descriptorState = await ensureAssetDescriptorState(sharpLib, asset, {
+      probeMetadata: options.probeMetadata === true || !(width > 0 && height > 0),
+    })
+    if (descriptorState?.inputFormat) asset.inputFormat = descriptorState.inputFormat
+    if (!(width > 0 && height > 0)) {
+      width = Math.max(1, Number(descriptorState?.metadata?.width) || width || 1)
+      height = Math.max(1, Number(descriptorState?.metadata?.height) || height || 1)
+    }
+  }
+  return {
+    width,
+    height,
+    descriptorState,
+  }
+}
+
+async function prepareSingleAssetWriteContext(sharpLib, asset, toolId, config, destinationPath, options = {}) {
+  const descriptorState = await ensureAssetDescriptorState(sharpLib, asset, {
+    probeMetadata: options.probeMetadata === true,
+  })
+  asset.inputFormat = descriptorState.inputFormat
+  const format = typeof options.resolveFormat === 'function'
+    ? options.resolveFormat(asset, config, descriptorState)
+    : mapOutputFormat(toolId, asset, config)
+  const outputPath = getSingleAssetOutputPath(destinationPath, asset, options.outputSuffix || toolId, format, {
+    unique: options.unique === true,
+  })
+  return {
+    ...descriptorState,
+    format,
+    outputPath,
+  }
+}
+
 function isAlphaCapableFormat(format) {
   return ALPHA_CAPABLE_FORMATS.has(String(format || '').toLowerCase())
 }
@@ -2046,10 +2582,13 @@ function createIcoBuffer(pngBuffer, width, height) {
 }
 
 async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('compression', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'compression', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'compression',
+    config,
+    destinationPath,
+  )
   const originalSizeBytes = Math.max(0, Number(asset?.sizeBytes) || 0)
   const targetBytes = config.targetSizeKb * 1024
   const maxQuality = 90
@@ -2144,22 +2683,24 @@ async function writeCompressionAsset(sharpLib, asset, config, destinationPath) {
   if (originalSizeBytes && chosenBuffer.length >= originalSizeBytes) {
     throw new Error('压缩结果未小于原图，已跳过该文件')
   }
-  fs.writeFileSync(outputPath, chosenBuffer)
   return {
-    outputPath,
-    outputName: path.basename(outputPath),
-    outputSizeBytes: chosenBuffer.length,
-    width: asset.width || 0,
-    height: asset.height || 0,
+    ...writeOutputBuffer(outputPath, chosenBuffer, {
+      width: asset.width || 0,
+      height: asset.height || 0,
+    }),
     warning,
   }
 }
 
 async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('format', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'format', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'format',
+    config,
+    destinationPath,
+    { probeMetadata: true },
+  )
   const { effectiveSourceFormat, sourceInput } = await prepareDirectSourcePassthrough(
     sharpLib,
     asset,
@@ -2188,10 +2729,13 @@ async function writeFormatAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeResizeAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('resize', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'resize', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'resize',
+    config,
+    destinationPath,
+  )
   const quality = getTransformQuality(config.quality, sourceFormat, format)
   const width = config.width.unit === '%' ? Math.max(1, Math.round((asset.width || 0) * (config.width.value / 100))) : Math.max(1, Math.round(config.width.value))
   const height = config.height.unit === '%' ? Math.max(1, Math.round((asset.height || 0) * (config.height.value / 100))) : Math.max(1, Math.round(config.height.value))
@@ -2594,10 +3138,13 @@ function revealResultDirectoryIfNeeded(result) {
 }
 
 async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('watermark', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'watermark', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'watermark',
+    config,
+    destinationPath,
+  )
   const watermarkOpacity = Number(config.opacity) || 0
   const isEmptyTextWatermark = config.type === 'text' && !sanitizeText(config.text)
   const isZeroSizeTextWatermark = config.type === 'text' && Number(config.fontSize) <= 0
@@ -2614,10 +3161,13 @@ async function writeWatermarkAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('rotate', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'rotate', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'rotate',
+    config,
+    destinationPath,
+  )
   const normalizedAngle = ((Math.round(Number(config.angle) || 0) % 360) + 360) % 360
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2657,13 +3207,21 @@ async function writeRotateAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writeFlipAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
   const requestedOutputFormat = String(config.outputFormat || '').toLowerCase()
-  const format = !requestedOutputFormat || requestedOutputFormat === 'keep original'
-    ? mapOutputFormat('flip', asset, config)
-    : mapOutputFormat('format', asset, { targetFormat: config.outputFormat })
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'flip', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'flip',
+    config,
+    destinationPath,
+    {
+      resolveFormat: (currentAsset, currentConfig) => (
+        !requestedOutputFormat || requestedOutputFormat === 'keep original'
+          ? mapOutputFormat('flip', currentAsset, currentConfig)
+          : mapOutputFormat('format', currentAsset, { targetFormat: currentConfig.outputFormat })
+      ),
+    },
+  )
   const hasNoFlipTransform = !config.horizontal && !config.vertical && !config.autoCropTransparent
   const transformQuality = getTransformQuality(config.quality, sourceFormat, format)
 
@@ -2697,12 +3255,21 @@ function buildRoundedRectSvg(width, height, radius, fill) {
 }
 
 async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
-  asset.inputFormat = inputFormat
-  const outputFormat = config.keepTransparency
-    ? (isAlphaCapableFormat(sourceFormat) ? sourceFormat : 'png')
-    : mapOutputFormat('corners', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'corners', outputFormat)
+  const { sourceFormat, metadata, format: outputFormat, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'corners',
+    config,
+    destinationPath,
+    {
+      probeMetadata: true,
+      resolveFormat: (currentAsset, currentConfig, descriptorState) => (
+        currentConfig.keepTransparency
+          ? (isAlphaCapableFormat(descriptorState.sourceFormat) ? descriptorState.sourceFormat : 'png')
+          : mapOutputFormat('corners', currentAsset, currentConfig)
+      ),
+    },
+  )
   const baseTransformer = createTransformer(sharpLib, asset)
   const width = asset.width || metadata?.width || 1
   const height = asset.height || metadata?.height || 1
@@ -2739,10 +3306,13 @@ async function writeCornersAsset(sharpLib, asset, config, destinationPath) {
 }
 
 async function writePaddingAsset(sharpLib, asset, config, destinationPath) {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat('padding', asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, 'padding', format)
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    'padding',
+    config,
+    destinationPath,
+  )
   const sourceWidth = Math.max(1, Number(asset.width) || 1)
   const sourceHeight = Math.max(1, Number(asset.height) || 1)
   const top = Math.max(0, resolveMeasureOffset(config.top, sourceHeight, 20))
@@ -2887,10 +3457,17 @@ async function renderManualCropSelection(sharpLib, transformed, box, stageMetric
 }
 
 async function writeCropAsset(sharpLib, asset, config, destinationPath, suffix = 'crop', toolId = 'crop') {
-  const { inputFormat, sourceFormat } = await ensureAssetDescriptorState(sharpLib, asset)
-  asset.inputFormat = inputFormat
-  const format = mapOutputFormat(toolId, asset, config)
-  const outputPath = getSingleAssetOutputPath(destinationPath, asset, suffix, format, { unique: toolId === 'manual-crop' })
+  const { sourceFormat, format, outputPath } = await prepareSingleAssetWriteContext(
+    sharpLib,
+    asset,
+    toolId,
+    config,
+    destinationPath,
+    {
+      outputSuffix: suffix,
+      unique: toolId === 'manual-crop',
+    },
+  )
   const box = normalizeCropBox(asset, config, toolId)
   const manualStageMetrics = toolId === 'manual-crop' ? getManualCropStageMetrics(asset, config) : null
   const sourceWidth = Math.max(0, Number(asset.width) || 0)
@@ -2968,40 +3545,24 @@ async function writeMergeImageAsset(sharpLib, payload) {
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && Number(asset.width) <= targetSpan) || Number(asset.width) === targetSpan)
       : ((preventUpscale && Number(asset.height) <= targetSpan) || Number(asset.height) === targetSpan)
-    const canCopyOriginal = keepsOriginalSize
-      && sourceFormat === format
-      && canSkipSameFormatEncoding(format, quality)
-    if (canCopyOriginal) {
+    if (keepsOriginalSize && canCopyWithoutTransform(sourceFormat, format, quality)) {
       return copyAssetToOutput(asset, outputPath)
     }
-    const info = await withOutputFormat(createTransformer(sharpLib, asset)
+    return writeTransformedAsset(createTransformer(sharpLib, asset)
       .resize({
         width: fitWidth,
         height: fitHeight,
         fit: 'contain',
         background,
         withoutEnlargement: preventUpscale,
-      }), format, quality)
-      .toFile(outputPath)
-    return {
-      outputPath,
-      outputSizeBytes: info.size || 0,
-      width: info.width || 0,
-      height: info.height || 0,
-    }
+      }), format, quality, outputPath)
   }
   const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const prepareConcurrency = Math.max(1, Math.min(payload.assets.length, Math.min(profile.mediumConcurrency, 4)))
   const dominantSize = targetSpan
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const { metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
-    let sourceWidth = Math.max(0, Number(asset.width) || 0)
-    let sourceHeight = Math.max(0, Number(asset.height) || 0)
-    if (!(sourceWidth > 0 && sourceHeight > 0)) {
-      sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
-      sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
-    }
+    const { width: sourceWidth, height: sourceHeight } = await resolveAssetDimensions(sharpLib, asset)
     const keepsOriginalSize = isVertical
       ? ((preventUpscale && sourceWidth <= targetSpan) || sourceWidth === targetSpan)
       : ((preventUpscale && sourceHeight <= targetSpan) || sourceHeight === targetSpan)
@@ -3048,12 +3609,18 @@ async function writeMergeImageAsset(sharpLib, payload) {
       height: info.height || Math.max(1, Math.round(baseHeight * scale)),
     }
   }
-  const prepared = []
+  const prepared = new Array(payload.assets.length)
   for (let index = 0; index < payload.assets.length; index += prepareConcurrency) {
     throwIfRunCancelled(payload.runId)
-    const batch = payload.assets.slice(index, index + prepareConcurrency)
-    const preparedBatch = await mapWithConcurrency(batch, prepareConcurrency, prepareAsset)
-    prepared.push(...preparedBatch)
+    const preparedBatch = await mapIndexRangeWithConcurrency(
+      index,
+      Math.min(payload.assets.length, index + prepareConcurrency),
+      prepareConcurrency,
+      (assetIndex) => prepareAsset(payload.assets[assetIndex]),
+    )
+    for (let offset = 0; offset < preparedBatch.length; offset += 1) {
+      prepared[index + offset] = preparedBatch[offset]
+    }
     await yieldToEventLoop()
   }
   throwIfRunCancelled(payload.runId)
@@ -3080,7 +3647,9 @@ async function writeMergeImageAsset(sharpLib, payload) {
 
   let cursorX = 0
   let cursorY = 0
-  const composites = prepared.map((item) => {
+  const composites = new Array(prepared.length)
+  for (let index = 0; index < prepared.length; index += 1) {
+    const item = prepared[index]
     const composite = {
       input: item.input,
       raw: item.raw,
@@ -3096,8 +3665,8 @@ async function writeMergeImageAsset(sharpLib, payload) {
     } else {
       cursorX += item.width + spacing
     }
-    return composite
-  })
+    composites[index] = composite
+  }
 
   const info = await withOutputFormat(sharpLib({
     create: {
@@ -3108,6 +3677,20 @@ async function writeMergeImageAsset(sharpLib, payload) {
     },
   }).composite(composites), format, quality).toFile(outputPath)
   throwIfRunCancelled(payload.runId)
+  for (let index = 0; index < composites.length; index += 1) {
+    if (composites[index]) {
+      composites[index].input = null
+      composites[index].raw = null
+      composites[index] = null
+    }
+    if (prepared[index]) {
+      prepared[index].input = null
+      prepared[index].raw = null
+      prepared[index] = null
+    }
+  }
+  prepared.length = 0
+  composites.length = 0
 
   return {
     outputPath,
@@ -3194,11 +3777,16 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   emitMergePdfProgress('merge-pdf-prepare')
   const prepareAsset = async (asset) => {
     throwIfRunCancelled(payload.runId)
-    const { inputFormat, metadata } = await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: autoPaginateFixedPage })
-    asset.inputFormat = inputFormat
-    const imageBytes = fs.readFileSync(asset.sourcePath)
     let sourceWidth = Math.max(0, Number(asset.width) || 0)
     let sourceHeight = Math.max(0, Number(asset.height) || 0)
+    const needsMetadata = autoPaginateFixedPage && !(sourceWidth > 0 && sourceHeight > 0)
+    const { descriptorState } = await resolveAssetDimensions(sharpLib, asset, { probeMetadata: needsMetadata })
+    if (descriptorState?.inputFormat) asset.inputFormat = descriptorState.inputFormat
+    if (needsMetadata) {
+      sourceWidth = Math.max(1, Number(asset.width) || Number(descriptorState?.metadata?.width) || sourceWidth || 1)
+      sourceHeight = Math.max(1, Number(asset.height) || Number(descriptorState?.metadata?.height) || sourceHeight || 1)
+    }
+    const sourceFormat = normalizeImageFormatName(asset.inputFormat || asset.ext)
     const margin = fixedMargin ?? (payload.config.margin === 'none'
       ? 0
       : payload.config.margin === 'wide'
@@ -3207,9 +3795,9 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
           ? Math.round((sourceWidth || 1) * 0.06)
           : Math.round((sourceWidth || 1) * 0.04))
     const prepared = {
-      imageBytes,
+      imageBytes: null,
       sourcePath: asset.sourcePath,
-      sourceFormat: normalizeImageFormatName(asset.inputFormat || asset.ext),
+      sourceFormat,
       sourceWidth,
       sourceHeight,
       margin,
@@ -3224,24 +3812,12 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
     }
 
     if (autoPaginateFixedPage) {
-      if (!(sourceWidth > 0 && sourceHeight > 0)) {
-        sourceWidth = Math.max(1, Number(metadata?.width) || sourceWidth || 1)
-        sourceHeight = Math.max(1, Number(metadata?.height) || sourceHeight || 1)
-        prepared.sourceWidth = sourceWidth
-        prepared.sourceHeight = sourceHeight
-      }
       prepared.drawableWidth = fixedDrawableWidth
       prepared.drawableHeight = fixedDrawableHeight
       prepared.scaledWidth = fixedDrawableWidth
       prepared.pageSliceHeight = fixedDrawableHeight
       prepared.scaledHeight = Math.max(1, Math.round(sourceHeight * (prepared.scaledWidth / sourceWidth)))
       prepared.requiresSlicing = prepared.scaledHeight > prepared.drawableHeight
-      if (prepared.requiresSlicing) {
-        prepared.scaledBuffer = await createTransformer(sharpLib, asset)
-          .resize({ width: prepared.scaledWidth, fit: 'fill' })
-          .png()
-          .toBuffer()
-      }
     } else if (prepared.sourceFormat !== 'png' && prepared.sourceFormat !== 'jpg' && prepared.sourceFormat !== 'jpeg') {
       const embeddedKind = isAlphaCapableFormat(prepared.sourceFormat) ? 'png' : 'jpg'
       prepared.embeddedBytes = embeddedKind === 'png'
@@ -3261,32 +3837,44 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
   throwIfRunCancelled(payload.runId)
   emitMergePdfProgress('merge-pdf-write')
 
-  for (const prepared of preparedAssets) {
+  for (let preparedIndex = 0; preparedIndex < preparedAssets.length; preparedIndex += 1) {
+    const prepared = preparedAssets[preparedIndex]
     throwIfRunCancelled(payload.runId)
     await yieldToEventLoop()
-    const { imageBytes } = prepared
     let embedded = null
     let sourceWidth = prepared.sourceWidth
     let sourceHeight = prepared.sourceHeight
+    const ensureSourceBytes = () => {
+      if (!prepared.imageBytes) {
+        prepared.imageBytes = fs.readFileSync(prepared.sourcePath)
+      }
+      return prepared.imageBytes
+    }
     const ensureEmbedded = async () => {
       if (embedded) return embedded
       if (prepared.embeddedKind === 'png' && prepared.embeddedBytes) {
         embedded = await pdf.embedPng(prepared.embeddedBytes)
+        prepared.embeddedBytes = null
       } else if (prepared.embeddedKind === 'jpg' && prepared.embeddedBytes) {
         embedded = await pdf.embedJpg(prepared.embeddedBytes)
+        prepared.embeddedBytes = null
       } else if (prepared.sourceFormat === 'png') {
-        embedded = await pdf.embedPng(imageBytes)
+        embedded = await pdf.embedPng(ensureSourceBytes())
+        prepared.imageBytes = null
       } else if (prepared.sourceFormat === 'jpg' || prepared.sourceFormat === 'jpeg') {
-        embedded = await pdf.embedJpg(imageBytes)
+        embedded = await pdf.embedJpg(ensureSourceBytes())
+        prepared.imageBytes = null
       } else {
-        embedded = await pdf.embedPng(
-          prepared.embeddedBytes || await createTransformer(sharpLib, {
-            ...prepared,
-            sourcePath: prepared.sourcePath,
-            inputFormat: prepared.sourceFormat,
-            ext: prepared.sourceFormat,
-          }).png().toBuffer(),
-        )
+        const fallbackEmbeddedBytes = prepared.embeddedBytes || await createTransformer(sharpLib, {
+          ...prepared,
+          sourcePath: prepared.sourcePath,
+          inputFormat: prepared.sourceFormat,
+          ext: prepared.sourceFormat,
+        }).png().toBuffer()
+        embedded = await pdf.embedPng(fallbackEmbeddedBytes)
+        if (prepared.embeddedBytes === fallbackEmbeddedBytes) {
+          prepared.embeddedBytes = null
+        }
       }
       sourceWidth = Math.max(1, sourceWidth || embedded.width || 1)
       sourceHeight = Math.max(1, sourceHeight || embedded.height || 1)
@@ -3347,15 +3935,15 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       continue
     }
 
-    const scaledBuffer = prepared.scaledBuffer
-      || await createTransformer(sharpLib, {
-        sourcePath: prepared.sourcePath,
-        inputFormat: prepared.sourceFormat,
-        ext: prepared.sourceFormat,
-      })
-        .resize({ width: scaledWidth, fit: 'fill' })
-        .png()
-        .toBuffer()
+    const scaledBuffer = await createTransformer(sharpLib, {
+      sourcePath: prepared.sourcePath,
+      inputFormat: prepared.sourceFormat,
+      ext: prepared.sourceFormat,
+    })
+      .resize({ width: scaledWidth, fit: 'fill' })
+      .png()
+      .toBuffer()
+    prepared.scaledBuffer = null
     const scaledImage = sharpLib(scaledBuffer)
     let offsetY = 0
     while (offsetY < scaledHeight) {
@@ -3377,18 +3965,21 @@ async function writeMergePdfAssetReal(sharpLib, payload) {
       })
       offsetY += sliceHeight
     }
+    embedded = null
+    prepared.imageBytes = null
+    prepared.embeddedBytes = null
+    prepared.scaledBuffer = null
+    preparedAssets[preparedIndex] = null
   }
+  preparedAssets.length = 0
 
   const saveObjectsPerTick = payload.assets.length > 8 ? 8 : 16
   const bytes = await pdf.save({ objectsPerTick: saveObjectsPerTick })
   throwIfRunCancelled(payload.runId)
-  fs.writeFileSync(outputPath, bytes)
-  return {
-    outputPath,
-    outputSizeBytes: bytes.length,
+  return writeOutputBuffer(outputPath, bytes, {
     width: fixedPageSize?.[0] || 0,
     height: fixedPageSize?.[1] || 0,
-  }
+  })
 }
 
 async function writeMergeGifAsset(sharpLib, payload) {
@@ -3403,21 +3994,26 @@ async function writeMergeGifAsset(sharpLib, payload) {
   const outputPath = path.join(payload.destinationPath, 'merged.gif')
   const { GIFEncoder, quantize, applyPalette } = gifenc
   const encoder = GIFEncoder()
-  const hydratedAssets = await Promise.all((payload.assets || []).map(async (asset) => {
-    await ensureAssetDescriptorState(sharpLib, asset, { probeMetadata: true })
+  const profile = getPerformanceProfile(getAppSettings().performanceMode)
+  const hydrationConcurrency = Math.max(1, Math.min((payload.assets || []).length || 1, Math.min(profile.mediumConcurrency, 4)))
+  const hydratedAssets = await mapWithConcurrency(payload.assets || [], hydrationConcurrency, async (asset) => {
+    const { width, height } = await resolveAssetDimensions(sharpLib, asset)
+    asset.width = width
+    asset.height = height
     return asset
-  }))
-  const frameWidth = payload.config.useMaxAssetSize
-    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.width) || 0)))
-    : payload.config.width
-  const frameHeight = payload.config.useMaxAssetSize
-    ? Math.max(1, ...hydratedAssets.map((asset) => Math.max(0, Number(asset?.height) || 0)))
-    : payload.config.height
+  })
+  let maxFrameWidth = 1
+  let maxFrameHeight = 1
+  for (const asset of hydratedAssets) {
+    maxFrameWidth = Math.max(maxFrameWidth, Math.max(0, Number(asset?.width) || 0))
+    maxFrameHeight = Math.max(maxFrameHeight, Math.max(0, Number(asset?.height) || 0))
+  }
+  const frameWidth = payload.config.useMaxAssetSize ? maxFrameWidth : payload.config.width
+  const frameHeight = payload.config.useMaxAssetSize ? maxFrameHeight : payload.config.height
   const background = hexToRgbaObject(payload.config.background, 1)
   const delay = Math.max(1, Math.round(payload.config.interval))
   const repeat = payload.config.loop ? 0 : -1
   const frameWriteOptions = { delay, repeat }
-  const profile = getPerformanceProfile(getAppSettings().performanceMode)
   const frameConcurrency = Math.max(1, Math.min(hydratedAssets.length, Math.min(profile.mediumConcurrency, 4)))
   const frameResizeOptions = { width: frameWidth, height: frameHeight, fit: 'contain', background }
   const prepareFrame = async (asset) => {
@@ -3438,30 +4034,34 @@ async function writeMergeGifAsset(sharpLib, payload) {
       palette: frame.palette,
       ...frameWriteOptions,
     })
+    hydratedAssets[0] = null
   } else {
     for (let index = 0; index < hydratedAssets.length; index += frameConcurrency) {
       throwIfRunCancelled(payload.runId)
-      const batch = hydratedAssets.slice(index, index + frameConcurrency)
-      const preparedFrames = await mapWithConcurrency(batch, frameConcurrency, prepareFrame)
-      for (const frame of preparedFrames) {
+      const preparedFrames = await mapIndexRangeWithConcurrency(
+        index,
+        Math.min(hydratedAssets.length, index + frameConcurrency),
+        frameConcurrency,
+        (assetIndex) => prepareFrame(hydratedAssets[assetIndex]),
+      )
+      for (let frameIndex = 0; frameIndex < preparedFrames.length; frameIndex += 1) {
+        const frame = preparedFrames[frameIndex]
         throwIfRunCancelled(payload.runId)
         encoder.writeFrame(frame.index, frameWidth, frameHeight, {
           palette: frame.palette,
           ...frameWriteOptions,
         })
+        preparedFrames[frameIndex] = null
       }
       await yieldToEventLoop()
     }
   }
+  hydratedAssets.length = 0
 
   encoder.finish()
   throwIfRunCancelled(payload.runId)
   const bytes = encoder.bytesView()
-  fs.writeFileSync(outputPath, bytes)
-  return {
-    outputPath,
-    outputSizeBytes: bytes.byteLength,
-  }
+  return writeOutputBuffer(outputPath, bytes)
 }
 
 async function executeAssetTool(sharpLib, payload, asset) {
@@ -3543,7 +4143,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
       }
 
       const processed = await (payload.mode === 'direct'
-        ? directResultToProcessed(asset, result, sharpLib)
+        ? directResultToProcessed(asset, result, payload, sharpLib)
         : stageResultToProcessed(asset, result, payload, sharpLib))
       completedCount += 1
       emitAssetProgress()
@@ -3685,8 +4285,8 @@ async function executeSaveFlow(payload) {
   })
 }
 
-async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
-  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save', options = {}) {
+  const payload = prepareRunPayload(toolId, config, assets, destinationPath, options)
   if (mode !== 'preview-only') {
     return executeLocalTool({
       ...payload,
@@ -3721,6 +4321,134 @@ async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
     runFolderName: firstItem.runFolderName || buildRunFolderName(createdAt, toolId),
     createdAt,
   })
+}
+
+async function materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName = '') {
+  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
+  const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
+  const createdAt = new Date().toISOString()
+  const run = createRunDescriptor(
+    output.destinationPath,
+    toolId,
+    createdAt,
+    preferredRunFolderName || normalizedItems[0]?.runFolderName || '',
+  )
+  ensureDirectory(run.runPath)
+  const processed = []
+  const failed = []
+
+  for (const item of normalizedItems) {
+    try {
+      const sourcePath = sanitizeText(item?.stagedPath)
+      if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('预览结果不存在，无法复用')
+      }
+      const targetPath = path.join(run.runPath, item.outputName || path.basename(sourcePath))
+      if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+        fs.copyFileSync(sourcePath, targetPath)
+      }
+      const meta = createOutputMeta(targetPath, {
+        size: item?.outputSizeBytes,
+        width: item?.width,
+        height: item?.height,
+      }, item)
+      const previewFormat = path.extname(targetPath).replace('.', '') || meta.outputName.split('.').pop() || ''
+      const previewUrl = await createAssetDisplayUrlAsync(targetPath, previewFormat)
+      processed.push({
+        assetId: item.assetId,
+        name: item.name,
+        mode: 'preview-save',
+        previewStatus: 'saved',
+        outputName: meta.outputName,
+        stagedPath: '',
+        previewUrl,
+        outputPath: targetPath,
+        outputSizeBytes: meta.outputSizeBytes,
+        width: meta.width,
+        height: meta.height,
+        warning: item?.warning || '',
+        saveSignature: item?.saveSignature || '',
+        runId: run.runId,
+        runFolderName: run.runFolderName,
+        savedOutputPath: targetPath,
+      })
+    } catch (error) {
+      failed.push({ assetId: item?.assetId, name: item?.name || '', error: error?.message || '复用预览结果失败' })
+    }
+  }
+
+  return {
+    ok: processed.length > 0 && failed.length === 0,
+    partial: processed.length > 0 && failed.length > 0,
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    destinationPath: run.runPath,
+    baseDestinationPath: output.destinationPath,
+    output,
+    mode: 'preview-save',
+    runId: run.runId,
+    runFolderName: run.runFolderName,
+    createdAt,
+    processed,
+    failed,
+    elapsedMs: 0,
+    message: processed.length
+      ? `已复用 ${processed.length} 项预览结果并加入当前处理结果。`
+      : '没有可复用的预览结果。',
+  }
+}
+
+function cleanupPreviewCache(runFolderNames = [], options = {}) {
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const folders = new Set()
+  const reason = sanitizeText(options?.reason || 'unspecified')
+  for (const value of Array.isArray(runFolderNames) ? runFolderNames : []) {
+    const folderName = path.basename(String(value || '').trim())
+    if (!folderName) continue
+    folders.add(folderName)
+  }
+  appendPreviewCacheDebugLog('cleanup-preview-cache', {
+    basePreviewPath,
+    reason,
+    runFolderNames: Array.from(folders),
+    count: folders.size,
+  })
+  for (const folderName of folders) {
+    const targetPath = path.join(basePreviewPath, folderName)
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true })
+    } catch {
+      // Ignore preview cleanup failures so UI state cleanup is not blocked.
+    }
+  }
+  return true
+}
+
+function clearPreviewCacheDirectory(options = {}) {
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const reason = sanitizeText(options?.reason || 'unspecified')
+  appendPreviewCacheDebugLog('clear-preview-cache-directory', {
+    basePreviewPath,
+    reason,
+  })
+  try {
+    fs.rmSync(basePreviewPath, { recursive: true, force: true })
+  } catch {
+    // Ignore cleanup failures and let the caller continue clearing in-memory state.
+  }
+  return true
+}
+
+function checkStagedFiles(stagedItems = []) {
+  const validAssetIds = []
+  for (const item of Array.isArray(stagedItems) ? stagedItems : []) {
+    const sourcePath = sanitizeText(item?.stagedPath)
+    if (!sourcePath) continue
+    if (!fs.existsSync(sourcePath)) continue
+    const assetId = sanitizeText(item?.assetId)
+    if (assetId) validAssetIds.push(assetId)
+  }
+  return validAssetIds
 }
 
 async function executeMergeTool(payload, sharpLib) {
@@ -4023,45 +4751,110 @@ const toolsApi = {
       }
     }
 
-    if (!collected.length) return []
-    return this.readImageMeta(Array.from(new Set(collected)))
+    if (!collected.length) {
+      appendLaunchDebugLog('resolve-launch-inputs-empty', {
+        valueCount: inputValues.length,
+        sample: inputValues.slice(0, 3).map((value) => summarizeLaunchValue(value)),
+      })
+      return []
+    }
+    const dedupedPaths = Array.from(new Set(collected))
+    appendLaunchDebugLog('resolve-launch-inputs-paths', {
+      valueCount: inputValues.length,
+      paths: dedupedPaths.slice(0, 12),
+      totalPaths: dedupedPaths.length,
+    })
+    return this.readImageMeta(dedupedPaths)
   },
 
-  async getLaunchInputs() {
+  async getLaunchInputs(options = {}) {
     installLaunchHooks()
-    await waitForLaunchValue()
+    const seededPendingValues = Array.isArray(options?.pendingValues) ? options.pendingValues : null
+    const requirePending = Boolean(options?.requirePending)
+    const includeCopiedFiles = Boolean(options?.includeCopiedFiles)
+    const minClipboardTimestamp = Number(options?.minClipboardTimestamp) || 0
+    appendLaunchDebugLog('get-launch-inputs', {
+      requirePending,
+      includeCopiedFiles,
+      minClipboardTimestamp,
+      pendingCount: seededPendingValues ? seededPendingValues.length : pendingLaunchValues.length,
+      source: seededPendingValues ? 'seeded' : 'queue',
+    })
+    if (!seededPendingValues) {
+      await waitForLaunchValue()
+    }
 
-    const pendingValues = pendingLaunchValues.splice(0, pendingLaunchValues.length)
+    const pendingValues = seededPendingValues || pendingLaunchValues.splice(0, pendingLaunchValues.length)
+    const hadPendingValues = pendingValues.length > 0
     const pendingAssets = await this.resolveLaunchInputs(pendingValues)
+    appendLaunchDebugLog('get-launch-inputs-after-pending', {
+      pendingCount: pendingValues.length,
+      pendingAssetsCount: pendingAssets.length,
+      requirePending,
+      source: seededPendingValues ? 'seeded' : 'queue',
+    })
     if (pendingAssets.length) return pendingAssets
 
-    const hostApi = getHostApi()
-    const candidates = [
-      hostApi.getLaunchData?.(),
-      hostApi.getLaunchInputs?.(),
-      hostApi.getCommandData?.(),
-      hostApi.getCmdData?.(),
-      hostApi.getFeature?.(),
-      hostApi.getCurrentFeature?.(),
-      hostApi.getSelectFiles?.(),
-      hostApi.getSelectedFiles?.(),
-      hostApi.getSelectedFilePaths?.(),
-      hostApi.getFiles?.(),
-      hostApi.getPaths?.(),
-      hostApi.getArguments?.(),
-      hostApi.arguments,
-      hostApi.argv,
-      hostApi.payload,
-      hostApi.cmd,
-      hostApi,
-      globalThis.launchData,
-      globalThis.pluginData,
-      globalThis.input,
-      globalThis.inputs,
-    ]
+    if (requirePending && !hadPendingValues) {
+      if (includeCopiedFiles) {
+        const copiedSnapshot = readCopiedFilesSnapshot()
+        let clipboardSnapshot = await readClipboardLaunchSnapshot()
+        const initialClipboardToken = sanitizeText(clipboardSnapshot.token)
+        const initialClipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        if (!initialClipboardEntryAcceptable) {
+          clipboardSnapshot = await waitForRecentClipboardLaunchSnapshot(initialClipboardToken, pluginStartupAt)
+        }
+        const consumedSignatures = loadConsumedHostLaunchSignaturesFromStorage()
+        const clipboardToken = sanitizeText(clipboardSnapshot.token)
+        const clipboardTokenConsumed = clipboardToken ? consumedSignatures.includes(clipboardToken) : false
+        const clipboardEntryAgeMs = getClipboardEntryAgeMs(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const clipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const clipboardEntryAfterMinTimestamp = !minClipboardTimestamp || (
+          Number.isFinite(clipboardSnapshot.entryTimestamp) && clipboardSnapshot.entryTimestamp >= minClipboardTimestamp
+        )
+        appendLaunchDebugLog('get-launch-inputs-copied-files-check', {
+          requirePending,
+          includeCopiedFiles,
+          minClipboardTimestamp,
+          pluginStartupAt,
+          lastHandledCopiedFilesSignature,
+          currentCopiedFilesSignature: copiedSnapshot.signature,
+          copiedFileCount: copiedSnapshot.paths.length,
+          copiedPaths: copiedSnapshot.paths.slice(0, 12),
+          initialClipboardToken,
+          initialClipboardEntryAcceptable,
+          clipboardToken,
+          clipboardTokenConsumed,
+          clipboardEntryTimestamp: clipboardSnapshot.entryTimestamp,
+          clipboardEntryAgeMs,
+          clipboardEntryAcceptable,
+          clipboardEntryAfterMinTimestamp,
+          clipboardEntry: summarizeLaunchValue(clipboardSnapshot.entry),
+          clipboardHistorySummary: clipboardSnapshot.historySummary,
+          clipboardStatusSummary: clipboardSnapshot.statusSummary,
+        })
+        if (copiedSnapshot.paths.length && clipboardToken && !clipboardTokenConsumed && clipboardEntryAcceptable && clipboardEntryAfterMinTimestamp) {
+          const copiedAssets = await this.resolveLaunchInputs([copiedSnapshot.value])
+          if (copiedAssets.length) {
+            rememberConsumedHostLaunchSignature(clipboardToken)
+            lastHandledCopiedFilesSignature = copiedSnapshot.signature
+            appendLaunchDebugLog('get-launch-inputs-consumed-clipboard-token', {
+              clipboardToken,
+              copiedAssetCount: copiedAssets.length,
+              copiedFilesSignature: copiedSnapshot.signature,
+            })
+            return copiedAssets
+          }
+        }
+      }
+      appendLaunchDebugLog('get-launch-inputs-skipped-current-read', {
+        requirePending,
+        includeCopiedFiles,
+      })
+      return []
+    }
 
-    const resolvedCandidates = await Promise.all(candidates.map((candidate) => Promise.resolve(candidate)))
-    return this.resolveLaunchInputs(resolvedCandidates)
+    return this.readCurrentLaunchInputs(options)
   },
 
   subscribeLaunchInputs(callback) {
@@ -4069,6 +4862,58 @@ const toolsApi = {
     if (typeof callback !== 'function') return false
     launchSubscribers.add(callback)
     return true
+  },
+
+  async readCurrentLaunchInputs(options = {}) {
+    const hostApi = getHostApi()
+    const includeCopiedFiles = Boolean(options?.includeCopiedFiles)
+    const candidateReaders = [
+      ['getLaunchData', () => hostApi.getLaunchData?.()],
+      ['getLaunchInputs', () => hostApi.getLaunchInputs?.()],
+      ['getCommandData', () => hostApi.getCommandData?.()],
+      ['getCmdData', () => hostApi.getCmdData?.()],
+      ['getFeature', () => hostApi.getFeature?.()],
+      ['getCurrentFeature', () => hostApi.getCurrentFeature?.()],
+      ['getSelectFiles', () => hostApi.getSelectFiles?.()],
+      ['getSelectedFiles', () => hostApi.getSelectedFiles?.()],
+      ['getSelectedFilePaths', () => hostApi.getSelectedFilePaths?.()],
+      ['getFiles', () => hostApi.getFiles?.()],
+      ['getPaths', () => hostApi.getPaths?.()],
+      ['getPath', () => hostApi.getPath?.()],
+      ['getArguments', () => hostApi.getArguments?.()],
+    ]
+    if (includeCopiedFiles) {
+      candidateReaders.splice(9, 0, ['getCopyedFiles', () => hostApi.getCopyedFiles?.()])
+    }
+    const candidateValues = await Promise.all(candidateReaders.map(async ([name, reader]) => {
+      const value = await Promise.resolve(safeInvoke(reader))
+      return { name, value }
+    }))
+    const candidates = [
+      ...candidateValues.map((entry) => entry.value),
+      hostApi.arguments,
+      hostApi.argv,
+      hostApi.payload,
+      hostApi.cmd,
+      globalThis.launchData,
+      globalThis.pluginData,
+      globalThis.input,
+      globalThis.inputs,
+    ]
+
+    const resolvedCandidates = await Promise.all(candidates.map((candidate) => Promise.resolve(candidate)))
+    appendLaunchDebugLog('read-current-launch-inputs', {
+      candidateCount: resolvedCandidates.length,
+      namedCandidates: candidateValues.map(({ name, value }) => ({
+        name,
+        summary: summarizeLaunchValue(value),
+      })),
+      sample: resolvedCandidates
+        .filter((candidate) => candidate != null)
+        .slice(0, 6)
+        .map((candidate) => summarizeLaunchValue(candidate)),
+    })
+    return this.resolveLaunchInputs(resolvedCandidates)
   },
 
   async savePreset(toolId, preset) {
@@ -4130,15 +4975,15 @@ const toolsApi = {
     return next
   },
 
-  prepareRunPayload(toolId, config, assets, destinationPath) {
+  prepareRunPayload(toolId, config, assets, destinationPath, options) {
     return {
-      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      ...prepareRunPayload(toolId, config, assets, destinationPath, options),
       mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
     }
   },
 
-  async stageToolPreview(toolId, config, assets, destinationPath, mode) {
-    return stageToolPreview(toolId, config, assets, destinationPath, mode)
+  async stageToolPreview(toolId, config, assets, destinationPath, mode, options) {
+    return stageToolPreview(toolId, config, assets, destinationPath, mode, options)
   },
 
   async saveStagedResult(toolId, stagedItem, destinationPath) {
@@ -4149,8 +4994,46 @@ const toolsApi = {
     return saveAllStagedResults(toolId, stagedItems, destinationPath)
   },
 
+  async materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName = '') {
+    return materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName)
+  },
+
+  cleanupPreviewCache(runFolderNames = [], options = {}) {
+    return cleanupPreviewCache(runFolderNames, options)
+  },
+
+  clearPreviewCacheDirectory(options = {}) {
+    return clearPreviewCacheDirectory(options)
+  },
+
+  appendLaunchDebugLog(event, payload) {
+    appendLaunchDebugLog(event, payload && typeof payload === 'object' ? payload : { value: payload })
+    return true
+  },
+
+  checkStagedFiles(stagedItems = []) {
+    return checkStagedFiles(stagedItems)
+  },
+
   loadSettings() {
     return buildSettingsPayload(getAppSettings())
+  },
+
+  loadConsumedHostLaunchSignatures() {
+    const hostApi = getHostApi()
+    const current = hostApi.dbStorage?.getItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY)
+    return Array.isArray(current)
+      ? current.map((value) => sanitizeText(value)).filter(Boolean)
+      : []
+  },
+
+  saveConsumedHostLaunchSignatures(signatures = []) {
+    const hostApi = getHostApi()
+    const normalized = Array.isArray(signatures)
+      ? signatures.map((value) => sanitizeText(value)).filter(Boolean)
+      : []
+    hostApi.dbStorage?.setItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY, normalized)
+    return normalized
   },
 
   saveSettings(settings) {
@@ -4165,9 +5048,9 @@ const toolsApi = {
     return buildStagedItemsFromAssets(assets)
   },
 
-  async runTool(toolId, config, assets, destinationPath) {
+  async runTool(toolId, config, assets, destinationPath, options) {
     const payload = {
-      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      ...prepareRunPayload(toolId, config, assets, destinationPath, options),
       mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
     }
     const hostApi = getHostApi()
@@ -4193,6 +5076,7 @@ const toolsApi = {
 }
 
 installLaunchHooks()
+installPreviewLifecycleCleanup()
 
 if (typeof window !== 'undefined') {
   window.imgbatch = toolsApi

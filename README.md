@@ -1,10 +1,10 @@
-# Imgbatch
+# 图片批量处理
 
 ## 🤖 关于本项目
 
 本项目的**所有代码均由 AI（Artificial Intelligence）生成**，项目作者本人不具备相关编程知识，对代码内容不作任何技术层面的解释或保证。如果你遇到问题或有改进想法，欢迎自行修改、Fork 或提交 Issue。
 
-Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线的多种图片处理能力，适合快速处理一批图片并统一输出结果。
+图片批量处理是一个面向 ZTools 的图片批量处理插件，提供本地离线的多种图片处理能力，适合快速处理一批图片并统一输出结果。
 
 当前版本：`0.1.3`
 
@@ -30,69 +30,69 @@ Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线
 
 ### 图片压缩
 
-![Imgbatch 图片压缩](./docs/screenshots/compression.png)
+![图片批量处理 图片压缩](./docs/screenshots/compression.png)
 
 ### 格式转换
 
-![Imgbatch 格式转换](./docs/screenshots/format.png)
+![图片批量处理 格式转换](./docs/screenshots/format.png)
 
 ### 修改尺寸
 
-![Imgbatch 修改尺寸](./docs/screenshots/resize.png)
+![图片批量处理 修改尺寸](./docs/screenshots/resize.png)
 
 ### 添加水印
 
-![Imgbatch 添加水印](./docs/screenshots/watermark.png)
+![图片批量处理 添加水印](./docs/screenshots/watermark.png)
 
 ### 添加圆角
 
-![Imgbatch 添加圆角](./docs/screenshots/corners.png)
+![图片批量处理 添加圆角](./docs/screenshots/corners.png)
 
 ### 补边留白
 
-![Imgbatch 补边留白](./docs/screenshots/padding.png)
+![图片批量处理 补边留白](./docs/screenshots/padding.png)
 
 ### 裁剪
 
-![Imgbatch 裁剪](./docs/screenshots/crop.png)
+![图片批量处理 裁剪](./docs/screenshots/crop.png)
 
 ### 旋转
 
-![Imgbatch 旋转](./docs/screenshots/rotate.png)
+![图片批量处理 旋转](./docs/screenshots/rotate.png)
 
 ### 翻转
 
-![Imgbatch 翻转](./docs/screenshots/flip.png)
+![图片批量处理 翻转](./docs/screenshots/flip.png)
 
 ### 合并为 PDF
 
-![Imgbatch 合并为 PDF ](./docs/screenshots/merge-pdf.png)
+![图片批量处理 合并为 PDF](./docs/screenshots/merge-pdf.png)
 
 ### 合并为图片
 
-![Imgbatch 合并为图片](./docs/screenshots/merge-image.png)
+![图片批量处理 合并为图片](./docs/screenshots/merge-image.png)
 
 ### 合并为 GIF
 
-![Imgbatch 合并为 GIF ](./docs/screenshots/merge-gif.png)
+![图片批量处理 合并为 GIF](./docs/screenshots/merge-gif.png)
 
 ### 手动裁剪
 
-![Imgbatch 手动裁剪](./docs/screenshots/manual-crop.png)
+![图片批量处理 手动裁剪](./docs/screenshots/manual-crop.png)
 
 ### 预览效果
 
-![Imgbatch 预览双栏对比图](./docs/screenshots/preview1.png)
+![图片批量处理 预览双栏对比图](./docs/screenshots/preview1.png)
 
-![Imgbatch 预览前后对比图](./docs/screenshots/preview2.png)
+![图片批量处理 预览前后对比图](./docs/screenshots/preview2.png)
 
 ### 设置页
 
-![Imgbatch 设置页](./docs/screenshots/settings.png)
+![图片批量处理 设置页](./docs/screenshots/settings.png)
 
 ### 处理结果对比
 
-![Imgbatch 处理结果对比](./docs/screenshots/result.png)
+![图片批量处理 处理结果对比](./docs/screenshots/result.png)
 
 ## 功能
 
@@ -148,10 +148,14 @@ Imgbatch 是一个面向 ZTools 的图片批量处理插件，提供本地离线
 - `pdf-lib`
 - `gifenc`
 
+## License
+
+MIT
+
 ## 项目结构
 
 ```text
-Imgbatch/
+图片批量处理/
 ├── assets/         # 前端页面、状态、样式与组件
 ├── lib/            # preload 侧共享运行逻辑
 ├── index.html      # 插件页面入口

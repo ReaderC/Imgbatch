@@ -5,6 +5,8 @@ const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermar
 const MERGE_OUTPUT_TOOLS = new Set(['merge-pdf', 'merge-image', 'merge-gif'])
 let batchDepth = 0
 let emitQueued = false
+let assetIndexById = new Map()
+let assetPathSet = new Set()
 
 const DEFAULT_CONFIGS = {
   compression: { mode: 'quality', quality: 85, targetSizeKb: 250 },
@@ -83,6 +85,43 @@ export function getState() {
   return state
 }
 
+function rebuildAssetIndex(assets = state.assets) {
+  const next = new Map()
+  const nextPaths = new Set()
+  for (let index = 0; index < assets.length; index += 1) {
+    const asset = assets[index]
+    const assetId = asset?.id
+    if (!assetId) continue
+    next.set(assetId, index)
+    const sourcePath = asset?.sourcePath
+    if (sourcePath) nextPaths.add(sourcePath)
+  }
+  assetIndexById = next
+  assetPathSet = nextPaths
+}
+
+function setAssets(nextAssets) {
+  state.assets = nextAssets
+  rebuildAssetIndex(nextAssets)
+}
+
+function findAssetIndexById(assetId) {
+  return assetIndexById.has(assetId) ? assetIndexById.get(assetId) : -1
+}
+
+function hasAssetSourcePath(sourcePath) {
+  return sourcePath ? assetPathSet.has(sourcePath) : false
+}
+
+export function getAssetById(assetId) {
+  const assetIndex = findAssetIndexById(assetId)
+  return assetIndex === -1 ? null : state.assets[assetIndex]
+}
+
+export function getAssetIndexById(assetId) {
+  return findAssetIndexById(assetId)
+}
+
 export function subscribe(listener) {
   listeners.add(listener)
   return () => listeners.delete(listener)
@@ -114,6 +153,9 @@ export function setState(patch) {
   }
   if (!changed) return
   Object.assign(state, patch)
+  if (Array.isArray(patch?.assets)) {
+    rebuildAssetIndex(patch.assets)
+  }
   emit()
 }
 
@@ -184,7 +226,7 @@ function markPreviewAssetsStale(toolId) {
       nextAssets[index] = nextAsset
     }
   }
-  if (nextAssets) state.assets = nextAssets
+  if (nextAssets) setAssets(nextAssets)
 }
 
 export function updateConfig(toolId, patch) {
@@ -240,32 +282,31 @@ export function replaceAssets(assets) {
     nextAssets.length === state.assets.length
     && nextAssets.every((asset, index) => state.assets[index]?.sourcePath === asset.sourcePath)
   ) return
-  state.assets = nextAssets
+  setAssets(nextAssets)
   emit()
 }
 
 export function appendAssets(assets) {
-  const known = new Set(state.assets.map((item) => item.sourcePath))
   const next = [...state.assets]
   let appended = false
   for (const asset of assets) {
-    if (!known.has(asset.sourcePath)) {
+    if (!hasAssetSourcePath(asset.sourcePath)) {
       next.push(createAssetState(asset))
-      known.add(asset.sourcePath)
+      assetPathSet.add(asset.sourcePath)
       appended = true
     }
   }
   if (!appended) return
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
 export function removeAsset(assetId) {
-  const assetIndex = state.assets.findIndex((item) => item.id === assetId)
+  const assetIndex = findAssetIndexById(assetId)
   if (assetIndex === -1) return
   const nextAssets = [...state.assets]
   nextAssets.splice(assetIndex, 1)
-  state.assets = nextAssets
+  setAssets(nextAssets)
   emit()
 }
 
@@ -273,18 +314,19 @@ export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange =
   if (!assetId || !listThumbnailUrl) return
   let changed = false
   if (emitChange) {
-    const assetIndex = state.assets.findIndex((asset) => asset.id === assetId)
+    const assetIndex = findAssetIndexById(assetId)
     if (assetIndex !== -1 && state.assets[assetIndex]?.listThumbnailUrl !== listThumbnailUrl) {
       const nextAssets = [...state.assets]
       nextAssets[assetIndex] = {
         ...state.assets[assetIndex],
         listThumbnailUrl,
       }
-      state.assets = nextAssets
+      setAssets(nextAssets)
       changed = true
     }
   } else {
-    const asset = state.assets.find((entry) => entry.id === assetId)
+    const assetIndex = findAssetIndexById(assetId)
+    const asset = assetIndex === -1 ? null : state.assets[assetIndex]
     if (asset && asset.listThumbnailUrl !== listThumbnailUrl) {
       asset.listThumbnailUrl = listThumbnailUrl
       changed = true
@@ -296,13 +338,25 @@ export function updateAssetListThumbnail(assetId, listThumbnailUrl, emitChange =
 export function applyRunResult(result) {
   if (!result) return
 
-  const processedMap = new Map((result.processed || []).map((item) => [item.assetId, item]))
-  const failedMap = new Map((result.failed || []).map((item) => [item.assetId, item]))
+  const processedMap = buildAssetResultMap(result.processed)
+  const failedMap = buildAssetResultMap(result.failed)
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result.toolId)
+  let changed = false
 
-  state.activeRun = result.runId
-    ? { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
-    : state.activeRun
+  if (result.runId) {
+    const nextActiveRun = { runId: result.runId, runFolderName: result.runFolderName || '', toolId: result.toolId, mode: result.mode || 'direct' }
+    const currentActiveRun = state.activeRun
+    if (
+      !currentActiveRun
+      || currentActiveRun.runId !== nextActiveRun.runId
+      || currentActiveRun.runFolderName !== nextActiveRun.runFolderName
+      || currentActiveRun.toolId !== nextActiveRun.toolId
+      || currentActiveRun.mode !== nextActiveRun.mode
+    ) {
+      state.activeRun = nextActiveRun
+      changed = true
+    }
+  }
 
   let nextAssets = null
   for (let index = 0; index < state.assets.length; index += 1) {
@@ -341,35 +395,42 @@ export function applyRunResult(result) {
   }
 
   if (nextAssets) {
-    state.assets = nextAssets
+    setAssets(nextAssets)
+    changed = true
   }
 
   if (result.mode === 'save' || result.mode === 'direct' || result.mode === 'preview-save') {
-    state.resultView = buildResultView(result, state.assets)
+    const nextResultView = buildResultView(result, state.assets)
+    if (!areResultViewsEquivalent(state.resultView, nextResultView)) {
+      state.resultView = nextResultView
+      changed = true
+    }
   }
 
-  if (result.mode === 'preview-only') {
+  if (result.mode === 'preview-only' && state.resultView !== null) {
     state.resultView = null
+    changed = true
   }
 
+  if (!changed) return
   emit()
 }
 
 export function moveAsset(assetId, direction) {
-  const index = state.assets.findIndex((item) => item.id === assetId)
+  const index = findAssetIndexById(assetId)
   if (index === -1) return
   const nextIndex = direction === 'up' ? index - 1 : index + 1
   if (nextIndex < 0 || nextIndex >= state.assets.length) return
   const next = [...state.assets]
   ;[next[index], next[nextIndex]] = [next[nextIndex], next[index]]
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
 export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') {
   if (!assetId || !targetAssetId || assetId === targetAssetId) return
-  const fromIndex = state.assets.findIndex((item) => item.id === assetId)
-  const targetIndex = state.assets.findIndex((item) => item.id === targetAssetId)
+  const fromIndex = findAssetIndexById(assetId)
+  const targetIndex = findAssetIndexById(targetAssetId)
   if (fromIndex === -1 || targetIndex === -1) return
 
   const next = [...state.assets]
@@ -377,19 +438,29 @@ export function moveAssetToTarget(assetId, targetAssetId, placement = 'before') 
   const adjustedTargetIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
   const insertIndex = placement === 'after' ? adjustedTargetIndex + 1 : adjustedTargetIndex
   next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, moved)
-  state.assets = next
+  setAssets(next)
   emit()
 }
 
 export function pushNotification(notification) {
   const item = { id: crypto.randomUUID(), ...notification }
-  state.notifications = [...state.notifications, item].slice(-4)
+  const next = state.notifications.slice()
+  next.push(item)
+  if (next.length > 4) {
+    next.splice(0, next.length - 4)
+  }
+  state.notifications = next
   emit()
   return item
 }
 
 export function dismissNotification(id) {
-  state.notifications = state.notifications.filter((item) => item.id !== id)
+  const current = state.notifications
+  const index = current.findIndex((item) => item.id === id)
+  if (index === -1) return
+  const next = current.slice()
+  next.splice(index, 1)
+  state.notifications = next
   emit()
 }
 
@@ -501,7 +572,8 @@ function applyProcessedAsset(asset, processed, result) {
 function mergeAssetPatch(asset, patch) {
   if (!asset || !patch || typeof patch !== 'object') return asset
   let changed = false
-  for (const [key, value] of Object.entries(patch)) {
+  for (const key of Object.keys(patch)) {
+    const value = patch[key]
     if (asset[key] !== value) {
       changed = true
       break
@@ -514,7 +586,7 @@ function buildResultView(result, assets = []) {
   const processed = Array.isArray(result?.processed) ? result.processed : []
   const failed = Array.isArray(result?.failed) ? result.failed : []
   const isMergedOutput = MERGE_OUTPUT_TOOLS.has(result?.toolId)
-  const assetMap = isMergedOutput ? null : new Map((assets || []).map((asset) => [asset.id, asset]))
+  const assetMap = isMergedOutput ? null : buildAssetIndexMap(assets)
   const items = []
   let totalSourceSizeBytes = 0
   let totalResultSizeBytes = 0
@@ -540,6 +612,83 @@ function buildResultView(result, assets = []) {
     totalResultSizeBytes,
     createdAt: Date.now(),
   }
+}
+
+function buildAssetResultMap(items) {
+  const next = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    const assetId = item?.assetId
+    if (!assetId) continue
+    next.set(assetId, item)
+  }
+  return next
+}
+
+function buildAssetIndexMap(assets) {
+  const next = new Map()
+  for (const asset of Array.isArray(assets) ? assets : []) {
+    const assetId = asset?.id
+    if (!assetId) continue
+    next.set(assetId, asset)
+  }
+  return next
+}
+
+function areResultViewsEquivalent(current, next) {
+  if (current === next) return true
+  if (!current || !next) return false
+  if (current.runId !== next.runId) return false
+  if (current.toolId !== next.toolId) return false
+  if (current.mode !== next.mode) return false
+  if ((current.elapsedMs || 0) !== (next.elapsedMs || 0)) return false
+  if ((current.totalSourceSizeBytes || 0) !== (next.totalSourceSizeBytes || 0)) return false
+  if ((current.totalResultSizeBytes || 0) !== (next.totalResultSizeBytes || 0)) return false
+  if (!areResultItemListsEquivalent(current.items, next.items)) return false
+  if (!areFailedItemListsEquivalent(current.failed, next.failed)) return false
+  return true
+}
+
+function areResultItemListsEquivalent(currentItems = [], nextItems = []) {
+  if (currentItems === nextItems) return true
+  if (currentItems.length !== nextItems.length) return false
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const current = currentItems[index]
+    const next = nextItems[index]
+    if (!current || !next) return false
+    if (current.assetId !== next.assetId) return false
+    if (current.outputPath !== next.outputPath) return false
+    if (current.afterUrl !== next.afterUrl) return false
+    if (current.summary !== next.summary) return false
+    if (!areResultSourceEquivalent(current.source, next.source)) return false
+    if (!areResultSourceEquivalent(current.result, next.result)) return false
+  }
+  return true
+}
+
+function areResultSourceEquivalent(current, next) {
+  if (current === next) return true
+  if (!current || !next) return false
+  return (
+    current.name === next.name
+    && (current.sizeBytes || 0) === (next.sizeBytes || 0)
+    && (current.width || 0) === (next.width || 0)
+    && (current.height || 0) === (next.height || 0)
+    && (current.dimensionsText || '') === (next.dimensionsText || '')
+    && Boolean(current.isAggregate) === Boolean(next.isAggregate)
+  )
+}
+
+function areFailedItemListsEquivalent(currentItems = [], nextItems = []) {
+  if (currentItems === nextItems) return true
+  if (currentItems.length !== nextItems.length) return false
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const current = currentItems[index]
+    const next = nextItems[index]
+    if (!current || !next) return false
+    if (current.assetId !== next.assetId) return false
+    if ((current.error || '') !== (next.error || '')) return false
+  }
+  return true
 }
 
 function buildResultViewItem(processed, asset) {
