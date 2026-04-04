@@ -19,7 +19,7 @@ const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ic
 const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
-const DEBUG_LOG_DIR_NAME = 'Imgbatch Logs'
+const LEGACY_DEBUG_LOG_DIR_NAME = 'Imgbatch Logs'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY = 'imgbatch:consumed-host-launch-signatures'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
@@ -63,7 +63,7 @@ const CANCELLED_RUNS = new Set()
 const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const LAUNCH_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'launch-debug.log')
-const PREVIEW_CACHE_DEBUG_LOG_PATH = path.join(os.tmpdir(), DEBUG_LOG_DIR_NAME, 'preview-cache-debug.log')
+const PREVIEW_CACHE_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'preview-cache-debug.log')
 const DETACHED_HEARTBEAT_FILE_NAME = 'preview-detached-heartbeat.json'
 const DETACHED_HEARTBEAT_STALE_MS = 15000
 const PDF_PAGE_SIZES = {
@@ -221,8 +221,17 @@ function appendPreviewCacheDebugLog(event, payload = {}) {
   }
 }
 
+function cleanupLegacyDebugLogDirectory() {
+  const legacyDirPath = path.join(os.tmpdir(), LEGACY_DEBUG_LOG_DIR_NAME)
+  try {
+    fs.rmSync(legacyDirPath, { recursive: true, force: true })
+  } catch {
+    // Ignore legacy debug cleanup failures.
+  }
+}
+
 function getDetachedHeartbeatPath() {
-  return path.join(os.tmpdir(), DEBUG_LOG_DIR_NAME, DETACHED_HEARTBEAT_FILE_NAME)
+  return path.join(os.tmpdir(), PREVIEW_DIR_NAME, DETACHED_HEARTBEAT_FILE_NAME)
 }
 
 function normalizeQueueThumbnailSize(value) {
@@ -1333,6 +1342,7 @@ function rememberConsumedHostLaunchSignature(signature) {
 function installPreviewLifecycleCleanup() {
   if (previewLifecycleCleanupInstalled) return
   previewLifecycleCleanupInstalled = true
+  cleanupLegacyDebugLogDirectory()
   const heartbeatFilePath = getDetachedHeartbeatPath()
 
   const clearAllPreviewCache = () => {
