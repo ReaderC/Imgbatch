@@ -146,6 +146,7 @@ let hiddenPreviewCleanupTimer = null
 let launchInputRetryTimer = null
 let launchInputRetryDeadline = 0
 let launchInputRetryInFlight = false
+let launchInputRetryStartedAt = 0
 
 function handleCleanupStateTransitions(state) {
   const nextToolId = state?.activeTool || ''
@@ -2776,13 +2777,16 @@ function stopLaunchInputRetryWindow() {
     launchInputRetryTimer = null
   }
   launchInputRetryDeadline = 0
+  launchInputRetryStartedAt = 0
 }
 
 function startLaunchInputRetryWindow(reason = 'unknown') {
+  launchInputRetryStartedAt = Date.now()
   launchInputRetryDeadline = Date.now() + LAUNCH_INPUT_RETRY_WINDOW_MS
   if (typeof window !== 'undefined' && window.imgbatch?.appendLaunchDebugLog) {
     window.imgbatch.appendLaunchDebugLog('launch-input-retry-window-started', {
       reason,
+      startedAt: launchInputRetryStartedAt,
       deadline: launchInputRetryDeadline,
       intervalMs: LAUNCH_INPUT_RETRY_INTERVAL_MS,
       windowMs: LAUNCH_INPUT_RETRY_WINDOW_MS,
@@ -2805,6 +2809,7 @@ async function retryLaunchInputs() {
     const assets = await getLaunchInputs({
       includeCopiedFiles: true,
       requirePending: true,
+      minClipboardTimestamp: launchInputRetryStartedAt,
     })
     if (assets?.length) {
       appendImportedAssets(assets, '已带入')
@@ -3237,9 +3242,7 @@ function attachGlobalEvents() {
       }
       const nextAssetCount = Math.max(0, getState().assets.length - 1)
       removeAsset(target.dataset.assetId)
-      if (!nextAssetCount) {
-        startLaunchInputRetryWindow('remove-last-asset')
-      }
+      startLaunchInputRetryWindow(nextAssetCount ? 'remove-asset' : 'remove-last-asset')
       return
     }
 

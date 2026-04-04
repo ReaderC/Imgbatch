@@ -1089,6 +1089,7 @@ let detachedWindowHeartbeatFilePath = ''
 let launchApiDebugLogged = false
 let delayedPreviewCleanupTimer = null
 let startupCopiedFilesSignature = null
+let lastHandledCopiedFilesSignature = ''
 const pluginStartupAt = Date.now()
 const MAX_CONSUMED_HOST_LAUNCH_SIGNATURES = 12
 const CLIPBOARD_LAUNCH_LOOKBACK_MS = 15000
@@ -1406,8 +1407,10 @@ function installLaunchHooks() {
   const hostApi = getHostApi()
   if (startupCopiedFilesSignature == null) {
     startupCopiedFilesSignature = readCopiedFilesSnapshot().signature
+    lastHandledCopiedFilesSignature = startupCopiedFilesSignature
     appendLaunchDebugLog('startup-copied-files-signature', {
       signature: startupCopiedFilesSignature,
+      lastHandledSignature: lastHandledCopiedFilesSignature,
     })
   }
   if (!launchApiDebugLogged) {
@@ -4671,9 +4674,11 @@ const toolsApi = {
     const seededPendingValues = Array.isArray(options?.pendingValues) ? options.pendingValues : null
     const requirePending = Boolean(options?.requirePending)
     const includeCopiedFiles = Boolean(options?.includeCopiedFiles)
+    const minClipboardTimestamp = Number(options?.minClipboardTimestamp) || 0
     appendLaunchDebugLog('get-launch-inputs', {
       requirePending,
       includeCopiedFiles,
+      minClipboardTimestamp,
       pendingCount: seededPendingValues ? seededPendingValues.length : pendingLaunchValues.length,
       source: seededPendingValues ? 'seeded' : 'queue',
     })
@@ -4695,8 +4700,8 @@ const toolsApi = {
     if (requirePending && !hadPendingValues) {
       if (includeCopiedFiles) {
         const copiedSnapshot = readCopiedFilesSnapshot()
-        const copiedFilesChangedSinceStartup = Boolean(
-          copiedSnapshot.signature && copiedSnapshot.signature !== startupCopiedFilesSignature,
+        const copiedFilesChangedSinceHandled = Boolean(
+          copiedSnapshot.signature && copiedSnapshot.signature !== lastHandledCopiedFilesSignature,
         )
         let clipboardSnapshot = await readClipboardLaunchSnapshot()
         const initialClipboardToken = sanitizeText(clipboardSnapshot.token)
@@ -4711,13 +4716,18 @@ const toolsApi = {
         const clipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const clipboardEntryAgeMs = getClipboardEntryAgeMs(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const clipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const clipboardEntryAfterMinTimestamp = !minClipboardTimestamp || (
+          Number.isFinite(clipboardSnapshot.entryTimestamp) && clipboardSnapshot.entryTimestamp >= minClipboardTimestamp
+        )
         appendLaunchDebugLog('get-launch-inputs-copied-files-check', {
           requirePending,
           includeCopiedFiles,
+          minClipboardTimestamp,
           pluginStartupAt,
           startupCopiedFilesSignature,
+          lastHandledCopiedFilesSignature,
           currentCopiedFilesSignature: copiedSnapshot.signature,
-          copiedFilesChangedSinceStartup,
+          copiedFilesChangedSinceHandled,
           copiedFileCount: copiedSnapshot.paths.length,
           copiedPaths: copiedSnapshot.paths.slice(0, 12),
           initialClipboardToken,
@@ -4729,23 +4739,23 @@ const toolsApi = {
           clipboardEntryAgeMs,
           clipboardEntryRecent,
           clipboardEntryAcceptable,
+          clipboardEntryAfterMinTimestamp,
           clipboardEntry: summarizeLaunchValue(clipboardSnapshot.entry),
           clipboardHistorySummary: clipboardSnapshot.historySummary,
           clipboardStatusSummary: clipboardSnapshot.statusSummary,
         })
-        if (copiedSnapshot.paths.length && clipboardToken && !clipboardTokenConsumed && clipboardEntryAcceptable) {
+        if (copiedSnapshot.paths.length && clipboardToken && !clipboardTokenConsumed && clipboardEntryAcceptable && clipboardEntryAfterMinTimestamp) {
           const copiedAssets = await this.resolveLaunchInputs([copiedSnapshot.value])
           if (copiedAssets.length) {
             rememberConsumedHostLaunchSignature(clipboardToken)
+            lastHandledCopiedFilesSignature = copiedSnapshot.signature
             appendLaunchDebugLog('get-launch-inputs-consumed-clipboard-token', {
               clipboardToken,
               copiedAssetCount: copiedAssets.length,
+              copiedFilesSignature: copiedSnapshot.signature,
             })
             return copiedAssets
           }
-        }
-        if (copiedFilesChangedSinceStartup) {
-          return this.resolveLaunchInputs([copiedSnapshot.value])
         }
       }
       appendLaunchDebugLog('get-launch-inputs-skipped-current-read', {
