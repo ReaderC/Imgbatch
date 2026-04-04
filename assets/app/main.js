@@ -108,6 +108,7 @@ const previewCacheQueue = []
 const pendingQueueThumbnailPatches = new Map()
 const LAUNCH_INPUT_RETRY_INTERVAL_MS = 1200
 const LAUNCH_INPUT_RETRY_WINDOW_MS = 12000
+const LAUNCH_INPUT_POST_IMPORT_RETRY_WINDOW_MS = 12000
 const rootMarkupCache = {
   sideNav: '',
   topbar: '',
@@ -2780,16 +2781,16 @@ function stopLaunchInputRetryWindow() {
   launchInputRetryStartedAt = 0
 }
 
-function startLaunchInputRetryWindow(reason = 'unknown') {
+function startLaunchInputRetryWindow(reason = 'unknown', durationMs = LAUNCH_INPUT_RETRY_WINDOW_MS) {
   launchInputRetryStartedAt = Date.now()
-  launchInputRetryDeadline = Date.now() + LAUNCH_INPUT_RETRY_WINDOW_MS
+  launchInputRetryDeadline = launchInputRetryStartedAt + Math.max(0, Number(durationMs) || 0)
   if (typeof window !== 'undefined' && window.imgbatch?.appendLaunchDebugLog) {
     window.imgbatch.appendLaunchDebugLog('launch-input-retry-window-started', {
       reason,
       startedAt: launchInputRetryStartedAt,
       deadline: launchInputRetryDeadline,
       intervalMs: LAUNCH_INPUT_RETRY_INTERVAL_MS,
-      windowMs: LAUNCH_INPUT_RETRY_WINDOW_MS,
+      windowMs: Math.max(0, Number(durationMs) || 0),
     })
   }
   if (launchInputRetryTimer) return
@@ -2859,7 +2860,7 @@ function appendImportedAssets(assets, verb = '已导入') {
     })
   }
   if (!appendedCount) return
-  stopLaunchInputRetryWindow()
+  startLaunchInputRetryWindow('post-import', LAUNCH_INPUT_POST_IMPORT_RETRY_WINDOW_MS)
   notify({ type: 'success', message: `${verb} ${appendedCount} 张图片。` })
 }
 
