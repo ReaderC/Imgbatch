@@ -1086,7 +1086,6 @@ let previewLifecycleCleanupInstalled = false
 let detachedWindowCleanupWatcher = null
 let detachedWindowHeartbeatTimer = null
 let detachedWindowHeartbeatFilePath = ''
-let launchApiDebugLogged = false
 let delayedPreviewCleanupTimer = null
 let lastHandledCopiedFilesSignature = ''
 const pluginStartupAt = Date.now()
@@ -1406,17 +1405,6 @@ function installLaunchHooks() {
   const hostApi = getHostApi()
   if (!lastHandledCopiedFilesSignature) {
     lastHandledCopiedFilesSignature = readCopiedFilesSnapshot().signature
-    appendLaunchDebugLog('startup-copied-files-signature', {
-      signature: lastHandledCopiedFilesSignature,
-    })
-  }
-  if (!launchApiDebugLogged) {
-    launchApiDebugLogged = true
-    const hostApiKeys = Object.keys(hostApi || {})
-    appendLaunchDebugLog('host-api-keys', {
-      totalKeys: hostApiKeys.length,
-      keys: hostApiKeys.filter((key) => /assembly|select|file|path|launch|input|payload|feature/i.test(key)).slice(0, 80),
-    })
   }
   const handleLaunch = (param) => {
     appendLaunchDebugLog('launch-callback-raw', {
