@@ -1,8 +1,8 @@
-const { nativeImage, shell } = require('electron')
+const { ipcRenderer, nativeImage, shell } = require('electron')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync, fork } = require('child_process')
+const { execFileSync } = require('child_process')
 const { getManualCropDisplaySize: computeManualCropDisplaySize, getManualCropStageMetrics: computeManualCropStageMetrics } = require('./lib/manual-crop-stage.cjs')
 
 const IMAGE_EXTENSIONS = new Set([
@@ -20,6 +20,7 @@ const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
+const CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY = 'imgbatch:consumed-host-launch-signatures'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
 const PERFORMANCE_MODES = new Set(['compatible', 'balanced', 'max'])
 const QUEUE_THUMBNAIL_SIZE_OPTIONS = new Set(['60', '100', '128', '160', '192'])
@@ -60,6 +61,7 @@ const ASSET_DESCRIPTOR_CACHE = new Map()
 const CANCELLED_RUNS = new Set()
 const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
+const LAUNCH_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'launch-debug.log')
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -156,6 +158,49 @@ function clampNumber(value, min, max, fallback = min) {
 function sanitizeText(value, fallback = '') {
   const text = typeof value === 'string' ? value.trim() : ''
   return text || fallback
+}
+
+function safeInvoke(reader, fallback = null) {
+  try {
+    return typeof reader === 'function' ? reader() : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function summarizeLaunchValue(value, depth = 0) {
+  if (value == null) return value
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (Array.isArray(value)) {
+    if (depth >= 1) return { type: 'array', length: value.length }
+    return value.slice(0, 6).map((item) => summarizeLaunchValue(item, depth + 1))
+  }
+  if (typeof value === 'object') {
+    const summary = {}
+    const keys = Object.keys(value).slice(0, 10)
+    for (const key of keys) {
+      const item = value[key]
+      if (typeof item === 'function') continue
+      summary[key] = depth >= 1 ? typeof item : summarizeLaunchValue(item, depth + 1)
+    }
+    return summary
+  }
+  return typeof value
+}
+
+function appendLaunchDebugLog(event, payload = {}) {
+  try {
+    fs.mkdirSync(path.dirname(LAUNCH_DEBUG_LOG_PATH), { recursive: true })
+    const record = {
+      time: new Date().toISOString(),
+      event,
+      payload,
+    }
+    fs.appendFileSync(LAUNCH_DEBUG_LOG_PATH, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch {
+    // Ignore debug log failures.
+  }
 }
 
 function normalizeQueueThumbnailSize(value) {
@@ -353,9 +398,9 @@ function buildRunFolderName(createdAt, toolId) {
   return `${stamp}-${toolId}`
 }
 
-function createRunDescriptor(baseDestinationPath, toolId, createdAt) {
+function createRunDescriptor(baseDestinationPath, toolId, createdAt, preferredRunFolderName = '') {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const runFolderName = buildRunFolderName(createdAt, toolId)
+  const runFolderName = sanitizeText(preferredRunFolderName) || buildRunFolderName(createdAt, toolId)
   const runPath = path.join(baseDestinationPath, runFolderName)
   return {
     runId,
@@ -972,7 +1017,7 @@ function normalizeRunConfig(toolId, config = {}) {
   return { ...config }
 }
 
-function prepareRunPayload(toolId, config, assets, destinationPath) {
+function prepareRunPayload(toolId, config, assets, destinationPath, options = {}) {
   const normalizedAssets = normalizeRunAssets(Array.isArray(assets) ? assets : [])
   const normalizedConfig = normalizeRunConfig(toolId, config)
   if (toolId === 'resize' && normalizedConfig.sizeMode !== 'manual') {
@@ -1015,7 +1060,7 @@ function prepareRunPayload(toolId, config, assets, destinationPath) {
   }
   const output = resolveDestinationPath(destinationPath, normalizedAssets, getAppSettings())
   const createdAt = new Date().toISOString()
-  const run = createRunDescriptor(output.destinationPath, toolId, createdAt)
+  const run = createRunDescriptor(output.destinationPath, toolId, createdAt, options?.preferredRunFolderName)
 
   return {
     toolId,
@@ -1037,13 +1082,317 @@ const pendingLaunchValues = []
 const launchWaiters = new Set()
 const launchSubscribers = new Set()
 let launchHooksInstalled = false
+let previewLifecycleCleanupInstalled = false
+let detachedWindowCleanupWatcher = null
+let detachedWindowHeartbeatTimer = null
+let detachedWindowHeartbeatFilePath = ''
+let launchApiDebugLogged = false
+let delayedPreviewCleanupTimer = null
+let startupCopiedFilesSignature = null
+const pluginStartupAt = Date.now()
+const MAX_CONSUMED_HOST_LAUNCH_SIGNATURES = 12
+const CLIPBOARD_LAUNCH_LOOKBACK_MS = 15000
+const CLIPBOARD_LAUNCH_POLL_INTERVAL_MS = 80
+const CLIPBOARD_LAUNCH_POLL_TIMEOUT_MS = 420
+const MAX_INITIAL_CLIPBOARD_TOKEN_AGE_MS = 1500
 
 function getHostApi() {
   return globalThis.ztools || {}
 }
 
+function normalizeCopiedFilePaths(value) {
+  return uniqueStrings(
+    extractLaunchItems(value).map((item) => sanitizeText(item)).filter(Boolean),
+  )
+}
+
+function buildLaunchPathSignature(paths = []) {
+  return paths.map((item) => path.resolve(item)).sort((left, right) => left.localeCompare(right)).join('|')
+}
+
+function readCopiedFilesSnapshot() {
+  const hostApi = getHostApi()
+  const copiedValue = safeInvoke(() => hostApi.getCopyedFiles?.())
+  const paths = normalizeCopiedFilePaths(copiedValue)
+  return {
+    value: copiedValue,
+    paths,
+    signature: buildLaunchPathSignature(paths),
+  }
+}
+
+function extractClipboardHistoryEntries(value, visited = new Set()) {
+  if (!value || visited.has(value)) return []
+  if (Array.isArray(value)) return value.flatMap((item) => extractClipboardHistoryEntries(item, visited))
+  if (typeof value !== 'object') return []
+  visited.add(value)
+
+  const directKeys = ['items', 'list', 'records', 'history', 'data', 'rows']
+  for (const key of directKeys) {
+    if (!value[key]) continue
+    const entries = extractClipboardHistoryEntries(value[key], visited)
+    if (entries.length) return entries
+  }
+
+  if (value.id != null || value.type != null || value.content != null || value.path != null || value.filePath != null) {
+    return [value]
+  }
+
+  return Object.values(value).flatMap((item) => extractClipboardHistoryEntries(item, visited))
+}
+
+function buildClipboardLaunchToken(entry) {
+  if (!entry || typeof entry !== 'object') return ''
+  const parts = [
+    sanitizeText(entry.id),
+    sanitizeText(entry.type),
+    sanitizeText(entry.createdAt),
+    sanitizeText(entry.updatedAt),
+    sanitizeText(entry.time),
+    sanitizeText(entry.timestamp),
+    sanitizeText(entry.path),
+    sanitizeText(entry.filePath),
+    sanitizeText(entry.name),
+  ].filter(Boolean)
+  if (!parts.length) return ''
+  return parts.join('|')
+}
+
+function normalizeClipboardEntryTimestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 0 ? Math.round(value) : 0
+  }
+  const text = sanitizeText(value)
+  if (!text) return 0
+  const numeric = Number(text)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.round(numeric)
+  }
+  const parsed = Date.parse(text)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function extractClipboardEntryTimestamp(entry) {
+  if (!entry || typeof entry !== 'object') return 0
+  return [
+    entry.timestamp,
+    entry.time,
+    entry.updatedAt,
+    entry.createdAt,
+  ].map((value) => normalizeClipboardEntryTimestamp(value)).find((value) => value > 0) || 0
+}
+
+function pickLatestClipboardEntry(entries = []) {
+  let latestEntry = null
+  let latestTimestamp = 0
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const entryTimestamp = extractClipboardEntryTimestamp(entry)
+    if (!latestEntry || entryTimestamp > latestTimestamp) {
+      latestEntry = entry
+      latestTimestamp = entryTimestamp
+    }
+  }
+  return {
+    entry: latestEntry,
+    entryTimestamp: latestTimestamp,
+  }
+}
+
+function isRecentClipboardEntry(entryTimestamp, referenceTimestamp = pluginStartupAt) {
+  if (!entryTimestamp || !referenceTimestamp) return false
+  return entryTimestamp >= (referenceTimestamp - CLIPBOARD_LAUNCH_LOOKBACK_MS)
+}
+
+function getClipboardEntryAgeMs(entryTimestamp, referenceTimestamp = pluginStartupAt) {
+  if (!entryTimestamp || !referenceTimestamp) return 0
+  return referenceTimestamp - entryTimestamp
+}
+
+function isClipboardEntryAcceptableForBootstrap(entryTimestamp, referenceTimestamp = pluginStartupAt, maxInitialAgeMs = MAX_INITIAL_CLIPBOARD_TOKEN_AGE_MS) {
+  if (!entryTimestamp || !referenceTimestamp) return false
+  if (entryTimestamp >= referenceTimestamp) return true
+  const ageMs = getClipboardEntryAgeMs(entryTimestamp, referenceTimestamp)
+  return ageMs >= 0 && ageMs <= maxInitialAgeMs
+}
+
+async function readClipboardLaunchSnapshot() {
+  const hostApi = getHostApi()
+  const clipboardApi = hostApi.clipboard
+  if (!clipboardApi) {
+    return { token: '', entry: null, entryTimestamp: 0, historySummary: null, statusSummary: null }
+  }
+
+  const historyValues = await Promise.all([
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5, 'file'))),
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5, 'image'))),
+    Promise.resolve(safeInvoke(() => clipboardApi.getHistory?.(1, 5))),
+  ])
+  const statusValue = await Promise.resolve(safeInvoke(() => clipboardApi.getStatus?.()))
+  const historyEntries = historyValues.flatMap((value) => extractClipboardHistoryEntries(value))
+  const { entry, entryTimestamp } = pickLatestClipboardEntry(historyEntries)
+  const token = buildClipboardLaunchToken(entry)
+  return {
+    token,
+    entry,
+    entryTimestamp,
+    historySummary: summarizeLaunchValue(historyValues),
+    statusSummary: summarizeLaunchValue(statusValue),
+  }
+}
+
+async function waitForRecentClipboardLaunchSnapshot(initialToken = '', referenceTimestamp = pluginStartupAt) {
+  let snapshot = await readClipboardLaunchSnapshot()
+  const deadline = Date.now() + CLIPBOARD_LAUNCH_POLL_TIMEOUT_MS
+
+  while (Date.now() < deadline) {
+    const snapshotToken = sanitizeText(snapshot.token)
+    if (
+      snapshotToken
+      && snapshotToken !== initialToken
+      && isClipboardEntryAcceptableForBootstrap(snapshot.entryTimestamp, referenceTimestamp)
+    ) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, CLIPBOARD_LAUNCH_POLL_INTERVAL_MS))
+    snapshot = await readClipboardLaunchSnapshot()
+  }
+
+  return snapshot
+}
+
+function loadConsumedHostLaunchSignaturesFromStorage() {
+  const hostApi = getHostApi()
+  const current = hostApi.dbStorage?.getItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY)
+  return Array.isArray(current)
+    ? current.map((value) => sanitizeText(value)).filter(Boolean)
+    : []
+}
+
+function rememberConsumedHostLaunchSignature(signature) {
+  const normalizedSignature = sanitizeText(signature)
+  if (!normalizedSignature) return []
+  const hostApi = getHostApi()
+  const current = loadConsumedHostLaunchSignaturesFromStorage()
+  const next = [normalizedSignature, ...current.filter((value) => value !== normalizedSignature)]
+    .slice(0, MAX_CONSUMED_HOST_LAUNCH_SIGNATURES)
+  hostApi.dbStorage?.setItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY, next)
+  return next
+}
+
+function installPreviewLifecycleCleanup() {
+  if (previewLifecycleCleanupInstalled) return
+  previewLifecycleCleanupInstalled = true
+
+  const clearAllPreviewCache = () => {
+    clearPreviewCacheDirectory()
+  }
+
+  const cancelDelayedPreviewCleanup = () => {
+    if (!delayedPreviewCleanupTimer) return
+    clearTimeout(delayedPreviewCleanupTimer)
+    delayedPreviewCleanupTimer = null
+  }
+
+  const scheduleDelayedPreviewCleanup = () => {
+    cancelDelayedPreviewCleanup()
+    delayedPreviewCleanupTimer = setTimeout(() => {
+      delayedPreviewCleanupTimer = null
+      clearAllPreviewCache()
+    }, 60 * 1000)
+  }
+
+  const stopDetachedWindowHeartbeat = () => {
+    if (detachedWindowHeartbeatTimer) {
+      clearInterval(detachedWindowHeartbeatTimer)
+      detachedWindowHeartbeatTimer = null
+    }
+    if (!detachedWindowHeartbeatFilePath) return
+    try {
+      fs.rmSync(detachedWindowHeartbeatFilePath, { force: true })
+    } catch {}
+    detachedWindowHeartbeatFilePath = ''
+  }
+
+  const stopDetachedWindowCleanupWatcher = () => {
+    if (!detachedWindowCleanupWatcher || detachedWindowCleanupWatcher.killed) return
+    try {
+      detachedWindowCleanupWatcher.kill()
+    } catch {}
+    detachedWindowCleanupWatcher = null
+  }
+
+  const startDetachedWindowCleanupWatcher = () => {
+    stopDetachedWindowHeartbeat()
+    stopDetachedWindowCleanupWatcher()
+    const heartbeatFilePath = path.join(
+      os.tmpdir(),
+      PREVIEW_DIR_NAME,
+      `.detached-heartbeat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`,
+    )
+    if (!heartbeatFilePath) return
+    try {
+      fs.mkdirSync(path.dirname(heartbeatFilePath), { recursive: true })
+      fs.writeFileSync(heartbeatFilePath, String(Date.now()))
+    } catch {
+      return
+    }
+    detachedWindowHeartbeatFilePath = heartbeatFilePath
+    detachedWindowHeartbeatTimer = setInterval(() => {
+      try {
+        fs.writeFileSync(heartbeatFilePath, String(Date.now()))
+      } catch {}
+    }, 1000)
+  }
+
+  const hostApi = getHostApi()
+  hostApi.onPluginOut?.(() => {
+    stopDetachedWindowHeartbeat()
+    stopDetachedWindowCleanupWatcher()
+    scheduleDelayedPreviewCleanup()
+  })
+  hostApi.onPluginEnter?.(() => {
+    cancelDelayedPreviewCleanup()
+  })
+  hostApi.onPluginReady?.(() => {
+    cancelDelayedPreviewCleanup()
+  })
+  hostApi.onPluginDetach?.(() => {
+    startDetachedWindowCleanupWatcher()
+  })
+
+  if (ipcRenderer?.on) {
+    ipcRenderer.on('plugin-out', () => {
+      stopDetachedWindowHeartbeat()
+      stopDetachedWindowCleanupWatcher()
+      scheduleDelayedPreviewCleanup()
+    })
+  }
+
+  if (typeof process?.once === 'function') {
+    process.once('exit', () => {
+      cancelDelayedPreviewCleanup()
+      stopDetachedWindowHeartbeat()
+      // Let the detached watcher own cleanup on forced detached-window teardown.
+      if (!detachedWindowCleanupWatcher) clearAllPreviewCache()
+    })
+  }
+
+  if (typeof globalThis?.addEventListener === 'function') {
+    globalThis.addEventListener('unload', () => {
+      cancelDelayedPreviewCleanup()
+      stopDetachedWindowHeartbeat()
+      if (!detachedWindowCleanupWatcher) clearAllPreviewCache()
+    })
+  }
+}
+
 function enqueueLaunchValue(value) {
   if (value == null) return
+  appendLaunchDebugLog('enqueue-launch-value', {
+    summary: summarizeLaunchValue(value),
+    extractedItems: extractLaunchItems(value).slice(0, 12),
+  })
   pendingLaunchValues.push(value)
   for (const waiter of launchWaiters) waiter()
   launchWaiters.clear()
@@ -1055,7 +1404,28 @@ function installLaunchHooks() {
   launchHooksInstalled = true
 
   const hostApi = getHostApi()
+  if (startupCopiedFilesSignature == null) {
+    startupCopiedFilesSignature = readCopiedFilesSnapshot().signature
+    appendLaunchDebugLog('startup-copied-files-signature', {
+      signature: startupCopiedFilesSignature,
+    })
+  }
+  if (!launchApiDebugLogged) {
+    launchApiDebugLogged = true
+    const hostApiKeys = Object.keys(hostApi || {})
+    appendLaunchDebugLog('host-api-keys', {
+      totalKeys: hostApiKeys.length,
+      keys: hostApiKeys.filter((key) => /assembly|select|file|path|launch|input|payload|feature/i.test(key)).slice(0, 80),
+    })
+  }
   const handleLaunch = (param) => {
+    appendLaunchDebugLog('launch-callback-raw', {
+      summary: summarizeLaunchValue(param),
+      extractedItems: extractLaunchItems(param).slice(0, 12),
+      hasPayload: param?.payload != null,
+      payloadSummary: param?.payload != null ? summarizeLaunchValue(param.payload) : null,
+      payloadExtractedItems: param?.payload != null ? extractLaunchItems(param.payload).slice(0, 12) : [],
+    })
     enqueueLaunchValue(param)
     if (param?.payload != null && param.payload !== param) {
       enqueueLaunchValue(param.payload)
@@ -3826,8 +4196,8 @@ async function executeSaveFlow(payload) {
   })
 }
 
-async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save') {
-  const payload = prepareRunPayload(toolId, config, assets, destinationPath)
+async function stageToolPreview(toolId, config, assets, destinationPath, mode = 'preview-save', options = {}) {
+  const payload = prepareRunPayload(toolId, config, assets, destinationPath, options)
   if (mode !== 'preview-only') {
     return executeLocalTool({
       ...payload,
@@ -3862,6 +4232,122 @@ async function saveAllStagedResults(toolId, stagedItems, destinationPath) {
     runFolderName: firstItem.runFolderName || buildRunFolderName(createdAt, toolId),
     createdAt,
   })
+}
+
+async function materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName = '') {
+  const output = resolveDestinationPath(destinationPath, [], getAppSettings())
+  const normalizedItems = Array.isArray(stagedItems) ? stagedItems : []
+  const createdAt = new Date().toISOString()
+  const run = createRunDescriptor(
+    output.destinationPath,
+    toolId,
+    createdAt,
+    preferredRunFolderName || normalizedItems[0]?.runFolderName || '',
+  )
+  ensureDirectory(run.runPath)
+  const processed = []
+  const failed = []
+
+  for (const item of normalizedItems) {
+    try {
+      const sourcePath = sanitizeText(item?.stagedPath)
+      if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('预览结果不存在，无法复用')
+      }
+      const targetPath = path.join(run.runPath, item.outputName || path.basename(sourcePath))
+      if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+        fs.copyFileSync(sourcePath, targetPath)
+      }
+      const meta = createOutputMeta(targetPath, {
+        size: item?.outputSizeBytes,
+        width: item?.width,
+        height: item?.height,
+      }, item)
+      const previewFormat = path.extname(targetPath).replace('.', '') || meta.outputName.split('.').pop() || ''
+      const previewUrl = await createAssetDisplayUrlAsync(targetPath, previewFormat)
+      processed.push({
+        assetId: item.assetId,
+        name: item.name,
+        mode: 'preview-save',
+        previewStatus: 'saved',
+        outputName: meta.outputName,
+        stagedPath: '',
+        previewUrl,
+        outputPath: targetPath,
+        outputSizeBytes: meta.outputSizeBytes,
+        width: meta.width,
+        height: meta.height,
+        warning: item?.warning || '',
+        saveSignature: item?.saveSignature || '',
+        runId: run.runId,
+        runFolderName: run.runFolderName,
+        savedOutputPath: targetPath,
+      })
+    } catch (error) {
+      failed.push({ assetId: item?.assetId, name: item?.name || '', error: error?.message || '复用预览结果失败' })
+    }
+  }
+
+  return {
+    ok: processed.length > 0 && failed.length === 0,
+    partial: processed.length > 0 && failed.length > 0,
+    toolId,
+    toolLabel: TOOL_LABELS[toolId] || toolId,
+    destinationPath: run.runPath,
+    baseDestinationPath: output.destinationPath,
+    output,
+    mode: 'preview-save',
+    runId: run.runId,
+    runFolderName: run.runFolderName,
+    createdAt,
+    processed,
+    failed,
+    elapsedMs: 0,
+    message: processed.length
+      ? `已复用 ${processed.length} 项预览结果并加入当前处理结果。`
+      : '没有可复用的预览结果。',
+  }
+}
+
+function cleanupPreviewCache(runFolderNames = []) {
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const folders = new Set()
+  for (const value of Array.isArray(runFolderNames) ? runFolderNames : []) {
+    const folderName = path.basename(String(value || '').trim())
+    if (!folderName) continue
+    folders.add(folderName)
+  }
+  for (const folderName of folders) {
+    const targetPath = path.join(basePreviewPath, folderName)
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true })
+    } catch {
+      // Ignore preview cleanup failures so UI state cleanup is not blocked.
+    }
+  }
+  return true
+}
+
+function clearPreviewCacheDirectory() {
+  const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  try {
+    fs.rmSync(basePreviewPath, { recursive: true, force: true })
+  } catch {
+    // Ignore cleanup failures and let the caller continue clearing in-memory state.
+  }
+  return true
+}
+
+function checkStagedFiles(stagedItems = []) {
+  const validAssetIds = []
+  for (const item of Array.isArray(stagedItems) ? stagedItems : []) {
+    const sourcePath = sanitizeText(item?.stagedPath)
+    if (!sourcePath) continue
+    if (!fs.existsSync(sourcePath)) continue
+    const assetId = sanitizeText(item?.assetId)
+    if (assetId) validAssetIds.push(assetId)
+  }
+  return validAssetIds
 }
 
 async function executeMergeTool(payload, sharpLib) {
@@ -4164,45 +4650,112 @@ const toolsApi = {
       }
     }
 
-    if (!collected.length) return []
-    return this.readImageMeta(Array.from(new Set(collected)))
+    if (!collected.length) {
+      appendLaunchDebugLog('resolve-launch-inputs-empty', {
+        valueCount: inputValues.length,
+        sample: inputValues.slice(0, 3).map((value) => summarizeLaunchValue(value)),
+      })
+      return []
+    }
+    const dedupedPaths = Array.from(new Set(collected))
+    appendLaunchDebugLog('resolve-launch-inputs-paths', {
+      valueCount: inputValues.length,
+      paths: dedupedPaths.slice(0, 12),
+      totalPaths: dedupedPaths.length,
+    })
+    return this.readImageMeta(dedupedPaths)
   },
 
-  async getLaunchInputs() {
+  async getLaunchInputs(options = {}) {
     installLaunchHooks()
-    await waitForLaunchValue()
+    const seededPendingValues = Array.isArray(options?.pendingValues) ? options.pendingValues : null
+    const requirePending = Boolean(options?.requirePending)
+    const includeCopiedFiles = Boolean(options?.includeCopiedFiles)
+    appendLaunchDebugLog('get-launch-inputs', {
+      requirePending,
+      includeCopiedFiles,
+      pendingCount: seededPendingValues ? seededPendingValues.length : pendingLaunchValues.length,
+      source: seededPendingValues ? 'seeded' : 'queue',
+    })
+    if (!seededPendingValues) {
+      await waitForLaunchValue()
+    }
 
-    const pendingValues = pendingLaunchValues.splice(0, pendingLaunchValues.length)
+    const pendingValues = seededPendingValues || pendingLaunchValues.splice(0, pendingLaunchValues.length)
+    const hadPendingValues = pendingValues.length > 0
     const pendingAssets = await this.resolveLaunchInputs(pendingValues)
+    appendLaunchDebugLog('get-launch-inputs-after-pending', {
+      pendingCount: pendingValues.length,
+      pendingAssetsCount: pendingAssets.length,
+      requirePending,
+      source: seededPendingValues ? 'seeded' : 'queue',
+    })
     if (pendingAssets.length) return pendingAssets
 
-    const hostApi = getHostApi()
-    const candidates = [
-      hostApi.getLaunchData?.(),
-      hostApi.getLaunchInputs?.(),
-      hostApi.getCommandData?.(),
-      hostApi.getCmdData?.(),
-      hostApi.getFeature?.(),
-      hostApi.getCurrentFeature?.(),
-      hostApi.getSelectFiles?.(),
-      hostApi.getSelectedFiles?.(),
-      hostApi.getSelectedFilePaths?.(),
-      hostApi.getFiles?.(),
-      hostApi.getPaths?.(),
-      hostApi.getArguments?.(),
-      hostApi.arguments,
-      hostApi.argv,
-      hostApi.payload,
-      hostApi.cmd,
-      hostApi,
-      globalThis.launchData,
-      globalThis.pluginData,
-      globalThis.input,
-      globalThis.inputs,
-    ]
+    if (requirePending && !hadPendingValues) {
+      if (includeCopiedFiles) {
+        const copiedSnapshot = readCopiedFilesSnapshot()
+        const copiedFilesChangedSinceStartup = Boolean(
+          copiedSnapshot.signature && copiedSnapshot.signature !== startupCopiedFilesSignature,
+        )
+        let clipboardSnapshot = await readClipboardLaunchSnapshot()
+        const initialClipboardToken = sanitizeText(clipboardSnapshot.token)
+        const initialClipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const initialClipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        if (!initialClipboardEntryAcceptable) {
+          clipboardSnapshot = await waitForRecentClipboardLaunchSnapshot(initialClipboardToken, pluginStartupAt)
+        }
+        const consumedSignatures = loadConsumedHostLaunchSignaturesFromStorage()
+        const clipboardToken = sanitizeText(clipboardSnapshot.token)
+        const clipboardTokenConsumed = clipboardToken ? consumedSignatures.includes(clipboardToken) : false
+        const clipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const clipboardEntryAgeMs = getClipboardEntryAgeMs(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        const clipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
+        appendLaunchDebugLog('get-launch-inputs-copied-files-check', {
+          requirePending,
+          includeCopiedFiles,
+          pluginStartupAt,
+          startupCopiedFilesSignature,
+          currentCopiedFilesSignature: copiedSnapshot.signature,
+          copiedFilesChangedSinceStartup,
+          copiedFileCount: copiedSnapshot.paths.length,
+          copiedPaths: copiedSnapshot.paths.slice(0, 12),
+          initialClipboardToken,
+          initialClipboardEntryRecent,
+          initialClipboardEntryAcceptable,
+          clipboardToken,
+          clipboardTokenConsumed,
+          clipboardEntryTimestamp: clipboardSnapshot.entryTimestamp,
+          clipboardEntryAgeMs,
+          clipboardEntryRecent,
+          clipboardEntryAcceptable,
+          clipboardEntry: summarizeLaunchValue(clipboardSnapshot.entry),
+          clipboardHistorySummary: clipboardSnapshot.historySummary,
+          clipboardStatusSummary: clipboardSnapshot.statusSummary,
+        })
+        if (copiedSnapshot.paths.length && clipboardToken && !clipboardTokenConsumed && clipboardEntryAcceptable) {
+          const copiedAssets = await this.resolveLaunchInputs([copiedSnapshot.value])
+          if (copiedAssets.length) {
+            rememberConsumedHostLaunchSignature(clipboardToken)
+            appendLaunchDebugLog('get-launch-inputs-consumed-clipboard-token', {
+              clipboardToken,
+              copiedAssetCount: copiedAssets.length,
+            })
+            return copiedAssets
+          }
+        }
+        if (copiedFilesChangedSinceStartup) {
+          return this.resolveLaunchInputs([copiedSnapshot.value])
+        }
+      }
+      appendLaunchDebugLog('get-launch-inputs-skipped-current-read', {
+        requirePending,
+        includeCopiedFiles,
+      })
+      return []
+    }
 
-    const resolvedCandidates = await Promise.all(candidates.map((candidate) => Promise.resolve(candidate)))
-    return this.resolveLaunchInputs(resolvedCandidates)
+    return this.readCurrentLaunchInputs(options)
   },
 
   subscribeLaunchInputs(callback) {
@@ -4210,6 +4763,58 @@ const toolsApi = {
     if (typeof callback !== 'function') return false
     launchSubscribers.add(callback)
     return true
+  },
+
+  async readCurrentLaunchInputs(options = {}) {
+    const hostApi = getHostApi()
+    const includeCopiedFiles = Boolean(options?.includeCopiedFiles)
+    const candidateReaders = [
+      ['getLaunchData', () => hostApi.getLaunchData?.()],
+      ['getLaunchInputs', () => hostApi.getLaunchInputs?.()],
+      ['getCommandData', () => hostApi.getCommandData?.()],
+      ['getCmdData', () => hostApi.getCmdData?.()],
+      ['getFeature', () => hostApi.getFeature?.()],
+      ['getCurrentFeature', () => hostApi.getCurrentFeature?.()],
+      ['getSelectFiles', () => hostApi.getSelectFiles?.()],
+      ['getSelectedFiles', () => hostApi.getSelectedFiles?.()],
+      ['getSelectedFilePaths', () => hostApi.getSelectedFilePaths?.()],
+      ['getFiles', () => hostApi.getFiles?.()],
+      ['getPaths', () => hostApi.getPaths?.()],
+      ['getPath', () => hostApi.getPath?.()],
+      ['getArguments', () => hostApi.getArguments?.()],
+    ]
+    if (includeCopiedFiles) {
+      candidateReaders.splice(9, 0, ['getCopyedFiles', () => hostApi.getCopyedFiles?.()])
+    }
+    const candidateValues = await Promise.all(candidateReaders.map(async ([name, reader]) => {
+      const value = await Promise.resolve(safeInvoke(reader))
+      return { name, value }
+    }))
+    const candidates = [
+      ...candidateValues.map((entry) => entry.value),
+      hostApi.arguments,
+      hostApi.argv,
+      hostApi.payload,
+      hostApi.cmd,
+      globalThis.launchData,
+      globalThis.pluginData,
+      globalThis.input,
+      globalThis.inputs,
+    ]
+
+    const resolvedCandidates = await Promise.all(candidates.map((candidate) => Promise.resolve(candidate)))
+    appendLaunchDebugLog('read-current-launch-inputs', {
+      candidateCount: resolvedCandidates.length,
+      namedCandidates: candidateValues.map(({ name, value }) => ({
+        name,
+        summary: summarizeLaunchValue(value),
+      })),
+      sample: resolvedCandidates
+        .filter((candidate) => candidate != null)
+        .slice(0, 6)
+        .map((candidate) => summarizeLaunchValue(candidate)),
+    })
+    return this.resolveLaunchInputs(resolvedCandidates)
   },
 
   async savePreset(toolId, preset) {
@@ -4271,15 +4876,15 @@ const toolsApi = {
     return next
   },
 
-  prepareRunPayload(toolId, config, assets, destinationPath) {
+  prepareRunPayload(toolId, config, assets, destinationPath, options) {
     return {
-      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      ...prepareRunPayload(toolId, config, assets, destinationPath, options),
       mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
     }
   },
 
-  async stageToolPreview(toolId, config, assets, destinationPath, mode) {
-    return stageToolPreview(toolId, config, assets, destinationPath, mode)
+  async stageToolPreview(toolId, config, assets, destinationPath, mode, options) {
+    return stageToolPreview(toolId, config, assets, destinationPath, mode, options)
   },
 
   async saveStagedResult(toolId, stagedItem, destinationPath) {
@@ -4290,8 +4895,46 @@ const toolsApi = {
     return saveAllStagedResults(toolId, stagedItems, destinationPath)
   },
 
+  async materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName = '') {
+    return materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName)
+  },
+
+  cleanupPreviewCache(runFolderNames = []) {
+    return cleanupPreviewCache(runFolderNames)
+  },
+
+  clearPreviewCacheDirectory() {
+    return clearPreviewCacheDirectory()
+  },
+
+  appendLaunchDebugLog(event, payload) {
+    appendLaunchDebugLog(event, payload && typeof payload === 'object' ? payload : { value: payload })
+    return true
+  },
+
+  checkStagedFiles(stagedItems = []) {
+    return checkStagedFiles(stagedItems)
+  },
+
   loadSettings() {
     return buildSettingsPayload(getAppSettings())
+  },
+
+  loadConsumedHostLaunchSignatures() {
+    const hostApi = getHostApi()
+    const current = hostApi.dbStorage?.getItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY)
+    return Array.isArray(current)
+      ? current.map((value) => sanitizeText(value)).filter(Boolean)
+      : []
+  },
+
+  saveConsumedHostLaunchSignatures(signatures = []) {
+    const hostApi = getHostApi()
+    const normalized = Array.isArray(signatures)
+      ? signatures.map((value) => sanitizeText(value)).filter(Boolean)
+      : []
+    hostApi.dbStorage?.setItem?.(CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY, normalized)
+    return normalized
   },
 
   saveSettings(settings) {
@@ -4306,9 +4949,9 @@ const toolsApi = {
     return buildStagedItemsFromAssets(assets)
   },
 
-  async runTool(toolId, config, assets, destinationPath) {
+  async runTool(toolId, config, assets, destinationPath, options) {
     const payload = {
-      ...prepareRunPayload(toolId, config, assets, destinationPath),
+      ...prepareRunPayload(toolId, config, assets, destinationPath, options),
       mode: isMergeTool(toolId) ? 'direct' : PREVIEW_SAVE_TOOLS.has(toolId) ? 'preview-save' : 'direct',
     }
     const hostApi = getHostApi()
@@ -4334,6 +4977,7 @@ const toolsApi = {
 }
 
 installLaunchHooks()
+installPreviewLifecycleCleanup()
 
 if (typeof window !== 'undefined') {
   window.imgbatch = toolsApi

@@ -39,7 +39,7 @@ import { updateManualCropSummaryResultView } from './lib/manual-crop-results.js'
 import { createManualCropRuntime } from './lib/manual-crop-runtime.js'
 import { getFormatCapability } from './services/ztools-bridge.js'
 import { appendAssets, applyRunResult, batchStateUpdates, dismissNotification, getAssetById, getAssetIndexById, getState, moveAsset, moveAssetToTarget, pushNotification, removeAsset, replaceConfig, setActiveTool, setConfirmDialog, setPresetDialog, setPreviewModal, setResultView, setSearchQuery, setSettingsDialog, setState, setToolPresets, subscribe, updateAssetListThumbnail, updateConfig, updateSettings } from './state/store.js'
-import { cancelRun, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, savePreset, saveSettings, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
+import { cancelRun, checkStagedFiles, cleanupPreviewCache, clearPreviewCacheDirectory, createAssetDisplayUrl, deletePreset, getLaunchInputs, importItems, loadPresets, loadSettings, materializePreviewResults, openInputDialog, prepareRunPayload, regenerateQueueThumbnails, renamePreset, resolveInputPaths, revealPath, replaceOriginals, runTool, saveAllStagedResults, savePreset, saveSettings, saveStagedResult, showMainWindow, stageToolPreview, subscribeLaunchInputs, subscribeQueueThumbnails } from './services/ztools-bridge.js'
 
 const PREVIEW_SAVE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
 const PREVIEWABLE_TOOLS = new Set(['compression', 'format', 'resize', 'watermark', 'corners', 'padding', 'crop', 'rotate', 'flip'])
@@ -57,6 +57,7 @@ const MANUAL_CROP_RATIO_ORDER = [
   { label: '21:9', value: '21:9' },
 ]
 const SETTINGS_TOOL_ID = 'settings'
+const PREVIEW_CACHE_LIMIT = 12
 const WATERMARK_POSITION_LABELS = {
   'top-left': '左上',
   'top-center': '上方居中',
@@ -103,7 +104,10 @@ let pendingQueueScrollRestore = null
 let queueMarkupCacheDirty = false
 let lastQueueViewportRenderSignature = ''
 let pendingAdjacentQueueMove = null
+const previewCacheQueue = []
 const pendingQueueThumbnailPatches = new Map()
+const LAUNCH_INPUT_RETRY_INTERVAL_MS = 1200
+const LAUNCH_INPUT_RETRY_WINDOW_MS = 12000
 const rootMarkupCache = {
   sideNav: '',
   topbar: '',
@@ -135,11 +139,78 @@ const {
   syncManualCropStageViewport,
 } = createManualCropRuntime({ getState, updateConfig })
 
+let observedCleanupToolId = getState().activeTool
+let observedSettingsVisible = Boolean(getState().settingsDialog?.visible)
+let ztoolsLifecycleCleanupAttached = false
+let hiddenPreviewCleanupTimer = null
+let launchInputRetryTimer = null
+let launchInputRetryDeadline = 0
+let launchInputRetryInFlight = false
+
+function handleCleanupStateTransitions(state) {
+  const nextToolId = state?.activeTool || ''
+  const nextSettingsVisible = Boolean(state?.settingsDialog?.visible)
+  if (observedCleanupToolId && observedCleanupToolId !== nextToolId) {
+    cleanupToolPreviewCache(observedCleanupToolId)
+  }
+  if (!observedSettingsVisible && nextSettingsVisible) {
+    cleanupToolPreviewCache(nextToolId)
+  }
+  observedCleanupToolId = nextToolId
+  observedSettingsVisible = nextSettingsVisible
+}
+
+function attachZtoolsLifecycleCleanup() {
+  if (ztoolsLifecycleCleanupAttached) return
+  const ztoolsApi = globalThis?.ztools
+  if (!ztoolsApi) return
+  const cleanupOnPluginLeave = () => {
+    scheduleHiddenPreviewCleanup()
+  }
+  const handlePluginEnter = () => {
+    clearHiddenPreviewCleanupTimer()
+  }
+  if (typeof ztoolsApi.onPluginOut === 'function') {
+    ztoolsApi.onPluginOut(() => {
+      cleanupOnPluginLeave()
+    })
+  }
+  if (typeof ztoolsApi.onPluginEnter === 'function') {
+    ztoolsApi.onPluginEnter(() => {
+      handlePluginEnter()
+    })
+  }
+  if (typeof ztoolsApi.onPluginReady === 'function') {
+    ztoolsApi.onPluginReady(() => {
+      handlePluginEnter()
+    })
+  }
+  ztoolsLifecycleCleanupAttached = true
+}
+
+function clearHiddenPreviewCleanupTimer() {
+  if (!hiddenPreviewCleanupTimer) return
+  clearTimeout(hiddenPreviewCleanupTimer)
+  hiddenPreviewCleanupTimer = null
+}
+
+function scheduleHiddenPreviewCleanup() {
+  clearHiddenPreviewCleanupTimer()
+  hiddenPreviewCleanupTimer = setTimeout(() => {
+    hiddenPreviewCleanupTimer = null
+    cleanupAllPreviewCache()
+  }, 60 * 1000)
+}
+
 document.body.append(fileInput, folderInput, watermarkFileInput)
-subscribe(render)
+subscribe((state) => {
+  handleCleanupStateTransitions(state)
+  render(state)
+})
 render(getState())
 attachProcessingProgressEvents()
 attachGlobalEvents()
+attachZtoolsLifecycleCleanup()
 bootstrapSettings().finally(() => {
   bootstrapLaunchInputs().finally(() => {
     attachLaunchSubscription()
@@ -294,6 +365,25 @@ async function saveSettingsFromDialog() {
   }
   closeSettingsDialog()
   notify({ type: 'success', message: '已保存默认图片保存位置与性能模式。' })
+}
+
+async function clearAllPreviewCacheDirectoryFromSettings() {
+  const assetIds = []
+  for (let index = 0; index < previewCacheQueue.length; index += 1) {
+    const assetId = String(previewCacheQueue[index]?.assetId || '')
+    if (assetId) assetIds.push(assetId)
+  }
+  if (!assetIds.length) {
+    const state = getState()
+    for (let index = 0; index < state.assets.length; index += 1) {
+      const asset = state.assets[index]
+      if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged') continue
+      assetIds.push(asset.id)
+    }
+  }
+  clearPreviewCacheDirectory()
+  if (assetIds.length) clearPreviewCacheState(assetIds)
+  notify({ type: 'success', message: '已清空 Imgbatch Preview 缓存目录。' })
 }
 
 async function chooseSettingsCustomPath() {
@@ -519,19 +609,171 @@ function getCurrentStagedItems(activeTool, assets) {
   return stagedItems
 }
 
+function buildAssetStagedItem(asset, toolId = getState().activeTool) {
+  const stagedPath = asset?.stagedOutputPath || asset?.savedOutputPath || asset?.outputPath || ''
+  if (!stagedPath) return null
+  if (asset.stagedToolId !== toolId) return null
+  return {
+    assetId: asset.id,
+    name: asset.name,
+    stagedPath,
+    outputName: asset.stagedOutputName || (stagedPath ? String(stagedPath).split(/[\\/]/).pop() || asset.name : asset.name),
+    runId: asset.runId,
+    runFolderName: asset.runFolderName || '',
+    saveSignature: asset.saveSignature || '',
+  }
+}
+
+function buildReusablePreviewProcessed(asset, toolId) {
+  if (!shouldReusePreviewResult(toolId, asset)) return null
+  const stagedItem = buildAssetStagedItem(asset, toolId)
+  if (!stagedItem) return null
+  return {
+    assetId: asset.id,
+    name: asset.name,
+    mode: 'preview-save',
+    previewStatus: 'staged',
+    outputName: asset.stagedOutputName || asset.name,
+    stagedPath: stagedItem.stagedPath,
+    previewUrl: asset.previewUrl || '',
+    outputSizeBytes: asset.stagedSizeBytes || 0,
+    width: asset.stagedWidth || asset.width || 0,
+    height: asset.stagedHeight || asset.height || 0,
+    warning: asset.warning || '',
+    saveSignature: asset.saveSignature || '',
+    runId: asset.runId || '',
+    runFolderName: asset.runFolderName || '',
+    savedOutputPath: '',
+  }
+}
+
+function buildPreviewCleanupFolders(assets = []) {
+  const folders = []
+  for (let index = 0; index < assets.length; index += 1) {
+    const asset = assets[index]
+    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged' && asset?.previewStatus !== 'saved') continue
+    if (!asset?.runFolderName) continue
+    folders.push(asset.runFolderName)
+  }
+  return folders
+}
+
+function clearPreviewCacheState(assetIds = []) {
+  if (!assetIds.length) return []
+  const targets = new Set(assetIds.map((assetId) => String(assetId || '')).filter(Boolean))
+  if (!targets.size) return []
+  const state = getState()
+  let nextAssets = null
+  const cleanedFolders = []
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    if (!targets.has(String(asset?.id || ''))) continue
+    if (asset.runFolderName) cleanedFolders.push(asset.runFolderName)
+    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged') continue
+    if (!nextAssets) nextAssets = [...state.assets]
+    nextAssets[index] = {
+      ...asset,
+      previewStatus: 'idle',
+      previewUrl: '',
+      stagedOutputPath: '',
+      stagedOutputName: '',
+      stagedSizeBytes: 0,
+      stagedWidth: 0,
+      stagedHeight: 0,
+      runId: '',
+      runFolderName: '',
+      stagedToolId: '',
+      saveSignature: '',
+      warning: '',
+    }
+  }
+  if (nextAssets) {
+    setState({ assets: nextAssets })
+  }
+  for (let index = previewCacheQueue.length - 1; index >= 0; index -= 1) {
+    if (targets.has(previewCacheQueue[index].assetId)) {
+      previewCacheQueue.splice(index, 1)
+    }
+  }
+  return cleanedFolders
+}
+
+function cleanupPreviewCacheByAssetIds(assetIds = []) {
+  const folders = clearPreviewCacheState(assetIds)
+  if (folders.length) cleanupPreviewCache(folders)
+}
+
+function cleanupToolPreviewCache(toolId) {
+  if (!toolId) return
+  const state = getState()
+  const previewAssetIds = []
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    if (asset?.stagedToolId !== toolId) continue
+    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged' && asset?.previewStatus !== 'saved') continue
+    previewAssetIds.push(asset.id)
+  }
+  if (previewAssetIds.length) cleanupPreviewCacheByAssetIds(previewAssetIds)
+}
+
+function cleanupAllPreviewCache() {
+  const previewAssetIds = []
+  for (let index = 0; index < previewCacheQueue.length; index += 1) {
+    const assetId = String(previewCacheQueue[index]?.assetId || '')
+    if (assetId) previewAssetIds.push(assetId)
+  }
+  if (previewAssetIds.length) {
+    cleanupPreviewCacheByAssetIds(previewAssetIds)
+    return
+  }
+  const state = getState()
+  const previewOnlyAssetIds = []
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged') continue
+    previewOnlyAssetIds.push(asset.id)
+  }
+  if (previewOnlyAssetIds.length) cleanupPreviewCacheByAssetIds(previewOnlyAssetIds)
+}
+
+function removePreviewCacheQueueEntries(assetIds = []) {
+  const targets = new Set(assetIds.map((assetId) => String(assetId || '')).filter(Boolean))
+  if (!targets.size) return
+  for (let index = previewCacheQueue.length - 1; index >= 0; index -= 1) {
+    if (targets.has(previewCacheQueue[index].assetId)) {
+      previewCacheQueue.splice(index, 1)
+    }
+  }
+}
+
+function rememberPreviewCacheAsset(assetId, toolId, runFolderName) {
+  const normalizedAssetId = String(assetId || '')
+  const normalizedToolId = String(toolId || '')
+  const normalizedRunFolderName = String(runFolderName || '')
+  if (!normalizedAssetId || !normalizedToolId || !normalizedRunFolderName) return
+  for (let index = previewCacheQueue.length - 1; index >= 0; index -= 1) {
+    if (previewCacheQueue[index].assetId === normalizedAssetId) {
+      previewCacheQueue.splice(index, 1)
+    }
+  }
+  previewCacheQueue.push({
+    assetId: normalizedAssetId,
+    toolId: normalizedToolId,
+    runFolderName: normalizedRunFolderName,
+  })
+  if (previewCacheQueue.length <= PREVIEW_CACHE_LIMIT) return
+  const evicted = []
+  while (previewCacheQueue.length > PREVIEW_CACHE_LIMIT) {
+    const entry = previewCacheQueue.shift()
+    if (entry?.assetId) evicted.push(entry.assetId)
+  }
+  if (evicted.length) cleanupPreviewCacheByAssetIds(evicted)
+}
+
 async function saveAssetResult(assetId) {
   const state = getState()
   const asset = getAssetById(assetId)
-  const stagedItem = asset?.stagedOutputPath && asset.previewStatus === 'staged' && asset.stagedToolId === state.activeTool
-    ? {
-        assetId: asset.id,
-        name: asset.name,
-        stagedPath: asset.stagedOutputPath,
-        outputName: asset.stagedOutputName,
-        runId: asset.runId,
-        runFolderName: asset.runFolderName,
-      }
-    : null
+  const stagedItem = buildAssetStagedItem(asset, state.activeTool)
   if (!stagedItem) {
     notify({ type: 'info', message: '当前图片还没有可保存的处理结果。' })
     return
@@ -542,7 +784,7 @@ async function saveAssetResult(assetId) {
     const result = await runBusyAction(() => saveStagedResult(state.activeTool, stagedItem, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
-      refreshResultViewIfVisible()
+      removePreviewCacheQueueEntries([assetId])
     }
     notifyActionResult(result, '保存失败。')
   } catch (error) {
@@ -563,6 +805,7 @@ async function saveAllCurrentResults() {
     const result = await runBusyAction(() => saveAllStagedResults(state.activeTool, stagedItems, destinationPath))
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
+      removePreviewCacheQueueEntries(stagedItems.map((item) => item.assetId))
       refreshResultViewIfVisible()
     }
     notifyActionResult(result, '批量保存失败。')
@@ -636,12 +879,7 @@ function getReplaceEntry(assetId) {
   const state = getState()
   const asset = getAssetById(assetId)
   if (!asset?.sourcePath) return null
-  let resultItem = null
-  for (const item of state.resultView?.items || []) {
-    if (item?.assetId !== assetId) continue
-    resultItem = item
-    break
-  }
+  const resultItem = getResultViewItemByAssetId(state.resultView, assetId)
   const resultPath = normalizeAssetPath(
     resultItem?.outputPath
     || asset?.savedOutputPath
@@ -658,10 +896,22 @@ function getReplaceEntry(assetId) {
   }
 }
 
+function getResultViewItemByAssetId(resultView, assetId) {
+  if (!assetId) return null
+  const items = resultView?.items || []
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    if (item?.assetId === assetId) return item
+  }
+  return null
+}
+
 function getReplaceEntries() {
   const state = getState()
   const resultPathByAssetId = new Map()
-  for (const item of state.resultView?.items || []) {
+  const resultItems = state.resultView?.items || []
+  for (let index = 0; index < resultItems.length; index += 1) {
+    const item = resultItems[index]
     resultPathByAssetId.set(item.assetId, normalizeAssetPath(item.outputPath))
   }
   const entries = []
@@ -682,17 +932,14 @@ function getReplaceEntries() {
 
 function clearAssetsResultState(processedItems) {
   const processedList = Array.isArray(processedItems) ? processedItems : []
-  const replacementMap = new Map()
-  for (const item of processedList) {
-    if (!item?.assetId) continue
-    replacementMap.set(item.assetId, item)
-  }
   const state = getState()
   let nextAssets = null
-  for (let index = 0; index < state.assets.length; index += 1) {
-    const asset = state.assets[index]
-    const replaced = replacementMap.get(asset.id)
-    if (!replaced) continue
+  for (let listIndex = 0; listIndex < processedList.length; listIndex += 1) {
+    const replaced = processedList[listIndex]
+    const assetId = replaced?.assetId
+    const index = getAssetIndexById(assetId)
+    if (index === -1) continue
+    const asset = (nextAssets || state.assets)[index]
     const nextSourcePath = String(replaced?.sourcePath || asset.sourcePath || '')
     const nextName = nextSourcePath ? nextSourcePath.replaceAll('\\', '/').split('/').pop() || asset.name : asset.name
     const nextExt = nextName.includes('.') ? nextName.split('.').pop().toLowerCase() : asset.ext
@@ -757,20 +1004,18 @@ function hasVisibleResultComparison() {
   return !!getState().resultView?.items?.length
 }
 
-function getResultViewItemsSignature(items = []) {
-  if (!Array.isArray(items) || !items.length) return ''
-  let signature = ''
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index]
-    if (index > 0) signature += '\u0002'
-    signature += `${item.assetId || ''}\u0001${item.outputPath || ''}\u0001${item.result?.name || ''}\u0001${item.result?.sizeBytes || 0}\u0001${item.result?.width || 0}\u0001${item.result?.height || 0}\u0001${item.summary || ''}`
-  }
-  return signature
-}
-
 function refreshResultView() {
   const state = getState()
+  const currentResultView = state.resultView
+  const canCompareWithCurrent = !!(
+    currentResultView
+    && currentResultView.runId === (state.activeRun?.runId || '')
+    && currentResultView.toolId === state.activeTool
+    && currentResultView.mode === (state.activeRun?.mode || 'save')
+  )
+  const currentItems = canCompareWithCurrent ? (currentResultView.items || []) : null
   const items = []
+  let matchesCurrentItems = !!currentItems
   for (const asset of state.assets) {
     const outputPath = getSavedOutputPath(asset) || getPreviewOutputPath(asset) || ''
     if (!outputPath) continue
@@ -779,7 +1024,7 @@ function refreshResultView() {
     const resultHeight = asset.stagedHeight || asset.height || 0
     const normalizedOutputPath = String(outputPath || '').replaceAll('\\', '/')
     const resultName = normalizedOutputPath.split('/').pop() || asset.name || ''
-    items.push({
+    const nextItem = {
       assetId: asset.id,
       name: asset.name,
       outputPath,
@@ -796,7 +1041,23 @@ function refreshResultView() {
         height: resultHeight,
       },
       summary: getPreviewMessage(asset),
-    })
+    }
+    if (matchesCurrentItems) {
+      const currentItem = currentItems[items.length] || null
+      if (
+        !currentItem
+        || currentItem.assetId !== nextItem.assetId
+        || currentItem.outputPath !== nextItem.outputPath
+        || currentItem.result?.name !== nextItem.result?.name
+        || (currentItem.result?.sizeBytes || 0) !== (nextItem.result?.sizeBytes || 0)
+        || (currentItem.result?.width || 0) !== (nextItem.result?.width || 0)
+        || (currentItem.result?.height || 0) !== (nextItem.result?.height || 0)
+        || (currentItem.summary || '') !== (nextItem.summary || '')
+      ) {
+        matchesCurrentItems = false
+      }
+    }
+    items.push(nextItem)
   }
 
   if (!items.length) {
@@ -804,18 +1065,8 @@ function refreshResultView() {
     return
   }
 
-  const currentResultView = state.resultView
-  if (
-    currentResultView
-    && currentResultView.runId === (state.activeRun?.runId || '')
-    && currentResultView.toolId === state.activeTool
-    && currentResultView.mode === (state.activeRun?.mode || 'save')
-  ) {
-    const nextItemsSignature = getResultViewItemsSignature(items)
-    const currentItemsSignature = getResultViewItemsSignature(currentResultView.items || [])
-    if (currentItemsSignature === nextItemsSignature) {
-      return
-    }
+  if (matchesCurrentItems && currentItems.length === items.length) {
+    return
   }
 
   setResultView({
@@ -1039,10 +1290,13 @@ function openPreviewModal(asset, toolId = getState().activeTool) {
   }
   const compareMode = RESHAPED_PREVIEW_TOOLS.has(toolId) ? 'split' : 'slider'
   setPreviewModal({
+    assetId: asset.id || '',
+    toolId,
     name: asset.name,
     url: asset.previewUrl,
     beforeUrl: asset.thumbnailUrl || asset.previewUrl,
     afterUrl: asset.previewUrl,
+    canSave: !!buildAssetStagedItem(asset, toolId),
     compareMode,
     sourceWidth: Number(asset.width) || 0,
     sourceHeight: Number(asset.height) || 0,
@@ -1195,25 +1449,51 @@ function formatBytes(bytes = 0) {
 function getToolRunner(toolId, previewMode = '') {
   if (previewMode === 'preview-only') {
     return isPreviewableTool(toolId)
-      ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only')
-      : runTool
+      ? (configToolId, config, assets, destinationPath, options = {}) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-only', options)
+      : (configToolId, config, assets, destinationPath, options = {}) => runTool(configToolId, config, assets, destinationPath, options)
   }
   return PREVIEW_SAVE_TOOLS.has(toolId)
-    ? (configToolId, config, assets, destinationPath) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save')
-    : runTool
+    ? (configToolId, config, assets, destinationPath, options = {}) => stageToolPreview(configToolId, config, assets, destinationPath, 'preview-save', options)
+    : (configToolId, config, assets, destinationPath, options = {}) => runTool(configToolId, config, assets, destinationPath, options)
 }
 
 function buildPreviewReuseSignature(toolId, config) {
   return JSON.stringify({ toolId, config: config || {} })
 }
 
+function getPreferredRunFolderName(toolId, assets = getState().assets) {
+  const signature = buildPreviewReuseSignature(toolId, getState().configs[toolId])
+  for (let index = 0; index < assets.length; index += 1) {
+    const asset = assets[index]
+    if (asset?.stagedToolId !== toolId) continue
+    if (!asset?.runFolderName) continue
+    if (asset?.saveSignature && asset.saveSignature !== signature) continue
+    if (!['previewed', 'staged', 'saved'].includes(asset?.previewStatus)) continue
+    return asset.runFolderName
+  }
+  return ''
+}
+
 function shouldReusePreviewResult(toolId, asset) {
   if (!isPreviewableTool(toolId)) return false
   if (asset?.stagedToolId !== toolId) return false
-  if (!asset?.previewUrl) return false
+  if (!asset?.stagedOutputPath && !asset?.savedOutputPath && !asset?.outputPath) return false
   const signature = buildPreviewReuseSignature(toolId, getState().configs[toolId])
   if (asset?.saveSignature && asset.saveSignature !== signature) return false
   return ['previewed', 'staged', 'saved'].includes(asset.previewStatus)
+}
+
+function buildViewableResultAsset(asset, toolId) {
+  if (!shouldReusePreviewResult(toolId, asset)) return null
+  const resultPath = asset.savedOutputPath || asset.outputPath || asset.stagedOutputPath || ''
+  if (!resultPath) return null
+  const resultUrl = asset.previewUrl || createAssetDisplayUrl(resultPath, asset.inputFormat || asset.ext || '')
+  if (!resultUrl) return null
+  return {
+    ...asset,
+    previewUrl: resultUrl,
+    stagedOutputPath: asset.stagedOutputPath || resultPath,
+  }
 }
 
 function findProcessedResultByAssetId(processedItems, assetId) {
@@ -1234,28 +1514,46 @@ async function previewWithRunner(tool, asset) {
   const processed = result?.processed?.[0]?.assetId === asset.id
     ? result.processed[0]
     : findProcessedResultByAssetId(result?.processed, asset.id)
-  const previewedAsset = processed
+  if (result?.processed?.length || result?.failed?.length) {
+    applyRunResult(result)
+    if (processed?.runFolderName) {
+      rememberPreviewCacheAsset(asset.id, tool.id, processed.runFolderName)
+    }
+  }
+  const previewedAsset = getAssetById(asset.id) || (processed
     ? {
         ...asset,
         previewUrl: processed.previewUrl || processed.outputPath || asset.previewUrl,
+        stagedOutputPath: processed.stagedPath || asset.stagedOutputPath || '',
+        stagedOutputName: processed.outputName || asset.stagedOutputName || '',
         stagedSizeBytes: processed.outputSizeBytes || asset.stagedSizeBytes || 0,
         stagedWidth: processed.width || asset.stagedWidth || 0,
         stagedHeight: processed.height || asset.stagedHeight || 0,
         previewStatus: processed.previewStatus || (PREVIEW_SAVE_TOOLS.has(tool.id) ? 'previewed' : 'saved'),
         stagedToolId: tool.id,
+        runId: processed.runId || asset.runId || '',
+        runFolderName: processed.runFolderName || asset.runFolderName || '',
+        saveSignature: processed.saveSignature || asset.saveSignature || '',
         savedOutputPath: processed.savedOutputPath || processed.outputPath || asset.savedOutputPath || '',
         outputPath: processed.outputPath || asset.outputPath || '',
       }
-    : asset
+    : asset)
   if (!openPreviewModal(previewedAsset, tool.id)) {
     throw new Error(`${tool?.label || '当前工具'} 预览结果无法打开。`)
-  }
-  if (result?.processed?.length || result?.failed?.length) {
-    applyRunResult(result)
   }
   if (isPreviewableTool(tool.id) && !PREVIEW_SAVE_TOOLS.has(tool.id)) {
     notify({ type: 'success', message: `${tool.label} 预览已生成。` })
   }
+}
+
+async function savePreviewResultFromModal() {
+  const preview = getState().previewModal
+  const assetId = preview?.assetId || ''
+  if (!assetId) {
+    notify({ type: 'info', message: '当前预览没有可直接保存的处理结果。' })
+    return
+  }
+  await saveAssetResult(assetId)
 }
 
 function getCompressionOversizeWarning(result, tool) {
@@ -1486,13 +1784,16 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
   const sidebarIcon = state.sidebarCollapsed ? 'right_panel_open' : 'left_panel_close'
   const toolLabel = TOOL_MAP[state.activeTool]?.label || ''
   const progress = state.processingProgress
+  const processingToolId = progress?.toolId || state.activeTool
+  const isMergeProcessing = state.isProcessing
+    && (processingToolId === 'merge-pdf' || processingToolId === 'merge-image' || processingToolId === 'merge-gif')
   const processLabel = state.isProcessing
     ? (
-        (progress?.toolId || state.activeTool) === 'merge-pdf'
+        processingToolId === 'merge-pdf'
           ? (progress?.phase === 'merge-pdf-prepare' ? '\u9884\u5904\u7406\u4e2d' : '\u751f\u6210 PDF \u4e2d')
-          : (progress?.toolId || state.activeTool) === 'merge-image'
+          : processingToolId === 'merge-image'
             ? '\u5408\u5e76\u4e2d'
-            : (progress?.toolId || state.activeTool) === 'merge-gif'
+            : processingToolId === 'merge-gif'
               ? '\u751f\u6210 GIF \u4e2d'
           : `${progress?.completed || 0}/${progress?.total || 0} \u5904\u7406\u4e2d`
       )
@@ -1515,14 +1816,17 @@ function syncTopBarRoot(state, mode = getAppShellMode(state)) {
     if (stopButton.textContent !== stopLabel) stopButton.textContent = stopLabel
     stopButton.toggleAttribute('disabled', !!state.cancelRequested)
     processButton.classList.add('is-processing')
+    processButton.classList.toggle('is-processing--merge', isMergeProcessing)
     processButton.toggleAttribute('disabled', true)
   } else if (stopButton) {
     stopButton.remove()
     stopButton = null
     processButton.classList.remove('is-processing')
+    processButton.classList.remove('is-processing--merge')
     processButton.removeAttribute('disabled')
   } else {
     processButton.classList.remove('is-processing')
+    processButton.classList.remove('is-processing--merge')
     processButton.removeAttribute('disabled')
   }
 
@@ -1718,7 +2022,6 @@ function patchQueueItemsForToolChange(state) {
   if (!tool) return false
   const layoutFlags = getQueueLayoutFlags(state)
   const { compactLayout } = layoutFlags
-  const assetIndexMap = new Map(state.assets.map((asset, index) => [asset.id, index]))
   let changed = false
 
   const expectedRootClassName = buildQueueClassName(layoutFlags)
@@ -1729,8 +2032,8 @@ function patchQueueItemsForToolChange(state) {
 
   root.querySelectorAll('.queue-item[data-asset-id]').forEach((item) => {
     const assetId = item.getAttribute('data-asset-id') || ''
-    const assetIndex = assetIndexMap.get(assetId)
-    if (assetIndex == null) return
+    const assetIndex = getAssetIndexById(assetId)
+    if (assetIndex === -1) return
     const asset = state.assets[assetIndex]
     const fragments = getQueueItemRenderSignatures(asset, tool, state, assetIndex, state.assets.length, compactLayout)
     const expectedItemClassName = buildQueueItemClassName(fragments.itemClassName, layoutFlags)
@@ -1778,9 +2081,13 @@ function patchQueueOrderInPlace(state) {
     queueMarkupCacheDirty = false
     return true
   }
-  const currentItems = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
+  const currentItems = queueList.querySelectorAll('.queue-item[data-asset-id]')
   if (currentItems.length !== state.assets.length) return false
-  const itemMap = new Map(currentItems.map((item) => [item.getAttribute('data-asset-id') || '', item]))
+  const itemMap = new Map()
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const item = currentItems[index]
+    itemMap.set(item.getAttribute('data-asset-id') || '', item)
+  }
   const orderedItems = []
   for (const asset of state.assets) {
     const item = itemMap.get(asset?.id || '')
@@ -1804,15 +2111,16 @@ function patchQueueOrderInPlace(state) {
 
 function patchQueueSortControlsInPlace(queueList, state) {
   const layoutFlags = getQueueLayoutFlags(state)
-  const items = Array.from(queueList.querySelectorAll('.queue-item[data-asset-id]'))
-  items.forEach((item, index) => {
+  const items = queueList.querySelectorAll('.queue-item[data-asset-id]')
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
     item.className = buildQueueItemClassName('queue-item queue-item--sortable', layoutFlags)
     item.setAttribute('draggable', 'true')
     const upButton = item.querySelector('[data-action="move-asset"][data-direction="up"]')
     const downButton = item.querySelector('[data-action="move-asset"][data-direction="down"]')
     if (upButton) upButton.toggleAttribute('disabled', index === 0)
     if (downButton) downButton.toggleAttribute('disabled', index === items.length - 1)
-  })
+  }
 }
 
 function patchAdjacentQueueMoveInPlace(queueList, state) {
@@ -1987,7 +2295,12 @@ function shouldCaptureSnapshotForFullShell(prev, next) {
 
 function getAssetOrderSignature(assets = []) {
   if (!Array.isArray(assets) || !assets.length) return ''
-  return assets.map((asset) => String(asset?.id || '')).join('|')
+  let signature = ''
+  for (let index = 0; index < assets.length; index += 1) {
+    if (index) signature += '|'
+    signature += String(assets[index]?.id || '')
+  }
+  return signature
 }
 
 function renderFullShell(state, snapshot) {
@@ -2405,13 +2718,16 @@ function queueQueueThumbnailPatch(assetId, listThumbnailUrl) {
 
 function flushQueueThumbnailPatches() {
   if (!pendingQueueThumbnailPatches.size) return
-  const itemMap = new Map()
-  app?.querySelectorAll?.('.queue-item[data-asset-id]').forEach((item) => {
-    const assetId = item.getAttribute('data-asset-id') || ''
-    if (assetId) itemMap.set(assetId, item)
-  })
+  let itemMap = null
+  if (pendingQueueThumbnailPatches.size > 4) {
+    itemMap = new Map()
+    app?.querySelectorAll?.('.queue-item[data-asset-id]').forEach((item) => {
+      const assetId = item.getAttribute('data-asset-id') || ''
+      if (assetId) itemMap.set(assetId, item)
+    })
+  }
   for (const [assetId, listThumbnailUrl] of pendingQueueThumbnailPatches.entries()) {
-    patchQueueThumbnail(itemMap.get(String(assetId)) || null, assetId, listThumbnailUrl)
+    patchQueueThumbnail(itemMap?.get(String(assetId)) || null, assetId, listThumbnailUrl)
   }
   pendingQueueThumbnailPatches.clear()
 }
@@ -2442,7 +2758,11 @@ function patchQueueThumbnail(item, assetId, listThumbnailUrl) {
 function attachLaunchSubscription() {
   subscribeLaunchInputs(async (values) => {
     try {
-      const assets = await importItems(values)
+      const assets = await getLaunchInputs({
+        pendingValues: values,
+        includeCopiedFiles: true,
+        requirePending: true,
+      })
       appendImportedAssets(assets, '已带入')
     } catch (error) {
       notify({ type: 'error', message: error?.message || '读取启动图片失败。' })
@@ -2450,19 +2770,92 @@ function attachLaunchSubscription() {
   })
 }
 
-async function bootstrapLaunchInputs() {
+function stopLaunchInputRetryWindow() {
+  if (launchInputRetryTimer) {
+    clearInterval(launchInputRetryTimer)
+    launchInputRetryTimer = null
+  }
+  launchInputRetryDeadline = 0
+}
+
+function startLaunchInputRetryWindow(reason = 'unknown') {
+  launchInputRetryDeadline = Date.now() + LAUNCH_INPUT_RETRY_WINDOW_MS
+  if (typeof window !== 'undefined' && window.imgbatch?.appendLaunchDebugLog) {
+    window.imgbatch.appendLaunchDebugLog('launch-input-retry-window-started', {
+      reason,
+      deadline: launchInputRetryDeadline,
+      intervalMs: LAUNCH_INPUT_RETRY_INTERVAL_MS,
+      windowMs: LAUNCH_INPUT_RETRY_WINDOW_MS,
+    })
+  }
+  if (launchInputRetryTimer) return
+  launchInputRetryTimer = setInterval(() => {
+    void retryLaunchInputs()
+  }, LAUNCH_INPUT_RETRY_INTERVAL_MS)
+}
+
+async function retryLaunchInputs() {
+  if (launchInputRetryInFlight) return
+  if (Date.now() >= launchInputRetryDeadline) {
+    stopLaunchInputRetryWindow()
+    return
+  }
+  launchInputRetryInFlight = true
   try {
-    const assets = await getLaunchInputs()
-    appendImportedAssets(assets, '已带入')
-  } catch (error) {
-    notify({ type: 'error', message: error?.message || '读取启动图片失败。' })
+    const assets = await getLaunchInputs({
+      includeCopiedFiles: true,
+      requirePending: true,
+    })
+    if (assets?.length) {
+      appendImportedAssets(assets, '已带入')
+      stopLaunchInputRetryWindow()
+    }
+  } catch {
+    if (Date.now() >= launchInputRetryDeadline) {
+      stopLaunchInputRetryWindow()
+    }
+  } finally {
+    launchInputRetryInFlight = false
+  }
+}
+
+async function bootstrapLaunchInputs() {
+  const startTime = Date.now()
+  const deadline = startTime + 10000
+  while (true) {
+    try {
+      const assets = await getLaunchInputs({
+        includeCopiedFiles: true,
+        requirePending: true,
+      })
+      if (assets?.length) {
+        appendImportedAssets(assets, '已带入')
+        return
+      }
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        notify({ type: 'error', message: error?.message || '读取启动图片失败。' })
+        return
+      }
+    }
+    if (Date.now() >= deadline) return
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
 }
 
 function appendImportedAssets(assets, verb = '已导入') {
   if (!assets?.length) return
-  appendAssets(assets)
-  notify({ type: 'success', message: `${verb} ${assets.length} 张图片。` })
+  const appendedCount = appendAssets(assets)
+  if (typeof window !== 'undefined' && window.imgbatch?.appendLaunchDebugLog) {
+    window.imgbatch.appendLaunchDebugLog('append-imported-assets', {
+      receivedCount: assets.length,
+      appendedCount,
+      sourcePaths: assets.slice(0, 12).map((asset) => String(asset?.sourcePath || '')),
+    })
+  }
+  if (!appendedCount) return
+  stopLaunchInputRetryWindow()
+  notify({ type: 'success', message: `${verb} ${appendedCount} 张图片。` })
 }
 
 function captureUiSnapshot() {
@@ -2539,8 +2932,14 @@ function findElementByDescriptor(descriptor) {
   }
 
   const selector = `[data-action="${descriptor.action}"][data-tool-id="${descriptor.toolId}"][data-key="${descriptor.key}"]`
-  const candidates = Array.from(document.querySelectorAll(selector))
-  return candidates.find((element) => (element.value ?? '') === descriptor.value) || candidates[0] || null
+  const candidates = document.querySelectorAll(selector)
+  let fallback = null
+  for (let index = 0; index < candidates.length; index += 1) {
+    const element = candidates[index]
+    if (!fallback) fallback = element
+    if ((element.value ?? '') === descriptor.value) return element
+  }
+  return fallback
 }
 
 function canImportFromEvent(event) {
@@ -2697,6 +3096,10 @@ function attachGlobalEvents() {
 
     if (action === 'activate-tool') {
       event.preventDefault()
+      const previousToolId = getState().activeTool
+      if (previousToolId && previousToolId !== target.dataset.toolId) {
+        cleanupToolPreviewCache(previousToolId)
+      }
       queueQueueScrollRestore()
       batchStateUpdates(() => {
         resetActiveResultUi()
@@ -2710,6 +3113,11 @@ function attachGlobalEvents() {
 
     if (action === 'close-preview-modal') {
       closePreviewModal()
+      return
+    }
+
+    if (action === 'save-preview-result') {
+      await savePreviewResultFromModal()
       return
     }
 
@@ -2734,6 +3142,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-settings' || action === 'save-default-path') {
+      cleanupToolPreviewCache(getState().activeTool)
       setSettingsDialog(createSettingsDialogState())
       return
     }
@@ -2772,6 +3181,11 @@ function attachGlobalEvents() {
       return
     }
 
+    if (action === 'clear-preview-cache-directory') {
+      await clearAllPreviewCacheDirectoryFromSettings()
+      return
+    }
+
     if (action === 'save-settings-dialog') {
       await saveSettingsFromDialog()
       return
@@ -2783,6 +3197,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'remove-asset') {
+      cleanupPreviewCacheByAssetIds([target.dataset.assetId])
       if (getState().activeTool === 'manual-crop') {
         flushManualCropConfigUpdates()
         const state = getState()
@@ -2814,18 +3229,26 @@ function attachGlobalEvents() {
           })
           if (!nextAssets.length) {
             setResultView(null)
+            startLaunchInputRetryWindow('remove-last-asset')
           }
           notify({ type: 'success', message: '已移除当前图片。' })
           return
         }
       }
+      const nextAssetCount = Math.max(0, getState().assets.length - 1)
       removeAsset(target.dataset.assetId)
+      if (!nextAssetCount) {
+        startLaunchInputRetryWindow('remove-last-asset')
+      }
       return
     }
 
     if (action === 'clear-assets') {
+      const assetIds = getState().assets.map((asset) => asset.id)
+      cleanupPreviewCacheByAssetIds(assetIds)
       resetActiveResultUi()
       setState({ assets: [], previewModal: null, resultView: null })
+      startLaunchInputRetryWindow('clear-assets')
       return
     }
 
@@ -3437,6 +3860,21 @@ function attachGlobalEvents() {
     hideTooltip()
   })
 
+  const cleanupOnPageExit = () => {
+    clearHiddenPreviewCleanupTimer()
+    cleanupAllPreviewCache()
+  }
+  window.addEventListener('beforeunload', cleanupOnPageExit)
+  window.addEventListener('pagehide', cleanupOnPageExit)
+  window.addEventListener('unload', cleanupOnPageExit)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      scheduleHiddenPreviewCleanup()
+      return
+    }
+    clearHiddenPreviewCleanupTimer()
+  })
+
   document.addEventListener('dragstart', (event) => {
     const item = event.target.closest('.queue-item--sortable[data-asset-id]')
     if (!item) return
@@ -3660,7 +4098,8 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
 
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return
-  if (shouldReusePreviewResult(tool.id, asset) && openPreviewModal(asset, tool.id)) {
+  const reusableAsset = buildViewableResultAsset(asset, tool.id)
+  if (reusableAsset && openPreviewModal(reusableAsset, tool.id)) {
     return
   }
   if (!isPreviewableTool(tool.id) || MERGE_PREVIEW_TOOLS.has(tool.id)) {
@@ -3721,9 +4160,160 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
     const assets = getAssetsForToolFlow(tool.id, state.assets, state.configs['manual-crop'])
     const runner = getToolRunner(tool.id)
     const destinationPath = state.destinationPath || state.settings.defaultSavePath || ''
-    const result = await runBusyAction(() => runner(tool.id, state.configs[tool.id], assets, destinationPath))
+    const preferredRunFolderName = PREVIEW_SAVE_TOOLS.has(tool.id)
+      ? getPreferredRunFolderName(tool.id, assets)
+      : ''
+    const reusableProcessed = []
+    const materializeItems = []
+    const materializeSourceRunFolderByAssetId = new Map()
+    const pendingAssets = []
+    if (PREVIEW_SAVE_TOOLS.has(tool.id)) {
+      const reusableCandidates = []
+      for (let index = 0; index < assets.length; index += 1) {
+        const asset = assets[index]
+        const reused = buildReusablePreviewProcessed(asset, tool.id)
+        if (reused) reusableCandidates.push({ asset, reused })
+        else pendingAssets.push(asset)
+      }
+      if (reusableCandidates.length) {
+        const validAssetIds = new Set(checkStagedFiles(reusableCandidates.map(({ reused }) => ({
+          assetId: reused.assetId,
+          stagedPath: reused.stagedPath,
+        }))))
+        const invalidAssetIds = []
+        for (let index = 0; index < reusableCandidates.length; index += 1) {
+          const { asset, reused } = reusableCandidates[index]
+          if (validAssetIds.has(reused.assetId)) {
+            if (asset.previewStatus === 'previewed') {
+              materializeItems.push(reused)
+              if (asset.runFolderName) materializeSourceRunFolderByAssetId.set(asset.id, asset.runFolderName)
+            } else {
+              reusableProcessed.push(reused)
+            }
+          } else {
+            pendingAssets.push(asset)
+            invalidAssetIds.push(reused.assetId)
+          }
+        }
+        if (invalidAssetIds.length) {
+          cleanupPreviewCacheByAssetIds(invalidAssetIds)
+          notify({
+            type: 'info',
+            message: `有 ${invalidAssetIds.length} 张预览缓存已失效，已自动回退为重新处理。`,
+            durationMs: 4200,
+          })
+        }
+      }
+    } else {
+      pendingAssets.push(...assets)
+    }
+
+    if (reusableProcessed.length || materializeItems.length) {
+      notify({
+        type: 'info',
+        message: pendingAssets.length
+          ? `本次有 ${reusableProcessed.length + materializeItems.length} 张直接复用了已有结果，处理进度只会显示其余 ${pendingAssets.length} 张。`
+          : `本次 ${reusableProcessed.length + materializeItems.length} 张都直接复用了已有结果，所以不会再进入处理进度。`,
+        durationMs: 4200,
+      })
+    }
+
+    let result = null
+    let successfulMaterializedFolders = []
+    if (!pendingAssets.length && !materializeItems.length && reusableProcessed.length) {
+      result = {
+        ok: true,
+        partial: false,
+        toolId: tool.id,
+        config: state.configs[tool.id],
+        mode: 'preview-save',
+        processed: reusableProcessed,
+        failed: [],
+        runId: reusableProcessed[0]?.runId || '',
+        runFolderName: reusableProcessed[0]?.runFolderName || '',
+        message: `已直接复用 ${tool.label} 预览结果：${reusableProcessed.length} 项，可继续保存。`,
+      }
+    } else {
+      const combinedRun = await runBusyAction(async () => {
+        const materializedResult = materializeItems.length
+          ? await materializePreviewResults(tool.id, materializeItems, destinationPath, preferredRunFolderName)
+          : null
+        const executedResult = pendingAssets.length
+          ? await runner(
+              tool.id,
+              state.configs[tool.id],
+              pendingAssets,
+              destinationPath,
+              preferredRunFolderName ? { preferredRunFolderName } : {},
+            )
+          : null
+        return { materializedResult, executedResult }
+      })
+      const materializedResult = combinedRun?.materializedResult || null
+      const executedResult = combinedRun?.executedResult || null
+      successfulMaterializedFolders = []
+      if (materializedResult?.processed?.length) {
+        const failedMaterializeAssetIds = new Set((materializedResult.failed || []).map((item) => item?.assetId).filter(Boolean))
+        const folderPendingCounts = new Map()
+        for (let index = 0; index < materializeItems.length; index += 1) {
+          const item = materializeItems[index]
+          const folderName = materializeSourceRunFolderByAssetId.get(item.assetId)
+          if (!folderName) continue
+          folderPendingCounts.set(folderName, (folderPendingCounts.get(folderName) || 0) + 1)
+        }
+        for (let index = 0; index < materializedResult.processed.length; index += 1) {
+          const item = materializedResult.processed[index]
+          if (failedMaterializeAssetIds.has(item?.assetId)) continue
+          const folderName = materializeSourceRunFolderByAssetId.get(item?.assetId)
+          if (!folderName) continue
+          const nextCount = (folderPendingCounts.get(folderName) || 0) - 1
+          if (nextCount > 0) {
+            folderPendingCounts.set(folderName, nextCount)
+            continue
+          }
+          folderPendingCounts.delete(folderName)
+          successfulMaterializedFolders.push(folderName)
+        }
+      }
+      if (reusableProcessed.length || materializedResult?.processed?.length) {
+        result = {
+          ...(executedResult || materializedResult || {
+            toolId: tool.id,
+            config: state.configs[tool.id],
+            mode: 'preview-save',
+            processed: [],
+            failed: [],
+          }),
+          mode: executedResult?.mode || materializedResult?.mode || 'preview-save',
+          runId: executedResult?.runId || materializedResult?.runId || '',
+          runFolderName: executedResult?.runFolderName || materializedResult?.runFolderName || preferredRunFolderName,
+          processed: [
+            ...reusableProcessed,
+            ...(materializedResult?.processed || []),
+            ...(executedResult?.processed || []),
+          ],
+          failed: [
+            ...(materializedResult?.failed || []),
+            ...(executedResult?.failed || []),
+          ],
+          ok: (reusableProcessed.length + Number(materializedResult?.processed?.length || 0) + Number(executedResult?.processed?.length || 0)) > 0
+            && !(materializedResult?.failed?.length)
+            && !(executedResult?.failed?.length),
+          partial: !!(materializedResult?.failed?.length) || !!(executedResult?.failed?.length) || !!executedResult?.partial || !!materializedResult?.partial,
+          message: executedResult?.message
+            || materializedResult?.message
+            || `已复用 ${reusableProcessed.length + materializeItems.length} 项预览结果，并继续生成其余结果。`,
+        }
+      } else {
+        result = executedResult || materializedResult
+      }
+    }
     if (result?.processed?.length || result?.failed?.length) {
       applyRunResult(result)
+      removePreviewCacheQueueEntries((result.processed || []).map((item) => item.assetId))
+      if (successfulMaterializedFolders.length) {
+        cleanupPreviewCache(successfulMaterializedFolders)
+      }
     }
 
     if (result?.ok || result?.partial) {
