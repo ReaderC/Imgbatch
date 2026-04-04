@@ -19,6 +19,7 @@ const ALPHA_CAPABLE_FORMATS = new Set(['png', 'webp', 'tiff', 'avif', 'gif', 'ic
 const QUALITY_CAPABLE_FORMATS = new Set(['png', 'jpeg', 'webp', 'tiff', 'avif'])
 const OUTPUT_DIR_NAME = 'Imgbatch Output'
 const PREVIEW_DIR_NAME = 'Imgbatch Preview'
+const DEBUG_LOG_DIR_NAME = 'Imgbatch Logs'
 const SETTINGS_STORAGE_KEY = 'imgbatch:settings'
 const CONSUMED_HOST_LAUNCH_SIGNATURES_STORAGE_KEY = 'imgbatch:consumed-host-launch-signatures'
 const SAVE_LOCATION_MODES = new Set(['source', 'downloads', 'pictures', 'desktop', 'custom'])
@@ -62,6 +63,9 @@ const CANCELLED_RUNS = new Set()
 const ACTIVE_MERGE_WORKERS = new Map()
 const DEFAULT_QUEUE_THUMBNAIL_SIZE = 128
 const LAUNCH_DEBUG_LOG_PATH = path.join(os.tmpdir(), PREVIEW_DIR_NAME, 'launch-debug.log')
+const PREVIEW_CACHE_DEBUG_LOG_PATH = path.join(os.tmpdir(), DEBUG_LOG_DIR_NAME, 'preview-cache-debug.log')
+const DETACHED_HEARTBEAT_FILE_NAME = 'preview-detached-heartbeat.json'
+const DETACHED_HEARTBEAT_STALE_MS = 15000
 const PDF_PAGE_SIZES = {
   A3: [841.89, 1190.55],
   A4: [595.28, 841.89],
@@ -201,6 +205,24 @@ function appendLaunchDebugLog(event, payload = {}) {
   } catch {
     // Ignore debug log failures.
   }
+}
+
+function appendPreviewCacheDebugLog(event, payload = {}) {
+  try {
+    fs.mkdirSync(path.dirname(PREVIEW_CACHE_DEBUG_LOG_PATH), { recursive: true })
+    const record = {
+      time: new Date().toISOString(),
+      event,
+      payload,
+    }
+    fs.appendFileSync(PREVIEW_CACHE_DEBUG_LOG_PATH, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch {
+    // Ignore debug log failures.
+  }
+}
+
+function getDetachedHeartbeatPath() {
+  return path.join(os.tmpdir(), DEBUG_LOG_DIR_NAME, DETACHED_HEARTBEAT_FILE_NAME)
 }
 
 function normalizeQueueThumbnailSize(value) {
@@ -1083,9 +1105,6 @@ const launchWaiters = new Set()
 const launchSubscribers = new Set()
 let launchHooksInstalled = false
 let previewLifecycleCleanupInstalled = false
-let detachedWindowCleanupWatcher = null
-let detachedWindowHeartbeatTimer = null
-let detachedWindowHeartbeatFilePath = ''
 let delayedPreviewCleanupTimer = null
 let lastHandledCopiedFilesSignature = ''
 const pluginStartupAt = Date.now()
@@ -1097,6 +1116,35 @@ const MAX_INITIAL_CLIPBOARD_TOKEN_AGE_MS = 1500
 
 function getHostApi() {
   return globalThis.ztools || {}
+}
+
+function getCurrentWindowType() {
+  return sanitizeText(getHostApi().getWindowType?.()).toLowerCase()
+}
+
+function isDetachedWindowType(windowType = '') {
+  const normalized = sanitizeText(windowType).toLowerCase()
+  return normalized.includes('detach') || normalized.includes('separate')
+}
+
+function readDetachedHeartbeatSnapshot(heartbeatFilePath) {
+  try {
+    const content = fs.readFileSync(heartbeatFilePath, 'utf8')
+    const parsed = JSON.parse(content)
+    return {
+      exists: true,
+      ts: Number(parsed?.ts) || 0,
+      pid: Number(parsed?.pid) || 0,
+      windowType: sanitizeText(parsed?.windowType).toLowerCase(),
+    }
+  } catch {
+    return {
+      exists: false,
+      ts: 0,
+      pid: 0,
+      windowType: '',
+    }
+  }
 }
 
 function normalizeCopiedFilePaths(value) {
@@ -1282,106 +1330,146 @@ function rememberConsumedHostLaunchSignature(signature) {
 function installPreviewLifecycleCleanup() {
   if (previewLifecycleCleanupInstalled) return
   previewLifecycleCleanupInstalled = true
+  const heartbeatFilePath = getDetachedHeartbeatPath()
 
   const clearAllPreviewCache = () => {
-    clearPreviewCacheDirectory()
+    appendPreviewCacheDebugLog('clear-all-preview-cache')
+    clearPreviewCacheDirectory({ reason: 'preload-clear-all-preview-cache' })
   }
 
   const cancelDelayedPreviewCleanup = () => {
     if (!delayedPreviewCleanupTimer) return
     clearTimeout(delayedPreviewCleanupTimer)
     delayedPreviewCleanupTimer = null
+    appendPreviewCacheDebugLog('cancel-delayed-preview-cleanup')
   }
 
   const scheduleDelayedPreviewCleanup = () => {
     cancelDelayedPreviewCleanup()
+    appendPreviewCacheDebugLog('schedule-delayed-preview-cleanup', {
+      delayMs: 60 * 1000,
+    })
     delayedPreviewCleanupTimer = setTimeout(() => {
       delayedPreviewCleanupTimer = null
+      appendPreviewCacheDebugLog('run-delayed-preview-cleanup')
       clearAllPreviewCache()
     }, 60 * 1000)
   }
 
-  const stopDetachedWindowHeartbeat = () => {
-    if (detachedWindowHeartbeatTimer) {
-      clearInterval(detachedWindowHeartbeatTimer)
-      detachedWindowHeartbeatTimer = null
+  const clearDetachedHeartbeatFile = (reason) => {
+    try {
+      fs.rmSync(heartbeatFilePath, { force: true })
+    } catch {}
+    appendPreviewCacheDebugLog('clear-detached-heartbeat-file', {
+      heartbeatFilePath,
+      reason,
+    })
+  }
+
+  const writeDetachedHeartbeatFile = () => {
+    const payload = {
+      ts: Date.now(),
+      pid: process.pid,
+      windowType: getCurrentWindowType(),
     }
-    if (!detachedWindowHeartbeatFilePath) return
-    try {
-      fs.rmSync(detachedWindowHeartbeatFilePath, { force: true })
-    } catch {}
-    detachedWindowHeartbeatFilePath = ''
-  }
-
-  const stopDetachedWindowCleanupWatcher = () => {
-    if (!detachedWindowCleanupWatcher || detachedWindowCleanupWatcher.killed) return
-    try {
-      detachedWindowCleanupWatcher.kill()
-    } catch {}
-    detachedWindowCleanupWatcher = null
-  }
-
-  const startDetachedWindowCleanupWatcher = () => {
-    stopDetachedWindowHeartbeat()
-    stopDetachedWindowCleanupWatcher()
-    const heartbeatFilePath = path.join(
-      os.tmpdir(),
-      PREVIEW_DIR_NAME,
-      `.detached-heartbeat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`,
-    )
-    if (!heartbeatFilePath) return
     try {
       fs.mkdirSync(path.dirname(heartbeatFilePath), { recursive: true })
-      fs.writeFileSync(heartbeatFilePath, String(Date.now()))
-    } catch {
+      fs.writeFileSync(heartbeatFilePath, JSON.stringify(payload), 'utf8')
+      appendPreviewCacheDebugLog('write-detached-heartbeat-file', {
+        heartbeatFilePath,
+        windowType: payload.windowType,
+        pid: payload.pid,
+      })
+    } catch {}
+  }
+
+  const cleanupStaleDetachedPreviewCacheOnStartup = (windowType) => {
+    if (isDetachedWindowType(windowType)) {
+      writeDetachedHeartbeatFile()
       return
     }
-    detachedWindowHeartbeatFilePath = heartbeatFilePath
-    detachedWindowHeartbeatTimer = setInterval(() => {
-      try {
-        fs.writeFileSync(heartbeatFilePath, String(Date.now()))
-      } catch {}
-    }, 1000)
+    const heartbeat = readDetachedHeartbeatSnapshot(heartbeatFilePath)
+    appendPreviewCacheDebugLog('check-detached-heartbeat-on-startup', {
+      heartbeatFilePath,
+      windowType,
+      heartbeatExists: heartbeat.exists,
+      heartbeatTs: heartbeat.ts,
+      heartbeatAgeMs: heartbeat.ts ? (Date.now() - heartbeat.ts) : null,
+      heartbeatWindowType: heartbeat.windowType,
+    })
+    if (!heartbeat.exists) return
+    const heartbeatAgeMs = heartbeat.ts ? (Date.now() - heartbeat.ts) : Number.POSITIVE_INFINITY
+    if (heartbeatAgeMs <= DETACHED_HEARTBEAT_STALE_MS) return
+    appendPreviewCacheDebugLog('cleanup-stale-detached-preview-cache-on-startup', {
+      heartbeatFilePath,
+      heartbeatAgeMs,
+    })
+    clearAllPreviewCache()
+    clearDetachedHeartbeatFile('startup-stale-detached-heartbeat')
+  }
+
+  const handlePluginOut = (source, isKill = false) => {
+    const normalizedIsKill = Boolean(isKill)
+    appendPreviewCacheDebugLog(source, {
+      isKill: normalizedIsKill,
+    })
+    cancelDelayedPreviewCleanup()
+    if (normalizedIsKill) {
+      clearAllPreviewCache()
+      return
+    }
+    scheduleDelayedPreviewCleanup()
   }
 
   const hostApi = getHostApi()
-  hostApi.onPluginOut?.(() => {
-    stopDetachedWindowHeartbeat()
-    stopDetachedWindowCleanupWatcher()
-    scheduleDelayedPreviewCleanup()
+  const windowType = getCurrentWindowType()
+  appendPreviewCacheDebugLog('install-preview-lifecycle-cleanup', {
+    windowType,
+    heartbeatFilePath,
+  })
+  cleanupStaleDetachedPreviewCacheOnStartup(windowType)
+  hostApi.onPluginOut?.((isKill) => {
+    handlePluginOut('host-plugin-out', isKill)
   })
   hostApi.onPluginEnter?.(() => {
+    appendPreviewCacheDebugLog('host-plugin-enter')
     cancelDelayedPreviewCleanup()
   })
   hostApi.onPluginReady?.(() => {
+    appendPreviewCacheDebugLog('host-plugin-ready')
     cancelDelayedPreviewCleanup()
   })
   hostApi.onPluginDetach?.(() => {
-    startDetachedWindowCleanupWatcher()
+    const currentWindowType = getCurrentWindowType()
+    appendPreviewCacheDebugLog('host-plugin-detach', {
+      windowType: currentWindowType,
+    })
+    if (isDetachedWindowType(currentWindowType)) {
+      writeDetachedHeartbeatFile()
+    }
   })
 
   if (ipcRenderer?.on) {
-    ipcRenderer.on('plugin-out', () => {
-      stopDetachedWindowHeartbeat()
-      stopDetachedWindowCleanupWatcher()
-      scheduleDelayedPreviewCleanup()
+    ipcRenderer.on('plugin-out', (_event, isKill) => {
+      handlePluginOut('ipc-plugin-out', isKill)
     })
   }
 
   if (typeof process?.once === 'function') {
     process.once('exit', () => {
+      appendPreviewCacheDebugLog('process-exit')
       cancelDelayedPreviewCleanup()
-      stopDetachedWindowHeartbeat()
-      // Let the detached watcher own cleanup on forced detached-window teardown.
-      if (!detachedWindowCleanupWatcher) clearAllPreviewCache()
+      clearDetachedHeartbeatFile('process-exit')
+      clearAllPreviewCache()
     })
   }
 
   if (typeof globalThis?.addEventListener === 'function') {
     globalThis.addEventListener('unload', () => {
+      appendPreviewCacheDebugLog('global-unload')
       cancelDelayedPreviewCleanup()
-      stopDetachedWindowHeartbeat()
-      if (!detachedWindowCleanupWatcher) clearAllPreviewCache()
+      clearDetachedHeartbeatFile('global-unload')
+      clearAllPreviewCache()
     })
   }
 }
@@ -4297,14 +4385,21 @@ async function materializePreviewResults(toolId, stagedItems, destinationPath, p
   }
 }
 
-function cleanupPreviewCache(runFolderNames = []) {
+function cleanupPreviewCache(runFolderNames = [], options = {}) {
   const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
   const folders = new Set()
+  const reason = sanitizeText(options?.reason || 'unspecified')
   for (const value of Array.isArray(runFolderNames) ? runFolderNames : []) {
     const folderName = path.basename(String(value || '').trim())
     if (!folderName) continue
     folders.add(folderName)
   }
+  appendPreviewCacheDebugLog('cleanup-preview-cache', {
+    basePreviewPath,
+    reason,
+    runFolderNames: Array.from(folders),
+    count: folders.size,
+  })
   for (const folderName of folders) {
     const targetPath = path.join(basePreviewPath, folderName)
     try {
@@ -4316,8 +4411,13 @@ function cleanupPreviewCache(runFolderNames = []) {
   return true
 }
 
-function clearPreviewCacheDirectory() {
+function clearPreviewCacheDirectory(options = {}) {
   const basePreviewPath = path.join(os.tmpdir(), PREVIEW_DIR_NAME)
+  const reason = sanitizeText(options?.reason || 'unspecified')
+  appendPreviewCacheDebugLog('clear-preview-cache-directory', {
+    basePreviewPath,
+    reason,
+  })
   try {
     fs.rmSync(basePreviewPath, { recursive: true, force: true })
   } catch {
@@ -4885,12 +4985,12 @@ const toolsApi = {
     return materializePreviewResults(toolId, stagedItems, destinationPath, preferredRunFolderName)
   },
 
-  cleanupPreviewCache(runFolderNames = []) {
-    return cleanupPreviewCache(runFolderNames)
+  cleanupPreviewCache(runFolderNames = [], options = {}) {
+    return cleanupPreviewCache(runFolderNames, options)
   },
 
-  clearPreviewCacheDirectory() {
-    return clearPreviewCacheDirectory()
+  clearPreviewCacheDirectory(options = {}) {
+    return clearPreviewCacheDirectory(options)
   },
 
   appendLaunchDebugLog(event, payload) {

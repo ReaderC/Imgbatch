@@ -142,66 +142,50 @@ const {
 
 let observedCleanupToolId = getState().activeTool
 let observedSettingsVisible = Boolean(getState().settingsDialog?.visible)
-let ztoolsLifecycleCleanupAttached = false
-let hiddenPreviewCleanupTimer = null
 let launchInputRetryTimer = null
 let launchInputRetryDeadline = 0
 let launchInputRetryInFlight = false
 let launchInputRetryStartedAt = 0
 
+function isPreviewCacheStatus(status, includeSaved = false) {
+  return status === 'previewed'
+    || status === 'stale'
+    || status === 'staged'
+    || (includeSaved && status === 'saved')
+}
+
+function collectPreviewCacheAssetIds(options = {}) {
+  const includeSaved = Boolean(options?.includeSaved)
+  const assetIds = []
+  const seen = new Set()
+  for (let index = 0; index < previewCacheQueue.length; index += 1) {
+    const assetId = String(previewCacheQueue[index]?.assetId || '')
+    if (!assetId || seen.has(assetId)) continue
+    seen.add(assetId)
+    assetIds.push(assetId)
+  }
+  const state = getState()
+  for (let index = 0; index < state.assets.length; index += 1) {
+    const asset = state.assets[index]
+    const assetId = String(asset?.id || '')
+    if (!assetId || seen.has(assetId) || !isPreviewCacheStatus(asset?.previewStatus, includeSaved)) continue
+    seen.add(assetId)
+    assetIds.push(assetId)
+  }
+  return assetIds
+}
+
 function handleCleanupStateTransitions(state) {
   const nextToolId = state?.activeTool || ''
   const nextSettingsVisible = Boolean(state?.settingsDialog?.visible)
   if (observedCleanupToolId && observedCleanupToolId !== nextToolId) {
-    cleanupToolPreviewCache(observedCleanupToolId)
+    cleanupToolPreviewCache(observedCleanupToolId, `state-transition:tool-change:${observedCleanupToolId}->${nextToolId}`)
   }
   if (!observedSettingsVisible && nextSettingsVisible) {
-    cleanupToolPreviewCache(nextToolId)
+    cleanupToolPreviewCache(nextToolId, `state-transition:open-settings:${nextToolId}`)
   }
   observedCleanupToolId = nextToolId
   observedSettingsVisible = nextSettingsVisible
-}
-
-function attachZtoolsLifecycleCleanup() {
-  if (ztoolsLifecycleCleanupAttached) return
-  const ztoolsApi = globalThis?.ztools
-  if (!ztoolsApi) return
-  const cleanupOnPluginLeave = () => {
-    scheduleHiddenPreviewCleanup()
-  }
-  const handlePluginEnter = () => {
-    clearHiddenPreviewCleanupTimer()
-  }
-  if (typeof ztoolsApi.onPluginOut === 'function') {
-    ztoolsApi.onPluginOut(() => {
-      cleanupOnPluginLeave()
-    })
-  }
-  if (typeof ztoolsApi.onPluginEnter === 'function') {
-    ztoolsApi.onPluginEnter(() => {
-      handlePluginEnter()
-    })
-  }
-  if (typeof ztoolsApi.onPluginReady === 'function') {
-    ztoolsApi.onPluginReady(() => {
-      handlePluginEnter()
-    })
-  }
-  ztoolsLifecycleCleanupAttached = true
-}
-
-function clearHiddenPreviewCleanupTimer() {
-  if (!hiddenPreviewCleanupTimer) return
-  clearTimeout(hiddenPreviewCleanupTimer)
-  hiddenPreviewCleanupTimer = null
-}
-
-function scheduleHiddenPreviewCleanup() {
-  clearHiddenPreviewCleanupTimer()
-  hiddenPreviewCleanupTimer = setTimeout(() => {
-    hiddenPreviewCleanupTimer = null
-    cleanupAllPreviewCache()
-  }, 60 * 1000)
 }
 
 document.body.append(fileInput, folderInput, watermarkFileInput)
@@ -212,7 +196,6 @@ subscribe((state) => {
 render(getState())
 attachProcessingProgressEvents()
 attachGlobalEvents()
-attachZtoolsLifecycleCleanup()
 bootstrapSettings().finally(() => {
   bootstrapLaunchInputs().finally(() => {
     attachLaunchSubscription()
@@ -370,20 +353,8 @@ async function saveSettingsFromDialog() {
 }
 
 async function clearAllPreviewCacheDirectoryFromSettings() {
-  const assetIds = []
-  for (let index = 0; index < previewCacheQueue.length; index += 1) {
-    const assetId = String(previewCacheQueue[index]?.assetId || '')
-    if (assetId) assetIds.push(assetId)
-  }
-  if (!assetIds.length) {
-    const state = getState()
-    for (let index = 0; index < state.assets.length; index += 1) {
-      const asset = state.assets[index]
-      if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged') continue
-      assetIds.push(asset.id)
-    }
-  }
-  clearPreviewCacheDirectory()
+  const assetIds = collectPreviewCacheAssetIds({ includeSaved: true })
+  clearPreviewCacheDirectory({ reason: 'settings-clear-preview-cache-directory' })
   if (assetIds.length) clearPreviewCacheState(assetIds)
   notify({ type: 'success', message: '已清空 Imgbatch Preview 缓存目录。' })
 }
@@ -700,42 +671,27 @@ function clearPreviewCacheState(assetIds = []) {
   return cleanedFolders
 }
 
-function cleanupPreviewCacheByAssetIds(assetIds = []) {
+function cleanupPreviewCacheByAssetIds(assetIds = [], reason = 'ui-preview-cache-cleanup') {
   const folders = clearPreviewCacheState(assetIds)
-  if (folders.length) cleanupPreviewCache(folders)
+  if (folders.length) cleanupPreviewCache(folders, { reason })
 }
 
-function cleanupToolPreviewCache(toolId) {
+function cleanupToolPreviewCache(toolId, reason = '') {
   if (!toolId) return
   const state = getState()
   const previewAssetIds = []
   for (let index = 0; index < state.assets.length; index += 1) {
     const asset = state.assets[index]
     if (asset?.stagedToolId !== toolId) continue
-    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged' && asset?.previewStatus !== 'saved') continue
+    if (!isPreviewCacheStatus(asset?.previewStatus, true)) continue
     previewAssetIds.push(asset.id)
   }
-  if (previewAssetIds.length) cleanupPreviewCacheByAssetIds(previewAssetIds)
+  if (previewAssetIds.length) cleanupPreviewCacheByAssetIds(previewAssetIds, reason || `tool-switch:${toolId}`)
 }
 
-function cleanupAllPreviewCache() {
-  const previewAssetIds = []
-  for (let index = 0; index < previewCacheQueue.length; index += 1) {
-    const assetId = String(previewCacheQueue[index]?.assetId || '')
-    if (assetId) previewAssetIds.push(assetId)
-  }
-  if (previewAssetIds.length) {
-    cleanupPreviewCacheByAssetIds(previewAssetIds)
-    return
-  }
-  const state = getState()
-  const previewOnlyAssetIds = []
-  for (let index = 0; index < state.assets.length; index += 1) {
-    const asset = state.assets[index]
-    if (asset?.previewStatus !== 'previewed' && asset?.previewStatus !== 'stale' && asset?.previewStatus !== 'staged') continue
-    previewOnlyAssetIds.push(asset.id)
-  }
-  if (previewOnlyAssetIds.length) cleanupPreviewCacheByAssetIds(previewOnlyAssetIds)
+function cleanupAllPreviewCache(reason = 'ui-clear-all-preview-cache') {
+  const previewAssetIds = collectPreviewCacheAssetIds({ includeSaved: true })
+  if (previewAssetIds.length) cleanupPreviewCacheByAssetIds(previewAssetIds, reason)
 }
 
 function removePreviewCacheQueueEntries(assetIds = []) {
@@ -769,7 +725,7 @@ function rememberPreviewCacheAsset(assetId, toolId, runFolderName) {
     const entry = previewCacheQueue.shift()
     if (entry?.assetId) evicted.push(entry.assetId)
   }
-  if (evicted.length) cleanupPreviewCacheByAssetIds(evicted)
+  if (evicted.length) cleanupPreviewCacheByAssetIds(evicted, 'preview-cache-queue-eviction')
 }
 
 async function saveAssetResult(assetId) {
@@ -3104,7 +3060,7 @@ function attachGlobalEvents() {
       event.preventDefault()
       const previousToolId = getState().activeTool
       if (previousToolId && previousToolId !== target.dataset.toolId) {
-        cleanupToolPreviewCache(previousToolId)
+        cleanupToolPreviewCache(previousToolId, `action:activate-tool:${previousToolId}->${target.dataset.tool}`)
       }
       queueQueueScrollRestore()
       batchStateUpdates(() => {
@@ -3148,7 +3104,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'open-settings' || action === 'save-default-path') {
-      cleanupToolPreviewCache(getState().activeTool)
+      cleanupToolPreviewCache(getState().activeTool, `action:open-settings:${getState().activeTool}`)
       setSettingsDialog(createSettingsDialogState())
       return
     }
@@ -3203,7 +3159,7 @@ function attachGlobalEvents() {
     }
 
     if (action === 'remove-asset') {
-      cleanupPreviewCacheByAssetIds([target.dataset.assetId])
+      cleanupPreviewCacheByAssetIds([target.dataset.assetId], `action:remove-asset:${target.dataset.assetId}`)
       if (getState().activeTool === 'manual-crop') {
         flushManualCropConfigUpdates()
         const state = getState()
@@ -3249,7 +3205,7 @@ function attachGlobalEvents() {
 
     if (action === 'clear-assets') {
       const assetIds = getState().assets.map((asset) => asset.id)
-      cleanupPreviewCacheByAssetIds(assetIds)
+      cleanupPreviewCacheByAssetIds(assetIds, 'action:clear-assets')
       resetActiveResultUi()
       setState({ assets: [], previewModal: null, resultView: null })
       startLaunchInputRetryWindow('clear-assets')
@@ -3865,19 +3821,11 @@ function attachGlobalEvents() {
   })
 
   const cleanupOnPageExit = () => {
-    clearHiddenPreviewCleanupTimer()
-    cleanupAllPreviewCache()
+    cleanupAllPreviewCache('page-exit')
   }
   window.addEventListener('beforeunload', cleanupOnPageExit)
   window.addEventListener('pagehide', cleanupOnPageExit)
   window.addEventListener('unload', cleanupOnPageExit)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      scheduleHiddenPreviewCleanup()
-      return
-    }
-    clearHiddenPreviewCleanupTimer()
-  })
 
   document.addEventListener('dragstart', (event) => {
     const item = event.target.closest('.queue-item--sortable[data-asset-id]')
@@ -4200,7 +4148,7 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
           }
         }
         if (invalidAssetIds.length) {
-          cleanupPreviewCacheByAssetIds(invalidAssetIds)
+          cleanupPreviewCacheByAssetIds(invalidAssetIds, 'staged-file-validation')
           notify({
             type: 'info',
             message: `有 ${invalidAssetIds.length} 张预览缓存已失效，已自动回退为重新处理。`,
@@ -4316,7 +4264,7 @@ async function processCurrentTool(skipResizePercentConfirm = false) {
       applyRunResult(result)
       removePreviewCacheQueueEntries((result.processed || []).map((item) => item.assetId))
       if (successfulMaterializedFolders.length) {
-        cleanupPreviewCache(successfulMaterializedFolders)
+        cleanupPreviewCache(successfulMaterializedFolders, { reason: 'materialized-preview-reuse' })
       }
     }
 
