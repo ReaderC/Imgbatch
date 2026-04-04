@@ -4699,7 +4699,6 @@ const toolsApi = {
         const copiedSnapshot = readCopiedFilesSnapshot()
         let clipboardSnapshot = await readClipboardLaunchSnapshot()
         const initialClipboardToken = sanitizeText(clipboardSnapshot.token)
-        const initialClipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const initialClipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         if (!initialClipboardEntryAcceptable) {
           clipboardSnapshot = await waitForRecentClipboardLaunchSnapshot(initialClipboardToken, pluginStartupAt)
@@ -4707,7 +4706,6 @@ const toolsApi = {
         const consumedSignatures = loadConsumedHostLaunchSignaturesFromStorage()
         const clipboardToken = sanitizeText(clipboardSnapshot.token)
         const clipboardTokenConsumed = clipboardToken ? consumedSignatures.includes(clipboardToken) : false
-        const clipboardEntryRecent = isRecentClipboardEntry(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const clipboardEntryAgeMs = getClipboardEntryAgeMs(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const clipboardEntryAcceptable = isClipboardEntryAcceptableForBootstrap(clipboardSnapshot.entryTimestamp, pluginStartupAt)
         const clipboardEntryAfterMinTimestamp = !minClipboardTimestamp || (
@@ -4723,13 +4721,11 @@ const toolsApi = {
           copiedFileCount: copiedSnapshot.paths.length,
           copiedPaths: copiedSnapshot.paths.slice(0, 12),
           initialClipboardToken,
-          initialClipboardEntryRecent,
           initialClipboardEntryAcceptable,
           clipboardToken,
           clipboardTokenConsumed,
           clipboardEntryTimestamp: clipboardSnapshot.entryTimestamp,
           clipboardEntryAgeMs,
-          clipboardEntryRecent,
           clipboardEntryAcceptable,
           clipboardEntryAfterMinTimestamp,
           clipboardEntry: summarizeLaunchValue(clipboardSnapshot.entry),
