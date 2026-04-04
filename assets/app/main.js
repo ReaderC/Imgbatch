@@ -1454,6 +1454,37 @@ function buildViewableResultAsset(asset, toolId) {
   }
 }
 
+function hasReusableResultFile(asset, toolId) {
+  if (!shouldReusePreviewResult(toolId, asset)) return false
+  const resultPath = asset?.savedOutputPath || asset?.outputPath || asset?.stagedOutputPath || ''
+  if (!resultPath) return false
+  return checkStagedFiles([{ assetId: asset.id, stagedPath: resultPath }]).includes(asset.id)
+}
+
+function markAssetResultMissing(assetId, toolId) {
+  const state = getState()
+  const assetIndex = getAssetIndexById(assetId)
+  if (assetIndex === -1) return false
+  const asset = state.assets[assetIndex]
+  if (!asset || asset.stagedToolId !== toolId) return false
+  const nextAssets = [...state.assets]
+  nextAssets[assetIndex] = {
+    ...asset,
+    previewStatus: 'stale',
+    previewUrl: '',
+    stagedOutputPath: '',
+    savedOutputPath: '',
+    outputPath: '',
+    stagedOutputName: '',
+    stagedSizeBytes: 0,
+    stagedWidth: 0,
+    stagedHeight: 0,
+    warning: '',
+  }
+  setState({ assets: nextAssets })
+  return true
+}
+
 function findProcessedResultByAssetId(processedItems, assetId) {
   if (!processedItems?.length || !assetId) return null
   for (const item of processedItems) {
@@ -2366,40 +2397,32 @@ function render(state) {
   }
   if (diff.workspaceChanged) {
     const reuseQueueDuringWorkspaceRefresh = canPreserveQueueDuringWorkspaceRefresh
-    const shouldPatchQueueItems = reuseQueueDuringWorkspaceRefresh
     if (reuseQueueDuringWorkspaceRefresh) {
       shouldCaptureWorkspaceSnapshot = false
       const { root, changed } = setRootMarkup('panel', renderToolPage(state.activeTool, state))
       if (root && changed) tooltipRoots.push(root)
-      if (shouldPatchQueueItems) {
-        queueQueueItemPatch()
-        effectiveQueueChanged = false
-      }
+      queueQueueItemPatch()
+      effectiveQueueChanged = false
     } else {
-    if (diff.previousMode === 'workspace' && (diff.nextMode !== 'workspace' || reuseQueueDuringWorkspaceRefresh)) {
-      detachQueueContent()
-    }
-    const workspaceMarkup = renderShellWorkspace(
-      state,
-      (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || reuseQueueDuringWorkspaceRefresh
-        ? ''
-        : renderImageQueue(state, queueViewportState),
-      nextSnapshot.mode,
-    )
-    const { root, changed } = setRootMarkup('workspace', workspaceMarkup)
-    if (root) {
       const shouldReattachQueue = (diff.previousMode !== 'workspace' && diff.nextMode === 'workspace') || reuseQueueDuringWorkspaceRefresh
-      if (shouldReattachQueue && !attachDetachedQueueContent()) {
+      if (diff.previousMode === 'workspace' && (diff.nextMode !== 'workspace' || reuseQueueDuringWorkspaceRefresh)) {
+        detachQueueContent()
+      }
+      const workspaceMarkup = renderShellWorkspace(
+        state,
+        shouldReattachQueue ? '' : renderImageQueue(state, queueViewportState),
+        nextSnapshot.mode,
+      )
+      const { root, changed } = setRootMarkup('workspace', workspaceMarkup)
+      const attachedDetachedQueue = root && shouldReattachQueue ? attachDetachedQueueContent() : false
+      if (shouldReattachQueue && !attachedDetachedQueue) {
         renderQueueRoot(state, false)
-      } else if (shouldReattachQueue && shouldPatchQueueItems) {
+      } else if (shouldReattachQueue) {
         queueQueueItemPatch()
         effectiveQueueChanged = false
-      } else if (shouldReattachQueue) {
-        effectiveQueueChanged = false
       }
-    }
-    const tooltipRoot = root && changed ? getWorkspaceTooltipRoot(nextSnapshot.mode) : null
-    if (tooltipRoot) tooltipRoots.push(tooltipRoot)
+      const tooltipRoot = root && changed ? getWorkspaceTooltipRoot(nextSnapshot.mode) : null
+      if (tooltipRoot) tooltipRoots.push(tooltipRoot)
     }
   } else if (diff.queueChanged && nextSnapshot.mode === 'workspace') {
     const shouldAppendQueue = shouldAppendQueueItemsInPlace(diff, lastRenderSnapshot, nextSnapshot, state)
@@ -4050,7 +4073,12 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
 
   const tool = TOOL_MAP[state.activeTool]
   if (!tool) return
-  const reusableAsset = buildViewableResultAsset(asset, tool.id)
+  if (shouldReusePreviewResult(tool.id, asset) && !hasReusableResultFile(asset, tool.id)) {
+    markAssetResultMissing(asset.id, tool.id)
+    notify({ type: 'info', message: '处理结果文件已不存在，已回退为重新处理。' })
+  }
+  const latestAsset = getAssetById(assetId) || asset
+  const reusableAsset = buildViewableResultAsset(latestAsset, tool.id)
   if (reusableAsset && openPreviewModal(reusableAsset, tool.id)) {
     return
   }
@@ -4073,7 +4101,7 @@ async function previewAsset(assetId, skipResizePercentConfirm = false) {
   if (state.isProcessing) return
 
   try {
-    await runBusyAction(() => previewWithRunner(tool, asset))
+    await runBusyAction(() => previewWithRunner(tool, latestAsset))
   } catch (error) {
     notify({ type: 'error', message: error?.message || `${tool.label} 预览失败。` })
   }

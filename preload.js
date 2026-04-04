@@ -721,7 +721,7 @@ async function stageResultToProcessed(asset, result, payload, sharpLib = null) {
   }
 }
 
-async function directResultToProcessed(asset, result, sharpLib = null) {
+async function directResultToProcessed(asset, result, payload, sharpLib = null) {
   const outputPath = typeof result === 'string' ? result : result.outputPath
   const meta = await resolveProcessedMeta(outputPath, result, sharpLib)
   return {
@@ -735,6 +735,9 @@ async function directResultToProcessed(asset, result, sharpLib = null) {
     width: meta.width,
     height: meta.height,
     warning: result?.warning || '',
+    saveSignature: buildSaveSignature(payload.toolId, payload.config),
+    runId: payload.runId,
+    runFolderName: payload.runFolderName,
     savedOutputPath: outputPath || '',
   }
 }
@@ -4130,7 +4133,7 @@ async function executeSingleAssetTool(payload, sharpLib) {
       }
 
       const processed = await (payload.mode === 'direct'
-        ? directResultToProcessed(asset, result, sharpLib)
+        ? directResultToProcessed(asset, result, payload, sharpLib)
         : stageResultToProcessed(asset, result, payload, sharpLib))
       completedCount += 1
       emitAssetProgress()
